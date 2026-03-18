@@ -1,0 +1,8 @@
+{
+  "org": "your-github-org",
+  "npm_scope": "@your-org",
+  "grpc_domain_suffix": "",
+  "server_name": "code-knowledge",
+  "display_name": "My Org Knowledge Base",
+  "embedding_model": "coderank"
+}

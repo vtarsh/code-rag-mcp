@@ -1,0 +1,45 @@
+# Data (generated, org-specific)
+raw/
+extracted/
+db/
+logs/
+__pycache__/
+
+# State files (generated)
+repo_state.json
+clone_log.json
+extract_log.json
+eval_baseline.json
+daemon.pid
+
+# Benchmark results (contain org-specific repo names)
+benchmark_*.json
+blind_spots_results.json
+ab_test_baseline.json
+
+# Generated HTML visualizations
+graph.html
+graph-*.html
+
+# Python cache
+.pytest_cache/
+
+# Org-specific profiles (only example/ is tracked)
+profiles/*/
+!profiles/example/
+
+# Legacy root config and docs (migrated to profile)
+/config.json
+/docs/
+
+# LaunchD plists (user-specific hardcoded paths)
+*.plist
+
+# Active profile marker
+.active_profile
+
+# Build logs
+build_coderank*.log
+
+# Legacy scripts (replaced by unified build_vectors.py)
+scripts/build_vectors_coderank.py

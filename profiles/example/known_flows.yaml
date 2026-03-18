@@ -1,0 +1,12 @@
+# Pre-defined business flow entry points for trace_chain.
+# Maps concept names to their entry-point repos.
+#
+# Example entries:
+auth:
+  - auth-service
+  - user-management
+deployment:
+  - ci-pipeline
+  - gitops
+#
+# Add your organization's key business flows below.

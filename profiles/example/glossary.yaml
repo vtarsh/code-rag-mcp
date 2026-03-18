@@ -1,0 +1,10 @@
+# Domain glossary — maps abbreviations/acronyms to expanded terms.
+# Used by search query expansion to improve recall.
+#
+# Example entries (customize for your org):
+k8s: kubernetes
+api: "application programming interface"
+db: database
+ci: "continuous integration"
+#
+# Add your organization's domain-specific abbreviations below.

@@ -1,0 +1,12 @@
+# Phrase-aware glossary — when ALL tokens in the key appear in a query,
+# append the expansion string. Handles context-aware query expansion.
+#
+# Example entries:
+- tokens: [error, handling]
+  expansion: "error handling exception catch try-catch error boundary"
+- tokens: [deploy, production]
+  expansion: "ci cd pipeline release"
+- tokens: [new, service]
+  expansion: "boilerplate template scaffolding"
+#
+# Add your organization's common multi-word concepts below.

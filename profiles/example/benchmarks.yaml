@@ -1,0 +1,60 @@
+# Benchmark queries for search quality evaluation.
+#
+# Each profile defines its own benchmark queries tailored to its codebase.
+# The benchmark scripts (scripts/benchmark_*.py) load queries from here.
+#
+# Sections:
+#   conceptual_queries  — used by benchmark_queries.py (semantic understanding)
+#   realworld_queries   — used by benchmark_realworld.py (daily developer queries)
+#   flow_queries        — used by benchmark_flows.py (cross-service flow tracing)
+
+# --- Conceptual queries (benchmark_queries.py) ---
+# Tests semantic search quality for abstract questions.
+# Fields:
+#   id, question, search_queries, tools, expected_repos (repo: weight),
+#   expected_keywords, note
+#   Optional: expected_via_graph, expected_min_dependents, expected_outgoing_types
+conceptual_queries:
+  - id: Q1
+    question: "What services handle the main business event?"
+    search_queries:
+      - "business event handler"
+      - "event processing service"
+    tools: ["search", "semantic_search"]
+    expected_repos: {}
+    expected_keywords: ["event"]
+    note: "Example: adapt to your org's event-driven services"
+
+# --- Real-world queries (benchmark_realworld.py) ---
+# Tests search quality for daily developer questions.
+# Fields:
+#   id, question, search_queries, category,
+#   expected_repos (repo: weight), expected_keywords
+#   Optional: expected_via_graph, graph_repo, expected_min_dependents, expected_min_results
+realworld_queries:
+  - id: RW01
+    question: "How to add a new service from the boilerplate"
+    search_queries:
+      - "boilerplate service setup"
+      - "new service template"
+    expected_repos: {}
+    expected_keywords: ["boilerplate"]
+    category: infra
+
+# --- Flow queries (benchmark_flows.py) ---
+# Tests cross-service flow tracing (multi-hop chains).
+# Fields:
+#   id, name, description, search_queries
+#   chain: list of steps, each with repo, file_pattern, must_contain, description
+#   Optional: must_not_contain_repos, note
+flow_queries:
+  - id: F1
+    name: "Example cross-service flow"
+    description: "Trace a request from API to backend service"
+    search_queries:
+      - "API request handler"
+    chain:
+      - repo: "example-api"
+        file_pattern: null
+        must_contain: []
+        description: "API entry point"
