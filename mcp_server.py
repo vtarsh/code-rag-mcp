@@ -20,6 +20,10 @@ from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
+# Auto-detect CODE_RAG_HOME from script location (mcp_server lives in project root)
+if "CODE_RAG_HOME" not in os.environ:
+    os.environ["CODE_RAG_HOME"] = str(Path(__file__).resolve().parent)
+
 from mcp.server.fastmcp import FastMCP
 
 DAEMON_PORT = int(os.environ.get("CODE_RAG_PORT", os.environ.get("PAY_KNOWLEDGE_PORT", "8742")))

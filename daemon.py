@@ -22,6 +22,10 @@ import traceback
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
+# Auto-detect CODE_RAG_HOME from script location (daemon lives in project root)
+if "CODE_RAG_HOME" not in os.environ:
+    os.environ["CODE_RAG_HOME"] = str(Path(__file__).resolve().parent)
+
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
