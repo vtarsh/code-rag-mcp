@@ -40,7 +40,9 @@ profiles/{name}/
 ├── known_flows.yaml      # Business flow entry points for trace_chain
 └── docs/
     ├── flows/            # YAML flow annotations (indexed as chunks)
-    ├── gotchas/          # Markdown gotchas (indexed as high-priority chunks)
+    ├── gotchas/          # Markdown gotchas (indexed as high-priority chunks, 1.5x boost)
+    ├── tasks/            # Markdown task journals (1 file per task, section-aware chunking)
+    ├── references/       # YAML/MD stable lookup docs (e.g., APM ranking, 1.3x boost)
     └── domain_registry.yaml  # Domain-to-repo mapping
 ```
 
@@ -93,7 +95,7 @@ All sessions share one daemon process. Proxy auto-starts daemon if not running.
 
 - `build_index.py` recreates DB from scratch — run `build_graph.py` after to restore graph_edges
 - `build_graph.py` also runs `build_env_index.py` (step 19) — env var table + map-type var chunks
-- `analyze.py` has 8 section helpers — add new sections as separate functions
+- `analyze.py` has 9 section helpers (0–8) — Section 0.5 searches tasks, add new sections as separate functions
 - Glossaries loaded from profile YAML at import time — restart daemon after editing
 - Graph viz virtual nodes (pkg:, proto:, route:) are filtered in visualize_graph.py and queries.py
 - FTS5 virtual tables cannot have columns added — use separate tables (chunk_meta, env_vars)
@@ -101,3 +103,6 @@ All sessions share one daemon process. Proxy auto-starts daemon if not running.
 - Pre-commit runs ruff + ruff-format + pytest — fix lint before committing
 - Daemon uses ~400 MB real memory (VSZ shows ~2.5 GB but that's virtual/mmap — not real usage)
 - Embedding model selected via profile config `embedding_model` key or `CODE_RAG_MODEL` env var
+- After adding tasks/references, run incremental vectors: `build_vectors.py --repos=task-slug,ref-slug`
+- Task boost tiers: plan/decisions 1.1x, api_spec/description 1.05x, metadata 0.95x, progress 0.7x
+- Tasks in analyze_task are filtered by provider name in repo_name to avoid false positives
