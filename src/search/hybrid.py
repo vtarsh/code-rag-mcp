@@ -116,10 +116,26 @@ def hybrid_search(
         scores[rid]["score"] += rrf_score
         scores[rid]["sources"].append("vector")
 
-    # Apply gotchas boost — curated knowledge ranks higher
+    # Apply content-type boosts — curated knowledge ranks higher
+    TASK_BOOST = {
+        "task_decisions": 1.2,
+        "task_plan": 1.2,
+        "task_api_spec": 1.1,
+        "task_gotchas": 1.2,
+        "task_description": 1.1,
+        "task_metadata": 1.0,
+        "task_progress": 0.8,
+        "task_section": 1.0,
+    }
+    REFERENCE_BOOST = 1.3
     for _rid, data in scores.items():
-        if data.get("file_type") == "gotchas":
+        ft = data.get("file_type", "")
+        if ft == "gotchas":
             data["score"] *= GOTCHAS_BOOST
+        elif ft == "task":
+            data["score"] *= TASK_BOOST.get(data.get("chunk_type", ""), 1.0)
+        elif ft == "reference":
+            data["score"] *= REFERENCE_BOOST
 
     total_candidates = len(scores)
 

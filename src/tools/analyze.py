@@ -137,6 +137,9 @@ def _analyze_task_impl(conn, description: str, provider: str) -> str:
     # Section 0: domain knowledge (show first — most important context)
     output += _section_gotchas(conn, provider, words)
 
+    # Section 0.5: existing task documents
+    output += _section_existing_tasks(conn, provider, words)
+
     # Sections 1-5: gather findings
     output += _section_provider(conn, provider, words, findings)
     output += _section_proto(conn, words, findings)
@@ -196,6 +199,47 @@ def _section_gotchas(conn, provider: str, words: set[str]) -> str:
     for row in results[:8]:
         snip = strip_repo_tag(row["snippet"])
         output += f"**{row['repo_name']}** (`{row['file_path']}`):\n{snip}\n\n"
+    return output
+
+
+def _section_existing_tasks(conn, provider: str, words: set[str]) -> str:
+    """Section 0.5: Surface existing task documents that may be related."""
+    queries = []
+    if provider:
+        queries.append(f'"{provider}"')
+    for w in words:
+        if len(w) > 5 and w not in _KEYWORD_STOP_WORDS:
+            queries.append(f'"{w}"')
+
+    if not queries:
+        return ""
+
+    seen_snippets: set[str] = set()
+    results = []
+    for q in queries:
+        try:
+            rows = conn.execute(
+                "SELECT repo_name, chunk_type, snippet(chunks, 0, '>>>', '<<<', '...', 30) as snippet "
+                "FROM chunks WHERE chunks MATCH ? AND file_type = 'task' "
+                "AND chunk_type != 'task_progress' ORDER BY rank LIMIT 5",
+                (q,),
+            ).fetchall()
+            for row in rows:
+                snip = row["snippet"][:300]
+                if snip not in seen_snippets:
+                    seen_snippets.add(snip)
+                    results.append(row)
+        except Exception:
+            continue
+
+    if not results:
+        return ""
+
+    output = "## 📋 Existing Task Documents\n\n"
+    output += "_Found related task context from previous work._\n\n"
+    for row in results[:6]:
+        snip = strip_repo_tag(row["snippet"])
+        output += f"**{row['repo_name']}** ({row['chunk_type']}): {snip}\n\n"
     return output
 
 

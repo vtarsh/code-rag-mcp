@@ -38,6 +38,14 @@ GOTCHAS_DIR = (
 FLOWS_DIR = (
     _PROFILE_DIR / "docs" / "flows" if (_PROFILE_DIR / "docs" / "flows").is_dir() else _BASE_DIR / "docs" / "flows"
 )
+TASKS_DIR = (
+    _PROFILE_DIR / "docs" / "tasks" if (_PROFILE_DIR / "docs" / "tasks").is_dir() else _BASE_DIR / "docs" / "tasks"
+)
+REFERENCES_DIR = (
+    _PROFILE_DIR / "docs" / "references"
+    if (_PROFILE_DIR / "docs" / "references").is_dir()
+    else _BASE_DIR / "docs" / "references"
+)
 _profile_domain_reg = _PROFILE_DIR / "docs" / "domain_registry.yaml"
 DOMAIN_REGISTRY_FILE = (
     _profile_domain_reg if _profile_domain_reg.exists() else _BASE_DIR / "docs" / "domain_registry.yaml"
@@ -927,6 +935,271 @@ def index_flows(conn: sqlite3.Connection) -> tuple[int, int]:
     return files, chunks
 
 
+_TASK_SECTION_MAP = {
+    "description": "task_description",
+    "api spec": "task_api_spec",
+    "api": "task_api_spec",
+    "implementation plan": "task_plan",
+    "implementation": "task_plan",
+    "plan": "task_plan",
+    "decisions": "task_decisions",
+    "key decisions": "task_decisions",
+    "gotchas": "task_gotchas",
+    "gotchas found": "task_gotchas",
+    "progress": "task_progress",
+    "progress log": "task_progress",
+    "webhook": "task_api_spec",
+    "webhook spec": "task_api_spec",
+    "config": "task_plan",
+    "repos to change": "task_plan",
+    "gaps": "task_decisions",
+}
+
+
+def _detect_task_chunk_type(header: str) -> str:
+    """Map a markdown header to a task chunk_type."""
+    normalized = re.sub(r"^#+\s*", "", header).strip().lower()
+    # Try exact match first, then prefix match
+    if normalized in _TASK_SECTION_MAP:
+        return _TASK_SECTION_MAP[normalized]
+    for key, ctype in _TASK_SECTION_MAP.items():
+        if normalized.startswith(key) or key in normalized:
+            return ctype
+    return "task_section"
+
+
+def chunk_task_markdown(content: str, task_name: str) -> list[dict]:
+    """Chunk task markdown with section-aware splitting.
+
+    - Frontmatter (---...---) → task_metadata chunk
+    - Each ## section → chunk typed by section name
+    - ### sub-sections within large sections → separate chunks
+    - Oversized chunks split at blank lines
+    """
+    chunks = []
+
+    # Extract frontmatter
+    fm_match = re.match(r"^---\n(.+?\n)---\n?", content, re.DOTALL)
+    frontmatter = ""
+    body = content
+    if fm_match:
+        frontmatter = fm_match.group(1).strip()
+        body = content[fm_match.end() :]
+        if len(frontmatter) >= MIN_CHUNK:
+            chunks.append(
+                {
+                    "content": f"[Task: {task_name}] [Metadata]\n{frontmatter}",
+                    "chunk_type": "task_metadata",
+                }
+            )
+
+    # Split body by H2 headers
+    h2_sections = re.split(r"^(##\s+.+)$", body, flags=re.MULTILINE)
+
+    current_header = ""
+    current_content = []
+
+    for part in h2_sections:
+        if re.match(r"^##\s+", part):
+            # Flush previous section
+            if current_content:
+                _flush_task_section(chunks, task_name, current_header, "\n".join(current_content))
+            current_header = part
+            current_content = []
+        else:
+            current_content.append(part)
+
+    # Flush last section
+    if current_content or current_header:
+        _flush_task_section(chunks, task_name, current_header, "\n".join(current_content))
+
+    # Fallback: if no chunks from body, index whole body
+    if not chunks and len(body.strip()) >= MIN_CHUNK:
+        chunks.append(
+            {
+                "content": f"[Task: {task_name}] {body.strip()[:MAX_CHUNK]}",
+                "chunk_type": "task_section",
+            }
+        )
+
+    return chunks
+
+
+def _flush_task_section(chunks: list[dict], task_name: str, header: str, content: str):
+    """Flush a task section, splitting by H3 if it exceeds MAX_CHUNK."""
+    chunk_type = _detect_task_chunk_type(header) if header else "task_section"
+    full_text = (header + "\n" + content).strip() if header else content.strip()
+
+    if len(full_text) < MIN_CHUNK:
+        return
+
+    if len(full_text) <= MAX_CHUNK:
+        chunks.append(
+            {
+                "content": f"[Task: {task_name}] [{chunk_type}] {full_text}",
+                "chunk_type": chunk_type,
+            }
+        )
+        return
+
+    # Split by H3 sub-sections
+    h3_parts = re.split(r"^(###\s+.+)$", content, flags=re.MULTILINE)
+    sub_header = header
+    sub_content: list[str] = []
+
+    for part in h3_parts:
+        if re.match(r"^###\s+", part):
+            # Flush previous sub-section
+            sub_text = (
+                (sub_header + "\n" + "\n".join(sub_content)).strip() if sub_header else "\n".join(sub_content).strip()
+            )
+            if len(sub_text) >= MIN_CHUNK:
+                if len(sub_text) > MAX_CHUNK:
+                    sub_text = sub_text[:MAX_CHUNK] + "\n... [truncated]"
+                chunks.append(
+                    {
+                        "content": f"[Task: {task_name}] [{chunk_type}] {sub_text}",
+                        "chunk_type": chunk_type,
+                    }
+                )
+            sub_header = part
+            sub_content = []
+        else:
+            sub_content.append(part)
+
+    # Flush last sub-section
+    sub_text = (sub_header + "\n" + "\n".join(sub_content)).strip() if sub_header else "\n".join(sub_content).strip()
+    if len(sub_text) >= MIN_CHUNK:
+        if len(sub_text) > MAX_CHUNK:
+            sub_text = sub_text[:MAX_CHUNK] + "\n... [truncated]"
+        chunks.append(
+            {
+                "content": f"[Task: {task_name}] [{chunk_type}] {sub_text}",
+                "chunk_type": chunk_type,
+            }
+        )
+
+
+def index_tasks(conn: sqlite3.Connection) -> tuple[int, int]:
+    """Index task files from profiles/{profile}/docs/tasks/.
+
+    File naming: <task-slug>.md (e.g., payper-interac-etransfer.md).
+    Each file is indexed with file_type='task' and repo_name=task slug.
+    """
+    if not TASKS_DIR.is_dir():
+        return 0, 0
+
+    files = 0
+    chunks = 0
+
+    for file_path in sorted(TASKS_DIR.glob("*.md")):
+        task_name = file_path.stem
+        files += 1
+
+        try:
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+
+        if not content.strip() or len(content.strip()) < MIN_CHUNK:
+            continue
+
+        file_chunks = chunk_task_markdown(content, task_name)
+        chunk_rowids = []
+
+        for chunk in file_chunks:
+            conn.execute(
+                "INSERT INTO chunks(content, repo_name, file_path, file_type, chunk_type, language) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    chunk["content"],
+                    task_name,
+                    f"docs/tasks/{file_path.name}",
+                    "task",
+                    chunk["chunk_type"],
+                    "markdown",
+                ),
+            )
+            chunk_rowids.append(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+            chunks += 1
+
+        # Populate chunk_meta for sibling retrieval
+        total = len(chunk_rowids)
+        for order, rowid in enumerate(chunk_rowids):
+            conn.execute(
+                "INSERT OR REPLACE INTO chunk_meta(chunk_rowid, chunk_order, total_chunks) VALUES (?, ?, ?)",
+                (rowid, order, total),
+            )
+
+    if files:
+        print(f"  Tasks: {files} files, {chunks} chunks")
+
+    return files, chunks
+
+
+def index_references(conn: sqlite3.Connection) -> tuple[int, int]:
+    """Index reference files from profiles/{profile}/docs/references/.
+
+    Supports .yaml and .md files. Each file indexed with file_type='reference'.
+    """
+    if not REFERENCES_DIR.is_dir():
+        return 0, 0
+
+    files = 0
+    chunks = 0
+
+    for file_path in sorted(REFERENCES_DIR.glob("*")):
+        if file_path.suffix.lower() not in (".yaml", ".yml", ".md"):
+            continue
+
+        ref_name = file_path.stem
+        files += 1
+
+        try:
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+
+        if not content.strip() or len(content.strip()) < MIN_CHUNK:
+            continue
+
+        language = detect_language(str(file_path))
+
+        if language == "markdown":
+            file_chunks = chunk_markdown(content, ref_name)
+        else:
+            # YAML: index as single chunk or split by top-level entries
+            text = content.strip()
+            if len(text) > MAX_CHUNK:
+                text = text[:MAX_CHUNK] + "\n... [truncated]"
+            file_chunks = [{"content": f"[Reference: {ref_name}] {text}", "chunk_type": "reference_entry"}]
+
+        for chunk in file_chunks:
+            # Ensure reference prefix
+            chunk_content = chunk["content"]
+            if not chunk_content.startswith("[Reference:"):
+                chunk_content = f"[Reference: {ref_name}] {chunk_content}"
+
+            conn.execute(
+                "INSERT INTO chunks(content, repo_name, file_path, file_type, chunk_type, language) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    chunk_content,
+                    ref_name,
+                    f"docs/references/{file_path.name}",
+                    "reference",
+                    chunk.get("chunk_type", "reference_entry"),
+                    language,
+                ),
+            )
+            chunks += 1
+
+    if files:
+        print(f"  References: {files} files, {chunks} chunks")
+
+    return files, chunks
+
+
 def chunk_cql_seeds(content: str, repo_name: str) -> list[dict]:
     """Chunk seeds.cql — each INSERT becomes a separate chunk with provider config metadata.
 
@@ -1256,6 +1529,29 @@ def main():
             total_files += ts_files
             total_chunks += ts_chunks
 
+            # Re-index tasks (delete old, insert fresh)
+            deleted_tk = conn.execute("SELECT rowid FROM chunks WHERE file_type = 'task'").fetchall()
+            for (rowid,) in deleted_tk:
+                conn.execute("DELETE FROM chunks WHERE rowid = ?", (rowid,))
+            if deleted_tk:
+                tk_rowids = [r[0] for r in deleted_tk]
+                placeholders = ",".join("?" * len(tk_rowids))
+                conn.execute(f"DELETE FROM chunk_meta WHERE chunk_rowid IN ({placeholders})", tk_rowids)
+                print(f"  Removed {len(deleted_tk)} old task chunks")
+            tk_files, tk_chunks = index_tasks(conn)
+            total_files += tk_files
+            total_chunks += tk_chunks
+
+            # Re-index references (delete old, insert fresh)
+            deleted_rf = conn.execute("SELECT rowid FROM chunks WHERE file_type = 'reference'").fetchall()
+            for (rowid,) in deleted_rf:
+                conn.execute("DELETE FROM chunks WHERE rowid = ?", (rowid,))
+            if deleted_rf:
+                print(f"  Removed {len(deleted_rf)} old reference chunks")
+            rf_files, rf_chunks = index_references(conn)
+            total_files += rf_files
+            total_chunks += rf_chunks
+
             # Clean old package_usage chunks (rebuilt by build_graph.py)
             deleted_pu = conn.execute("SELECT rowid FROM chunks WHERE file_type = 'package_usage'").fetchall()
             for (rowid,) in deleted_pu:
@@ -1321,6 +1617,16 @@ def main():
         ts_files, ts_chunks = index_test_scripts(conn)
         total_files += ts_files
         total_chunks += ts_chunks
+
+        # Index task files
+        tk_files, tk_chunks = index_tasks(conn)
+        total_files += tk_files
+        total_chunks += tk_chunks
+
+        # Index reference files
+        rf_files, rf_chunks = index_references(conn)
+        total_files += rf_files
+        total_chunks += rf_chunks
 
         total_chunks_global = total_chunks
         total_repos_global = len(repo_meta)
