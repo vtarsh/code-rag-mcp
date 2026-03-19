@@ -118,13 +118,13 @@ def hybrid_search(
 
     # Apply content-type boosts — curated knowledge ranks higher
     TASK_BOOST = {
-        "task_decisions": 1.2,
-        "task_plan": 1.2,
-        "task_api_spec": 1.1,
-        "task_gotchas": 1.2,
-        "task_description": 1.1,
-        "task_metadata": 1.0,
-        "task_progress": 0.8,
+        "task_decisions": 1.1,
+        "task_plan": 1.1,
+        "task_api_spec": 1.05,
+        "task_gotchas": 1.1,
+        "task_description": 1.05,
+        "task_metadata": 0.95,
+        "task_progress": 0.7,
         "task_section": 1.0,
     }
     REFERENCE_BOOST = 1.3

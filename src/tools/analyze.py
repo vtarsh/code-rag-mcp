@@ -203,7 +203,11 @@ def _section_gotchas(conn, provider: str, words: set[str]) -> str:
 
 
 def _section_existing_tasks(conn, provider: str, words: set[str]) -> str:
-    """Section 0.5: Surface existing task documents that may be related."""
+    """Section 0.5: Surface existing task documents that may be related.
+
+    When a provider is specified, require that the task repo_name contains it
+    to avoid false positives (e.g., "verification" matching unrelated tasks).
+    """
     queries = []
     if provider:
         queries.append(f'"{provider}"')
@@ -225,6 +229,9 @@ def _section_existing_tasks(conn, provider: str, words: set[str]) -> str:
                 (q,),
             ).fetchall()
             for row in rows:
+                # When provider is specified, only show tasks that mention it in their name
+                if provider and provider not in row["repo_name"]:
+                    continue
                 snip = row["snippet"][:300]
                 if snip not in seen_snippets:
                     seen_snippets.add(snip)
