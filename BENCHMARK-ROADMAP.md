@@ -117,6 +117,12 @@
 
 ## Codebase Context (для імплементаторів)
 
+### Code facts coverage
+- **350/500 repos** мають code_facts (70%). Решта ~150 або boilerplate/CI/gitops, або мають нестандартну структуру
+- Scan покриває: methods/, libs/, consts/, handlers/, routes/, utils/, services/, workflows/, env/, src/ + root consts.js/config.js
+- **Якщо code_facts не знайдено** — подивись repo_overview для опису, перевір чи repo має JS в інших директоріях (app/, server/, functions/)
+- ~80-120 з тих 150 справді порожні (stubs, config-only, CI actions)
+
 ### JS без типів
 - Кодова база = 500+ JS мікросервісів, **немає TypeScript**
 - Proto files (.proto) = type system замість TS types

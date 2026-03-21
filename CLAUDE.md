@@ -91,6 +91,36 @@ All sessions share one daemon process. Proxy auto-starts daemon if not running.
 - All tool functions return `str` (error strings on failure, formatted results on success)
 - Org-specific data MUST live in profiles/ — never hardcode org names in src/
 
+## Code Facts (added 2026-03-21)
+
+- **2,606 code_facts** from **350 repos** stored in `code_facts` table + `code_facts_fts` (FTS5)
+- Also inserted as `file_type='code_fact'` chunks for hybrid search
+- Fact types: validation_guard (530), const_value (1485), joi_schema (244), temporal_retry (43), env_var (3)
+- Extraction: regex-based in `build_index.py::extract_code_facts()` — runs during `index_repo()`
+- Coverage: methods/, libs/, consts/, handlers/, routes/, utils/, services/, workflows/, env/, src/ + root consts.js/config.js
+- ~150 repos have no facts (boilerplate, CI, gitops, or non-standard structure)
+- To rebuild facts only: delete from code_facts + code_facts_fts, re-run index_repo for affected repos
+
+## Tools (12 total)
+
+- `search` — hybrid search with `exclude_file_types` parameter (e.g. "gotchas")
+- `find_dependencies`, `trace_impact`, `trace_flow`, `trace_chain` — graph tools
+- `repo_overview`, `list_repos` — browsing
+- `analyze_task`, `context_builder` — composite
+- `diff_provider_config` — compares two providers' feature flags from seeds.cql (handles multi-PMT)
+- `health_check`, `visualize_graph` — diagnostics
+
+## Benchmark Regression Suite
+
+```bash
+# Run after any search/indexing changes (uses profile benchmarks.yaml)
+CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=my-org python3 scripts/benchmark_queries.py
+CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=my-org python3 scripts/benchmark_realworld.py
+CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=my-org python3 scripts/benchmark_flows.py
+```
+
+Current scores: conceptual 0.85, realworld 0.83, flows 0.71
+
 ## Gotchas
 
 - `build_index.py` recreates DB from scratch — run `build_graph.py` after to restore graph_edges

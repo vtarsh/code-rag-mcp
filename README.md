@@ -121,11 +121,11 @@ List models: `python3 scripts/build_vectors.py --list-models`
 
 **Disk space**: Embedding models are 80-250 MB (downloaded from HuggingFace on first run). The SQLite database and vector store grow at roughly 1 MB per 10 indexed repos.
 
-## MCP Tools (11)
+## MCP Tools (12)
 
 | Tool | Description |
 |------|-------------|
-| `search` | Hybrid search (FTS5 + vector + RRF + CrossEncoder reranker) |
+| `search` | Hybrid search (FTS5 + vector + RRF + CrossEncoder). Supports `exclude_file_types` filter |
 | `context_builder` | One-call context: search + deps + proto for LLM tasks |
 | `repo_overview` | Aggregated info about a specific repo |
 | `list_repos` | List/filter repos by type or dependency |
@@ -134,8 +134,24 @@ List models: `python3 scripts/build_vectors.py --list-models`
 | `trace_flow` | Shortest path between two repos |
 | `trace_chain` | Full processing chain from a repo or concept |
 | `analyze_task` | Task analysis with proto/webhook/gateway check + GitHub PR scan |
+| `diff_provider_config` | Compare feature flags between two providers from seeds.cql |
 | `health_check` | System diagnostics |
 | `visualize_graph` | Interactive graph visualization |
+
+## Code Facts Extraction
+
+The indexer extracts structured facts from JS/TS code into a `code_facts` table:
+
+| Fact Type | What | Example |
+|-----------|------|---------|
+| `validation_guard` | if-throw patterns | `if (!mit) → "Only MIT transactions allowed"` |
+| `const_value` | UPPER_CASE constants | `MAX_RETRIES = 5` |
+| `joi_schema` | Joi validation schemas | `Joi.object({amount: Joi.number()...})` |
+| `temporal_retry` | Temporal retry policies | `maximumAttempts: 9, initialInterval: '1h'` |
+| `env_var` | process.env with defaults | `process.env.PORT \|\| 3000` |
+| `grpc_status` | gRPC status code mapping | `status: NOT_FOUND → "Account not found"` |
+
+Facts are searchable via `search(query, file_type="code_fact")`.
 
 ## Makefile Commands
 
