@@ -3,7 +3,7 @@
 All tools are registered here with FastMCP.
 Business logic lives in service modules, this file only wires them up.
 
-Tools (11):
+Tools (12):
   Search:  search
   Graph:   find_dependencies, trace_impact, trace_flow, trace_chain
   Tools:   repo_overview, list_repos, analyze_task, context_builder, health_check, visualize_graph

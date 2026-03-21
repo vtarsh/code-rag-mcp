@@ -325,10 +325,17 @@ def diff_provider_config_tool(provider_a: str, provider_b: str) -> str:
 
     def _get_provider_chunks(provider: str) -> list[str]:
         """Get ALL provider_config chunks for a provider (may have multiple payment_method_types)."""
-        rows = conn.execute(
-            "SELECT content FROM chunks WHERE file_type = 'provider_config' AND content MATCH ?",
-            (f'"{provider}"',),
-        ).fetchall()
+        # Sanitize provider name for FTS5 (remove quotes to prevent injection)
+        safe_provider = provider.replace('"', "").replace("'", "").strip()
+        if not safe_provider:
+            return []
+        try:
+            rows = conn.execute(
+                "SELECT content FROM chunks WHERE file_type = 'provider_config' AND content MATCH ?",
+                (f'"{safe_provider}"',),
+            ).fetchall()
+        except Exception:
+            return []
         results = []
         for row in rows:
             try:

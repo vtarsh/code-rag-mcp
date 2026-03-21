@@ -70,7 +70,7 @@ def _build_context(
     output = f"# Context: {query}\n\n"
 
     # 1. Search
-    ranked, vec_err, _total = hybrid_search(expanded, repo, "", search_limit)
+    ranked, vec_err, _total = hybrid_search(expanded, repo, "", limit=search_limit)
     if not ranked:
         return output + "No results found. Try different keywords.\n"
 
