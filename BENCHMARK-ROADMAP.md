@@ -5,7 +5,10 @@
 - **Phase 0.5: COMPLETE** (2026-03-21) — ground truth verified for Q0-Q5, stored in GROUND-TRUTH.md
 - **Phase 1: COMPLETE** (2026-03-21) — all 4 fixes done and tested
 - **Phase 2: COMPLETE** (2026-03-21) — re-test shows significant improvement
-- **Next action:** Phase 3 (proactivity test) or Phase 6 (regression suite)
+- **Phase 3: COMPLETE** (2026-03-21) — proactivity test: 83% TP, 0% FP WITHOUT gotchas
+- **Phase 4: COMPLETE** (2026-03-21) — 8 diagnostic templates indexed as reference docs
+- **Phase 5: COMPLETE** (2026-03-21) — 3/39 gotchas covered by code_facts, 36 still needed
+- **Next action:** Phase 6 (regression suite) — next session
 
 ### Implemented Fixes (Phase 1)
 - **Fix 1 (seeds.cql):** DONE — all boolean values now explicit (enabled/disabled/feature flags matrix)
