@@ -322,7 +322,13 @@ def diff_provider_config_tool(provider_a: str, provider_b: str) -> str:
         provider_b: Second provider name (e.g., "paypal", "nuvei")
     """
     conn = get_db()
+    try:
+        return _diff_provider_config_impl(conn, provider_a, provider_b)
+    finally:
+        conn.close()
 
+
+def _diff_provider_config_impl(conn, provider_a: str, provider_b: str) -> str:
     def _get_provider_chunks(provider: str) -> list[str]:
         """Get ALL provider_config chunks for a provider (may have multiple payment_method_types)."""
         # Sanitize provider name for FTS5 (remove quotes to prevent injection)

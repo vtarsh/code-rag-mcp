@@ -1453,7 +1453,9 @@ def extract_code_facts(content: str, file_path: str, repo_name: str) -> list[dic
             for j in range(i + 1, min(i + 11, len(lines))):
                 next_line = lines[j].strip()
                 # Match throw, issuer_response_text, message patterns
-                throw_match = re.search(r"throw\s+(?:new\s+\w+\()?['\"`]([^'\"`]+)['\"`]", next_line)
+                throw_match = re.search(r"throw\s+(?:new\s+\w+\()?['\"]([^'\"]+)['\"]", next_line) or re.search(
+                    r"throw\s+(?:new\s+\w+\()?`([^`]+)`", next_line
+                )
                 response_match = re.search(r"issuer_response_text:\s*['\"]([^'\"]+)['\"]", next_line)
                 message_match = re.search(r"message:\s*['\"]([^'\"]+)['\"]", next_line)
                 msg = None

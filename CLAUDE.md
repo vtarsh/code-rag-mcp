@@ -93,9 +93,9 @@ All sessions share one daemon process. Proxy auto-starts daemon if not running.
 
 ## Code Facts (added 2026-03-21)
 
-- **2,606 code_facts** from **350 repos** stored in `code_facts` table + `code_facts_fts` (FTS5)
+- **2,279 code_facts** from **397 repos** stored in `code_facts` table + `code_facts_fts` (FTS5)
 - Also inserted as `file_type='code_fact'` chunks for hybrid search
-- Fact types: validation_guard (530), const_value (1485), joi_schema (244), temporal_retry (43), env_var (3)
+- Fact types: validation_guard (1311), const_value (684), joi_schema (231), temporal_retry (31), env_var (22)
 - Extraction: regex-based in `build_index.py::extract_code_facts()` — runs during `index_repo()`
 - Coverage: methods/, libs/, consts/, handlers/, routes/, utils/, services/, workflows/, env/, src/ + root consts.js/config.js
 - ~150 repos have no facts (boilerplate, CI, gitops, or non-standard structure)
@@ -119,7 +119,7 @@ CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=my-org python3 scripts/benchmark_r
 CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=my-org python3 scripts/benchmark_flows.py
 ```
 
-Current scores: conceptual 0.85, realworld 0.83, flows 0.71
+Current scores: conceptual 0.85, realworld 0.83, flows 0.875
 
 ## Gotchas
 
