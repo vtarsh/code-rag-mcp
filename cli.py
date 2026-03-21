@@ -36,7 +36,7 @@ def call_tool(tool_name: str, args: dict) -> str:
         return f"ERROR: {e}"
 
 
-def main():
+def main() -> None:
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)

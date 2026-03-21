@@ -6,6 +6,7 @@ These tools provide repo browsing, diagnostics, and visualization.
 from __future__ import annotations
 
 import json
+import sqlite3
 import subprocess
 from pathlib import Path
 
@@ -328,7 +329,7 @@ def diff_provider_config_tool(provider_a: str, provider_b: str) -> str:
         conn.close()
 
 
-def _diff_provider_config_impl(conn, provider_a: str, provider_b: str) -> str:
+def _diff_provider_config_impl(conn: sqlite3.Connection, provider_a: str, provider_b: str) -> str:
     def _get_provider_chunks(provider: str) -> list[str]:
         """Get ALL provider_config chunks for a provider (may have multiple payment_method_types)."""
         # Sanitize provider name for FTS5 (remove quotes to prevent injection)
@@ -363,7 +364,7 @@ def _diff_provider_config_impl(conn, provider_a: str, provider_b: str) -> str:
     if not chunks_b:
         return f"Provider '{provider_b}' not found in seeds.cql. '{provider_a}' has {len(chunks_a)} config(s)."
 
-    def _parse_features(chunk: str) -> dict:
+    def _parse_features(chunk: str) -> dict[str, str]:
         features = {}
         for raw_line in chunk.splitlines():
             line = raw_line.strip()

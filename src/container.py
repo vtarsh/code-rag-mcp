@@ -15,7 +15,8 @@ import functools
 import logging
 import sqlite3
 import threading
-from typing import Any
+from collections.abc import Callable
+from typing import Any, ParamSpec, TypeVar
 
 from src.config import DB_PATH, EMBEDDING_MODEL_KEY, LANCE_PATH
 from src.models import get_model_config
@@ -104,17 +105,21 @@ def get_reranker() -> tuple[Any, str | None]:
     return _reranker, None
 
 
-def require_db(func):
+P = ParamSpec("P")
+T = TypeVar("T")
+
+
+def require_db(func: Callable[P, T]) -> Callable[P, T]:
     """Decorator that checks DB health before running a tool function."""
 
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
         db_err = check_db_health()
         if db_err:
-            return db_err
+            return db_err  # type: ignore[return-value]
         return func(*args, **kwargs)
 
-    return wrapper
+    return wrapper  # type: ignore[return-value]
 
 
 def is_model_loaded() -> bool:

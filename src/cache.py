@@ -10,6 +10,8 @@ import functools
 import hashlib
 import json
 import time
+from collections.abc import Callable
+from typing import ParamSpec, TypeVar
 
 from src.types import RuntimeStats, ToolCallStat
 
@@ -68,17 +70,21 @@ def _track_tool(func_name: str, duration: float) -> None:
         _stats["tool_times"][func_name] = times[-100:]
 
 
-def tracked(fn):
+P = ParamSpec("P")
+T = TypeVar("T")
+
+
+def tracked(fn: Callable[P, T]) -> Callable[P, T]:
     """Decorator to track tool call count and duration."""
 
     @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
         t0 = time.time()
         result = fn(*args, **kwargs)
         _track_tool(fn.__name__, time.time() - t0)
         return result
 
-    return wrapper
+    return wrapper  # type: ignore[return-value]
 
 
 def get_runtime_stats() -> RuntimeStats:

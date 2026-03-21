@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import sqlite3
 import subprocess
 from pathlib import Path
 
@@ -84,7 +85,7 @@ def _find_task_prs(repos: list[str], task_id: str) -> dict[str, list[dict]]:
     return results
 
 
-def _check_method_exists(repo_name: str, method_name: str, conn) -> dict:
+def _check_method_exists(repo_name: str, method_name: str, conn: sqlite3.Connection) -> dict:
     """Check if a gRPC method already exists in a repo."""
     chunks = conn.execute(
         "SELECT file_path, content FROM chunks WHERE repo_name = ? AND file_type = 'grpc_method' AND file_path LIKE ?",
@@ -124,7 +125,7 @@ def analyze_task_tool(description: str, provider: str = "") -> str:
         conn.close()
 
 
-def _analyze_task_impl(conn, description: str, provider: str) -> str:
+def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str) -> str:
     """Orchestrate 8-section task analysis. Each section is a helper function."""
     output = f"# Task Analysis\n\n**Task**: {description}\n\n"
     findings: list[tuple[str, str]] = []
@@ -161,7 +162,7 @@ def _analyze_task_impl(conn, description: str, provider: str) -> str:
     return output
 
 
-def _section_gotchas(conn, provider: str, words: set[str]) -> str:
+def _section_gotchas(conn: sqlite3.Connection, provider: str, words: set[str]) -> str:
     """Section 0: Surface curated domain knowledge — show BEFORE code analysis."""
     # Search gotchas chunks for provider and task keywords
     queries = []
@@ -202,7 +203,7 @@ def _section_gotchas(conn, provider: str, words: set[str]) -> str:
     return output
 
 
-def _section_existing_tasks(conn, provider: str, words: set[str]) -> str:
+def _section_existing_tasks(conn: sqlite3.Connection, provider: str, words: set[str]) -> str:
     """Section 0.5: Surface existing task documents that may be related.
 
     When a provider is specified, require that the task repo_name contains it
@@ -250,7 +251,7 @@ def _section_existing_tasks(conn, provider: str, words: set[str]) -> str:
     return output
 
 
-def _detect_provider(conn, words: set[str]) -> str:
+def _detect_provider(conn: sqlite3.Connection, words: set[str]) -> str:
     """Auto-detect provider name from task description words."""
     provider_repos = conn.execute(
         "SELECT name FROM repos WHERE name LIKE 'grpc-apm-%' OR name LIKE 'grpc-providers-%'"
@@ -284,7 +285,7 @@ _KEYWORD_STOP_WORDS = frozenset(
 )
 
 
-def _section_provider(conn, provider: str, words: set[str], findings: list[tuple[str, str]]) -> str:
+def _section_provider(conn: sqlite3.Connection, provider: str, words: set[str], findings: list[tuple[str, str]]) -> str:
     """Section 1: Find provider service repos and keyword matches."""
     if not provider:
         return ""
@@ -318,7 +319,7 @@ def _section_provider(conn, provider: str, words: set[str], findings: list[tuple
     return output
 
 
-def _section_proto(conn, words: set[str], findings: list[tuple[str, str]]) -> str:
+def _section_proto(conn: sqlite3.Connection, words: set[str], findings: list[tuple[str, str]]) -> str:
     """Section 2: Check proto contract for available RPC methods."""
     output = "## 2. Proto Contract (providers-proto)\n\n"
     proto_service = conn.execute(
@@ -339,7 +340,7 @@ def _section_proto(conn, words: set[str], findings: list[tuple[str, str]]) -> st
     return output
 
 
-def _section_webhooks(conn, provider: str, findings: list[tuple[str, str]]) -> str:
+def _section_webhooks(conn: sqlite3.Connection, provider: str, findings: list[tuple[str, str]]) -> str:
     """Section 3: Find webhook handling for the provider."""
     if not provider:
         return ""
@@ -366,7 +367,7 @@ def _section_webhooks(conn, provider: str, findings: list[tuple[str, str]]) -> s
     return output
 
 
-def _section_gateway(conn, words: set[str], findings: list[tuple[str, str]]) -> str:
+def _section_gateway(conn: sqlite3.Connection, words: set[str], findings: list[tuple[str, str]]) -> str:
     """Section 4: Check payment gateway methods."""
     output = "## 4. Payment Gateway\n\n"
     gateway_methods = conn.execute(
@@ -383,7 +384,7 @@ def _section_gateway(conn, words: set[str], findings: list[tuple[str, str]]) -> 
     return output
 
 
-def _section_impact(conn, provider: str) -> str:
+def _section_impact(conn: sqlite3.Connection, provider: str) -> str:
     """Section 5: Trace dependency impact for provider repos."""
     output = "## 5. Impact Analysis\n\n"
     if not provider:
@@ -402,7 +403,9 @@ def _section_impact(conn, provider: str) -> str:
     return output
 
 
-def _section_methods(conn, words: set[str], findings: list[tuple[str, str]]) -> tuple[str, set[str], dict[str, dict]]:
+def _section_methods(
+    conn: sqlite3.Connection, words: set[str], findings: list[tuple[str, str]]
+) -> tuple[str, set[str], dict[str, dict]]:
     """Section 6: Check if gRPC methods exist in provider/gateway repos.
 
     Returns (output, task_methods, method_status).
@@ -491,7 +494,7 @@ def _section_github(
 
 
 def _section_completeness(
-    conn,
+    conn: sqlite3.Connection,
     findings: list[tuple[str, str]],
     task_methods: set[str],
     method_status: dict[str, dict],

@@ -10,6 +10,8 @@ Profile resolution order:
 4. Fallback: "example"
 """
 
+from __future__ import annotations
+
 import json
 import os
 from pathlib import Path

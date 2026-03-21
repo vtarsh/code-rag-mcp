@@ -19,8 +19,10 @@ import os
 import sys
 import time
 import traceback
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from typing import Any
 
 # Auto-detect CODE_RAG_HOME from script location (daemon lives in project root)
 if "CODE_RAG_HOME" not in os.environ:
@@ -61,7 +63,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # --- Tool registry ---
-TOOLS: dict[str, callable] = {
+TOOLS: dict[str, Callable[[dict[str, Any]], str]] = {
     "search": lambda args: search_tool(
         args["query"],
         args.get("repo", ""),
@@ -94,13 +96,13 @@ TOOLS: dict[str, callable] = {
 class DaemonHandler(BaseHTTPRequestHandler):
     """Handle /tool/<name> and /health requests."""
 
-    def do_GET(self):
+    def do_GET(self) -> None:
         if self.path == "/health":
             self._json_response(200, {"status": "ok", "uptime": time.time() - _start_time, "pid": os.getpid()})
         else:
             self._json_response(404, {"error": "not found"})
 
-    def do_POST(self):
+    def do_POST(self) -> None:
         if not self.path.startswith("/tool/"):
             self._json_response(404, {"error": "not found"})
             return
@@ -128,7 +130,7 @@ class DaemonHandler(BaseHTTPRequestHandler):
             log.error(f"tool={tool_name} error: {traceback.format_exc()}")
             self._json_response(500, {"error": str(e)})
 
-    def _json_response(self, status: int, data: dict):
+    def _json_response(self, status: int, data: dict) -> None:
         body = json.dumps(data).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
@@ -136,7 +138,7 @@ class DaemonHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def log_message(self, format, *args):
+    def log_message(self, format: str, *args: object) -> None:
         """Suppress default stderr logging — we use our own logger."""
         pass
 
@@ -144,18 +146,18 @@ class DaemonHandler(BaseHTTPRequestHandler):
 _start_time = time.time()
 
 
-def write_pid():
+def write_pid() -> None:
     """Write PID file for management scripts."""
     PID_FILE.write_text(str(os.getpid()))
 
 
-def cleanup_pid():
+def cleanup_pid() -> None:
     """Remove PID file on shutdown."""
     with contextlib.suppress(OSError):
         PID_FILE.unlink(missing_ok=True)
 
 
-def main():
+def main() -> None:
     log.info(f"Starting daemon on port {PORT} (pid={os.getpid()})")
 
     # Preload ML models in background thread

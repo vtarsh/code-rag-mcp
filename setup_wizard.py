@@ -180,7 +180,7 @@ def check_gh_auth() -> bool:
     return result.returncode == 0
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="code-rag-mcp setup wizard")
     parser.add_argument("--org", help="GitHub organization name (required in non-interactive mode)")
     parser.add_argument("--npm-scope", help="npm scope (default: @<org>)")
@@ -197,7 +197,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
+def main() -> None:
     args = parse_args()
     interactive = args.org is None
 
