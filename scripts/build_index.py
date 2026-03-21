@@ -1453,7 +1453,7 @@ def extract_code_facts(content: str, file_path: str, repo_name: str) -> list[dic
             for j in range(i + 1, min(i + 11, len(lines))):
                 next_line = lines[j].strip()
                 # Match throw, issuer_response_text, message patterns
-                throw_match = re.search(r"throw\s+(?:new\s+\w+\()?['\"]([^'\"]+)['\"]", next_line)
+                throw_match = re.search(r"throw\s+(?:new\s+\w+\()?['\"`]([^'\"`]+)['\"`]", next_line)
                 response_match = re.search(r"issuer_response_text:\s*['\"]([^'\"]+)['\"]", next_line)
                 message_match = re.search(r"message:\s*['\"]([^'\"]+)['\"]", next_line)
                 msg = None
@@ -1516,6 +1516,67 @@ def extract_code_facts(content: str, file_path: str, repo_name: str) -> list[dic
                     "message": "",
                     "line_number": i + 1,
                     "raw_snippet": "\n".join(lines[max(0, i) : min(len(lines), i + 5)])[:500],
+                }
+            )
+
+        # Pattern 4: process.env lookups with defaults
+        env_match = re.search(
+            r"process\.env\.(\w+)\s*(?:\|\||===?\s*|!==?\s*|\?\?)\s*['\"`]?([^'\"`;\n,)]{1,100})['\"`]?",
+            stripped,
+        )
+        if env_match:
+            env_name = env_match.group(1)
+            default_val = env_match.group(2).strip()
+            facts.append(
+                {
+                    "repo_name": repo_name,
+                    "file_path": file_path,
+                    "function_name": current_function,
+                    "fact_type": "env_var",
+                    "condition": env_name,
+                    "message": default_val,
+                    "line_number": i + 1,
+                    "raw_snippet": stripped[:500],
+                }
+            )
+
+        # Pattern 5: Temporal activity retry policies
+        if "maximumAttempts" in stripped or "backoffCoefficient" in stripped or "initialInterval" in stripped:
+            retry_match = re.search(
+                r"(maximumAttempts|backoffCoefficient|initialInterval|startToCloseTimeout)"
+                r"\s*:\s*['\"]?([^'\",}\s]+)['\"]?",
+                stripped,
+            )
+            if retry_match:
+                facts.append(
+                    {
+                        "repo_name": repo_name,
+                        "file_path": file_path,
+                        "function_name": current_function,
+                        "fact_type": "temporal_retry",
+                        "condition": retry_match.group(1),
+                        "message": retry_match.group(2),
+                        "line_number": i + 1,
+                        "raw_snippet": "\n".join(lines[max(0, i - 2) : min(len(lines), i + 3)])[:500],
+                    }
+                )
+
+        # Pattern 6: gRPC status code mapping
+        grpc_status_match = re.search(
+            r"(?:code|status)\s*:\s*(?:grpc\.status\.|status\.)?(\w+)\s*,\s*(?:message|details)\s*:\s*['\"`]([^'\"`]+)['\"`]",
+            stripped,
+        )
+        if grpc_status_match:
+            facts.append(
+                {
+                    "repo_name": repo_name,
+                    "file_path": file_path,
+                    "function_name": current_function,
+                    "fact_type": "grpc_status",
+                    "condition": grpc_status_match.group(1),
+                    "message": grpc_status_match.group(2),
+                    "line_number": i + 1,
+                    "raw_snippet": stripped[:500],
                 }
             )
 

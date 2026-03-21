@@ -43,3 +43,13 @@ build_coderank*.log
 
 # Legacy scripts (replaced by unified build_vectors.py)
 scripts/build_vectors_coderank.py
+
+# Security patterns
+*.pem
+*.key
+.env*
+!.env.example
+credentials*
+*secret*
+*token*
+

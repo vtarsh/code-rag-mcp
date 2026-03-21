@@ -8,7 +8,91 @@
 - **Phase 3: COMPLETE** (2026-03-21) — proactivity test: 83% TP, 0% FP WITHOUT gotchas
 - **Phase 4: COMPLETE** (2026-03-21) — 8 diagnostic templates indexed as reference docs
 - **Phase 5: COMPLETE** (2026-03-21) — 3/39 gotchas covered by code_facts, 36 still needed
-- **Next action:** Phase 6 (regression suite) — next session
+- **Phase 6: COMPLETE** (2026-03-21) — regression suite: conceptual 0.85, realworld 0.80, flows 0.71
+- **Next action:** Phase 7 (foundation cleanup) → Phase 8 (benchmark expansion) → Phase 9 (MOONSHOT: Failure Propagation Engine)
+
+## Vision: Failure Propagation Engine (THE MOONSHOT)
+
+**Goal:** Not "where is this code" → but "what happens when this code breaks"
+**Why unique:** Nobody has built a causal model of microservice failure propagation tied to code intelligence.
+
+### Layer 2 (FIRST — most structured, highest ROI):
+- **State Machine Extraction** — payment status transitions per provider
+- Extract from: status enums, switch statements, workflow activity chains
+- Demo query: "trace full lifecycle of Trustly DirectDebit: every status, retry point, failure branch"
+
+### Layer 1 (SECOND):
+- **Error Handling Semantics** — try-catch → graph edges showing failure paths
+- "Service A calls B → if B fails → A retries 3x → then falls back to C → if C fails → payment stuck in PENDING"
+
+### Layer 3 (DEFERRED):
+- **Temporal Reasoning** — timing dependencies, cron, settlement windows, retry backoffs
+
+### Layer 4 (DEFERRED):
+- **Counter-factual Queries** — "what if Trustly goes down for 30 min? Which payments stuck? Recovery path?"
+
+## Phase 7a: Provider Documentation Scraping (next session or parallel)
+
+**Goal:** Стягнути ВСЮ публічну документацію кожного провайдера і зберегти в knowledges.
+
+### Що стягувати:
+- API reference: всі endpoints, request/response schemas, всі типи відповідей
+- **Описи і примітки** — не тільки API specs, а й текстові пояснення, caveats, limitations
+- Error codes та їх значення
+- Webhooks documentation (event types, payloads, retry policies)
+- Sandbox/test credentials інструкції
+- **Все** — кожне посилання повноцінно, без скорочень
+
+### Як стягувати:
+- **Tavily API** (є ключі) — найшвидший варіант, передаєш URL + параметри, отримуєш structured content
+- **Browser UI extension (Claude in Chrome)** — для сайтів що блокують bots або потребують JS rendering
+- **WebFetch** — для простих URL що віддають HTML
+- Fallback: manual copy якщо нічого не працює
+
+### КРИТИЧНЕ правило ізоляції:
+- **Кожен агент = свій окремий tab** в browser UI
+- НІКОЛИ два паралельних агенти не використовують один tab
+- Перед запуском агента — `tabs_create_mcp` для нового tab
+- Після завершення — `tabs_close_mcp` для cleanup
+
+### Провайдери для scraping (priority):
+1. Trustly — verification, DirectDebitMandate, webhooks
+2. Worldpay — payouts, retry policies, XML API
+3. Stripe — reference implementation, best-in-class docs
+4. PayPal — APM flow, redirect handling
+5. Nuvei — card + APM hybrid
+6. Всі інші по черзі
+
+### Storage:
+- Зберігати в `profiles/my-org/docs/providers/<provider-name>/`
+- Індексувати як `file_type: provider_docs`
+- Кожен provider = окрема директорія з markdown файлами
+- Зв'язати з відповідним grpc-apm-* або grpc-providers-* repo в графі
+
+## Phase 7: Foundation Cleanup (next session)
+- Fix LIMIT 1 bug in diff_provider_config (multi-PMT providers)
+- Add 3 regex: process.env with defaults, Temporal retry policies, gRPC status mapping
+- Expand code_facts to ~140 meaningful repos (filter boilerplate/stubs)
+- Template literal throw support in regex
+- .gitignore: add *.pem, *.key, .env*, credentials*, *secret*
+
+## Phase 8: Benchmark Expansion
+- 30-50 out-of-distribution questions from real Slack/Jira
+- 10 runs per question for statistical validity
+- Retrieval-only eval (isolate indexer from LLM quality)
+- Independent scoring (blind evaluation)
+
+## Phase 9: Failure Propagation Engine (months)
+- Start with Layer 2 (state machines) — most structured, highest signal-to-noise
+- Then Layer 1 (error handling semantics)
+- Prove value before expanding to Layers 3-4
+
+## Analysis Summary (9 agents, 2026-03-21)
+- 6 analysis agents: edge cases, JS patterns, meta-critique, best practices, priority, security
+- 2 critics: technical (deflated numbers, challenged tree-sitter) + strategy (moonshot vision)
+- 1 fresh reviewer: hybrid A+B, state machines first, "library → advisor" gap
+- Key insight: dependency graph = unique moat, but topology without SEMANTICS is replicable
+- Security audit: SAFE, minor .gitignore additions needed
 
 ### Implemented Fixes (Phase 1)
 - **Fix 1 (seeds.cql):** DONE — all boolean values now explicit (enabled/disabled/feature flags matrix)
