@@ -96,6 +96,34 @@ def create_db(conn: sqlite3.Connection):
             key TEXT PRIMARY KEY,
             value TEXT
         );
+
+        -- Code facts: validation guards, const values, joi/zod schemas
+        CREATE TABLE IF NOT EXISTS code_facts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            repo_name TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            function_name TEXT,
+            fact_type TEXT NOT NULL,  -- 'validation_guard', 'const_value', 'joi_schema', 'require_chain'
+            condition TEXT,           -- the if-condition or const name
+            message TEXT,             -- error message or const value
+            line_number INTEGER,
+            raw_snippet TEXT           -- 3-5 lines of context
+        );
+        CREATE INDEX IF NOT EXISTS idx_code_facts_repo ON code_facts(repo_name);
+        CREATE INDEX IF NOT EXISTS idx_code_facts_type ON code_facts(fact_type);
+
+        -- FTS5 for code_facts (searchable)
+        CREATE VIRTUAL TABLE IF NOT EXISTS code_facts_fts USING fts5(
+            repo_name,
+            file_path,
+            function_name,
+            fact_type,
+            condition,
+            message,
+            content=code_facts,
+            content_rowid=id,
+            tokenize='porter unicode61'
+        );
     """)
 
 
@@ -738,6 +766,52 @@ def index_repo(conn: sqlite3.Connection, repo_name: str, meta: dict) -> tuple[in
                     (rowid, order, total),
                 )
 
+            # Extract code_facts from JS files in relevant directories
+            if language in ("javascript", "typescript") and artifact_type in (
+                "methods",
+                "libs",
+                "handlers",
+                "routes",
+                "services",
+                "utils",
+                "consts",
+            ):
+                try:
+                    source = file_path.read_text(encoding="utf-8", errors="replace")
+                    facts = extract_code_facts(source, rel_path, repo_name)
+                    for fact in facts:
+                        conn.execute(
+                            "INSERT INTO code_facts(repo_name, file_path, function_name, fact_type, "
+                            "condition, message, line_number, raw_snippet) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                            (
+                                fact["repo_name"],
+                                fact["file_path"],
+                                fact["function_name"],
+                                fact["fact_type"],
+                                fact["condition"],
+                                fact["message"],
+                                fact["line_number"],
+                                fact["raw_snippet"],
+                            ),
+                        )
+                        # Also insert into FTS5 for searchability
+                        conn.execute(
+                            "INSERT INTO code_facts_fts(rowid, repo_name, file_path, function_name, "
+                            "fact_type, condition, message) "
+                            "VALUES (last_insert_rowid(), ?, ?, ?, ?, ?, ?)",
+                            (
+                                fact["repo_name"],
+                                fact["file_path"],
+                                fact["function_name"],
+                                fact["fact_type"],
+                                fact["condition"],
+                                fact["message"],
+                            ),
+                        )
+                except Exception:
+                    pass  # Don't fail indexing on code_facts extraction errors
+
     # Insert/update repo metadata
     conn.execute(
         "INSERT OR REPLACE INTO repos(name, type, sha, org_deps, artifact_counts) VALUES (?, ?, ?, ?, ?)",
@@ -1242,7 +1316,7 @@ def chunk_cql_seeds(content: str, repo_name: str) -> list[dict]:
         provider = col_val.get("provider", "").strip("'\"")
         pmt = col_val.get("payment_method_type", "").strip("'\"")
 
-        # Extract enabled features
+        # Extract ALL feature flags with explicit true/false values
         feature_cols = [
             "authorization",
             "sale",
@@ -1259,20 +1333,54 @@ def chunk_cql_seeds(content: str, repo_name: str) -> list[dict]:
             "external_settlement",
             "internal_settlement",
         ]
-        features = [c for c in feature_cols if col_val.get(c, "").strip() == "true"]
+        enabled = [c for c in feature_cols if col_val.get(c, "").strip() == "true"]
+        disabled = [c for c in feature_cols if col_val.get(c, "").strip() == "false"]
 
         currencies = col_val.get("processing_currency_codes", "[]")
+        settlement_currencies = col_val.get("settlement_currency_codes", "[]")
+        precision = col_val.get("default_precision", "").strip("'\"")
 
-        # Build rich chunk content
+        # Card scheme flags
+        card_schemes = []
+        for scheme in ["visa", "mastercard", "amex", "discover"]:
+            val = col_val.get(scheme, "").strip()
+            if val == "true":
+                card_schemes.append(scheme)
+
+        # Build rich chunk content with ALL values explicit
         header = f"Provider: {provider} | payment_method_type: {pmt}"
-        feature_line = f"Features: {', '.join(features)}" if features else "Features: none"
+        enabled_line = f"Enabled features: {', '.join(enabled)}" if enabled else "Enabled features: none"
+        disabled_line = f"Disabled features: {', '.join(disabled)}" if disabled else "Disabled features: none"
         currency_line = f"Processing currencies: {currencies}"
+        settlement_line = f"Settlement currencies: {settlement_currencies}"
+        precision_line = f"Default precision: {precision}" if precision else ""
+        schemes_line = f"Card schemes: {', '.join(card_schemes)}" if card_schemes else ""
 
-        chunk_content = (
-            f"[Repo: {repo_name}] [Provider Config — Source of Truth]\n"
-            f"{header}\n{feature_line}\n{currency_line}\n"
-            f"Raw: {line[: MAX_CHUNK - 500]}"
-        )
+        # Explicit boolean matrix for search (key for benchmark accuracy)
+        bool_lines = []
+        for col in feature_cols:
+            val = col_val.get(col, "").strip()
+            if val in ("true", "false"):
+                bool_lines.append(f"  {col} = {val}")
+        bool_matrix = "Feature flags:\n" + "\n".join(bool_lines) if bool_lines else ""
+
+        parts = [
+            f"[Repo: {repo_name}] [Provider Config — Source of Truth]",
+            header,
+            enabled_line,
+            disabled_line,
+            currency_line,
+            settlement_line,
+        ]
+        if precision_line:
+            parts.append(precision_line)
+        if schemes_line:
+            parts.append(schemes_line)
+        if bool_matrix:
+            parts.append(bool_matrix)
+        parts.append(f"Raw: {line[: MAX_CHUNK - 800]}")
+
+        chunk_content = "\n".join(parts)
 
         chunks.append(
             {
@@ -1309,6 +1417,109 @@ def _parse_cql_values(values_str: str) -> list[str]:
         values.append(current.strip())
 
     return values
+
+
+def extract_code_facts(content: str, file_path: str, repo_name: str) -> list[dict]:
+    """Extract validation guards, const declarations, and joi/zod schemas from JS code.
+
+    Returns list of dicts with: repo_name, file_path, function_name, fact_type,
+    condition, message, line_number, raw_snippet.
+    """
+    facts: list[dict] = []
+    lines = content.splitlines()
+
+    # Track current function scope
+    current_function = None
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+
+        # Track function scope
+        func_match = re.match(
+            r"(?:async\s+)?function\s+(\w+)|(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\(?|(\w+)\s*[:(]\s*(?:async\s+)?(?:function|\()",
+            stripped,
+        )
+        if func_match:
+            current_function = func_match.group(1) or func_match.group(2) or func_match.group(3)
+
+        # Pattern 1: Validation guards — if (condition) throw/return error
+        if_throw = re.match(
+            r"if\s*\((.+?)\)\s*\{?\s*$",
+            stripped,
+        )
+        if if_throw:
+            condition = if_throw.group(1)
+            # Look ahead for throw/return/error within next 10 lines
+            for j in range(i + 1, min(i + 11, len(lines))):
+                next_line = lines[j].strip()
+                # Match throw, issuer_response_text, message patterns
+                throw_match = re.search(r"throw\s+(?:new\s+\w+\()?['\"]([^'\"]+)['\"]", next_line)
+                response_match = re.search(r"issuer_response_text:\s*['\"]([^'\"]+)['\"]", next_line)
+                message_match = re.search(r"message:\s*['\"]([^'\"]+)['\"]", next_line)
+                msg = None
+                if throw_match:
+                    msg = throw_match.group(1)
+                elif response_match:
+                    msg = response_match.group(1)
+                elif message_match:
+                    msg = message_match.group(1)
+
+                if msg:
+                    snippet = "\n".join(lines[max(0, i - 1) : min(len(lines), j + 2)])
+                    facts.append(
+                        {
+                            "repo_name": repo_name,
+                            "file_path": file_path,
+                            "function_name": current_function,
+                            "fact_type": "validation_guard",
+                            "condition": condition,
+                            "message": msg,
+                            "line_number": i + 1,
+                            "raw_snippet": snippet[:500],
+                        }
+                    )
+                    break
+
+        # Pattern 2: Const declarations with literal values
+        const_match = re.match(
+            r"(?:const|let|var)\s+([A-Z][A-Z_0-9]+)\s*=\s*(.+?)(?:;?\s*$)",
+            stripped,
+        )
+        if const_match:
+            name = const_match.group(1)
+            value = const_match.group(2).strip().rstrip(";")
+            # Only index simple values (numbers, strings, small arrays)
+            if len(value) < 300 and not value.startswith("require") and not value.startswith("function"):
+                facts.append(
+                    {
+                        "repo_name": repo_name,
+                        "file_path": file_path,
+                        "function_name": current_function,
+                        "fact_type": "const_value",
+                        "condition": name,
+                        "message": value,
+                        "line_number": i + 1,
+                        "raw_snippet": stripped[:500],
+                    }
+                )
+
+        # Pattern 3: Joi schemas
+        joi_match = re.search(r"Joi\.(object|string|number|array|boolean)\s*\(", stripped)
+        if joi_match and ("validate" in stripped.lower() or "schema" in stripped.lower() or "=" in stripped):
+            facts.append(
+                {
+                    "repo_name": repo_name,
+                    "file_path": file_path,
+                    "function_name": current_function,
+                    "fact_type": "joi_schema",
+                    "condition": stripped[:200],
+                    "message": "",
+                    "line_number": i + 1,
+                    "raw_snippet": "\n".join(lines[max(0, i) : min(len(lines), i + 5)])[:500],
+                }
+            )
+
+    return facts
 
 
 def index_seeds(conn: sqlite3.Connection) -> tuple[int, int]:

@@ -311,6 +311,115 @@ def _append_index_freshness(lines: list[str], last_build: str) -> None:
         pass
 
 
+@require_db
+def diff_provider_config_tool(provider_a: str, provider_b: str) -> str:
+    """Compare feature flags and config between two providers from seeds.cql.
+
+    Useful for understanding why a feature works for one provider but not another.
+
+    Args:
+        provider_a: First provider name (e.g., "trustly", "epx")
+        provider_b: Second provider name (e.g., "paypal", "nuvei")
+    """
+    conn = get_db()
+
+    def _get_provider_chunk(provider: str) -> str | None:
+        row = conn.execute(
+            "SELECT content FROM chunks WHERE file_type = 'provider_config' AND content MATCH ? LIMIT 1",
+            (f'"{provider}"',),
+        ).fetchone()
+        if not row:
+            return None
+        # FTS5 with Row factory — access by column name
+        try:
+            return row["content"]
+        except (IndexError, KeyError):
+            return row[0]
+
+    chunk_a = _get_provider_chunk(provider_a)
+    chunk_b = _get_provider_chunk(provider_b)
+
+    if not chunk_a and not chunk_b:
+        return f"Neither '{provider_a}' nor '{provider_b}' found in provider configs (seeds.cql)"
+    if not chunk_a:
+        return f"Provider '{provider_a}' not found in seeds.cql. '{provider_b}' exists."
+    if not chunk_b:
+        return f"Provider '{provider_b}' not found in seeds.cql. '{provider_a}' exists."
+
+    def _parse_features(chunk: str) -> dict:
+        features = {}
+        for raw_line in chunk.splitlines():
+            line = raw_line.strip()
+            if "=" in line and raw_line.startswith((" ", "\t")) and "Feature flags:" not in line:
+                parts = line.split("=", 1)
+                if len(parts) == 2:
+                    key = parts[0].strip()
+                    val = parts[1].strip()
+                    features[key] = val
+        # Also extract payment_method_type
+        for line in chunk.splitlines():
+            if "payment_method_type:" in line:
+                pmt = line.split("payment_method_type:")[1].strip()
+                features["_payment_method_type"] = pmt
+                break
+        return features
+
+    feats_a = _parse_features(chunk_a)
+    feats_b = _parse_features(chunk_b)
+
+    all_keys = sorted(set(list(feats_a.keys()) + list(feats_b.keys())))
+
+    lines = [f"## Provider Config Comparison: {provider_a} vs {provider_b}\n"]
+
+    # Payment method types
+    pmt_a = feats_a.pop("_payment_method_type", "?")
+    pmt_b = feats_b.pop("_payment_method_type", "?")
+    lines.append(f"**payment_method_type:** {provider_a}=`{pmt_a}` | {provider_b}=`{pmt_b}`\n")
+
+    # Diff table
+    same = []
+    diff = []
+    only_a = []
+    only_b = []
+
+    for key in all_keys:
+        if key.startswith("_"):
+            continue
+        va = feats_a.get(key)
+        vb = feats_b.get(key)
+        if va and vb:
+            if va == vb:
+                same.append((key, va))
+            else:
+                diff.append((key, va, vb))
+        elif va and not vb:
+            only_a.append((key, va))
+        elif vb and not va:
+            only_b.append((key, vb))
+
+    if diff:
+        lines.append("### Differences")
+        lines.append(f"| Feature | {provider_a} | {provider_b} |")
+        lines.append("|---------|-------|-------|")
+        for key, va, vb in diff:
+            marker = " ⚠️" if va != vb else ""
+            lines.append(f"| {key} | {va} | {vb} |{marker}")
+
+    if same:
+        lines.append(f"\n### Same ({len(same)} features)")
+        lines.append(", ".join(f"{k}={v}" for k, v in same))
+
+    if only_a:
+        lines.append(f"\n### Only in {provider_a}")
+        lines.append(", ".join(f"{k}={v}" for k, v in only_a))
+
+    if only_b:
+        lines.append(f"\n### Only in {provider_b}")
+        lines.append(", ".join(f"{k}={v}" for k, v in only_b))
+
+    return "\n".join(lines)
+
+
 def visualize_graph_tool(repo: str = "", edge_type: str = "") -> str:
     """Generate an interactive D3.js graph visualization and open it in the browser.
 

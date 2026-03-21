@@ -26,6 +26,7 @@ from src.search.service import search_tool
 from src.tools.analyze import analyze_task_tool
 from src.tools.context import context_builder_tool
 from src.tools.service import (
+    diff_provider_config_tool,
     health_check_tool,
     list_repos_tool,
     repo_overview_tool,
@@ -40,7 +41,7 @@ mcp = FastMCP(SERVER_NAME)
 
 @mcp.tool()
 @tracked
-def search(query: str, repo: str = "", file_type: str = "", limit: int = 10) -> str:
+def search(query: str, repo: str = "", file_type: str = "", exclude_file_types: str = "", limit: int = 10) -> str:
     """Search the knowledge base using keyword + semantic hybrid search.
 
     Works for both keyword queries ("user authentication", "webhook callback")
@@ -52,9 +53,10 @@ def search(query: str, repo: str = "", file_type: str = "", limit: int = 10) -> 
         query: Search query — keywords or natural language question
         repo: Optional - filter by repo name (exact or partial match)
         file_type: Optional - filter by type: proto, docs, config, env, k8s, grpc_method, library, workflow, ci, gotchas
+        exclude_file_types: Optional - comma-separated file types to exclude from results (e.g. "gotchas,task")
         limit: Max results to return (default 10, max 20)
     """
-    return search_tool(query, repo, file_type, limit)
+    return search_tool(query, repo, file_type, exclude_file_types, limit)
 
 
 # --- Graph tools ---
@@ -142,6 +144,21 @@ def list_repos(type: str = "", has_dep: str = "", limit: int = 30) -> str:
         limit: Max results (default 30)
     """
     return list_repos_tool(type, has_dep, limit)
+
+
+@mcp.tool()
+@tracked
+def diff_provider_config(provider_a: str, provider_b: str) -> str:
+    """Compare feature flags and config between two providers from seeds.cql.
+
+    Useful for understanding why a feature works for one provider but not another.
+    Shows differences in payment_method_type, feature flags, and supported operations.
+
+    Args:
+        provider_a: First provider name (e.g., "trustly", "epx")
+        provider_b: Second provider name (e.g., "paypal", "nuvei")
+    """
+    return diff_provider_config_tool(provider_a, provider_b)
 
 
 @mcp.tool()

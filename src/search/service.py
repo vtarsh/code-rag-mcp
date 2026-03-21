@@ -19,6 +19,7 @@ def search_tool(
     query: str,
     repo: str = "",
     file_type: str = "",
+    exclude_file_types: str = "",
     limit: int = 10,
 ) -> str:
     """Search the knowledge base using keyword + semantic hybrid search.
@@ -27,6 +28,7 @@ def search_tool(
         query: Search query — keywords or natural language question
         repo: Optional - filter by repo name (exact or partial match)
         file_type: Optional - filter by type: proto, docs, config, env, k8s, grpc_method, library, workflow, ci
+        exclude_file_types: Optional - comma-separated file types to exclude from results (e.g. "gotchas,task")
         limit: Max results to return (default 10, max 20)
     """
     if not query.strip():
@@ -35,12 +37,14 @@ def search_tool(
     limit = min(max(1, limit), 20)
 
     expanded = expand_query(query)
-    ck = cache_key("search", query=expanded, repo=repo, file_type=file_type, limit=limit)
+    ck = cache_key(
+        "search", query=expanded, repo=repo, file_type=file_type, exclude_file_types=exclude_file_types, limit=limit
+    )
     cached = cache_get(ck)
     if cached is not None:
         return cached
 
-    ranked, vec_err, total_candidates = hybrid_search(expanded, repo, file_type, limit)
+    ranked, vec_err, total_candidates = hybrid_search(expanded, repo, file_type, exclude_file_types, limit)
 
     log_search("search", expanded, {"repo": repo, "file_type": file_type, "limit": limit}, ranked, total_candidates)
 

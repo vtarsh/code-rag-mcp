@@ -62,6 +62,7 @@ def hybrid_search(
     query: str,
     repo: str = "",
     file_type: str = "",
+    exclude_file_types: str = "",
     limit: int = 10,
 ) -> tuple[list[dict], str | None, int]:
     """Hybrid search: combine FTS5 keyword + vector similarity via RRF.
@@ -76,10 +77,10 @@ def hybrid_search(
     GOTCHAS_BOOST = 1.5  # Boost gotchas chunks in ranking
 
     # 1. Keyword search (FTS5) — large pool, no per-repo cap
-    keyword_results = fts_search(query, repo, file_type, limit=100)
+    keyword_results = fts_search(query, repo, file_type, exclude_file_types, limit=100)
 
     # 2. Vector search
-    vector_results, vec_err = vector_search(query, repo, file_type, limit=50)
+    vector_results, vec_err = vector_search(query, repo, file_type, exclude_file_types, limit=50)
 
     # 3. RRF fusion
     scores: dict[int, dict] = {}  # rowid → merged result dict

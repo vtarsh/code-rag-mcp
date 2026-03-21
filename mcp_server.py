@@ -113,7 +113,7 @@ def _call_daemon(tool_name: str, args: dict) -> str:
 
 
 @mcp.tool()
-def search(query: str, repo: str = "", file_type: str = "", limit: int = 10) -> str:
+def search(query: str, repo: str = "", file_type: str = "", exclude_file_types: str = "", limit: int = 10) -> str:
     """Search the knowledge base using keyword + semantic hybrid search.
 
     Works for both keyword queries ("settlement account", "webhook callback")
@@ -125,9 +125,19 @@ def search(query: str, repo: str = "", file_type: str = "", limit: int = 10) -> 
         query: Search query — keywords or natural language question
         repo: Optional - filter by repo name (exact or partial match)
         file_type: Optional - filter by type: proto, docs, config, env, k8s, grpc_method, library, workflow, ci, gotchas
+        exclude_file_types: Optional - comma-separated file types to exclude from results (e.g. "gotchas,task")
         limit: Max results to return (default 10, max 20)
     """
-    return _call_daemon("search", {"query": query, "repo": repo, "file_type": file_type, "limit": limit})
+    return _call_daemon(
+        "search",
+        {
+            "query": query,
+            "repo": repo,
+            "file_type": file_type,
+            "exclude_file_types": exclude_file_types,
+            "limit": limit,
+        },
+    )
 
 
 @mcp.tool()

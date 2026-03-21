@@ -40,6 +40,7 @@ from src.search.service import search_tool
 from src.tools.analyze import analyze_task_tool
 from src.tools.context import context_builder_tool
 from src.tools.service import (
+    diff_provider_config_tool,
     health_check_tool,
     list_repos_tool,
     repo_overview_tool,
@@ -62,7 +63,11 @@ log = logging.getLogger(__name__)
 # --- Tool registry ---
 TOOLS: dict[str, callable] = {
     "search": lambda args: search_tool(
-        args["query"], args.get("repo", ""), args.get("file_type", ""), args.get("limit", 10)
+        args["query"],
+        args.get("repo", ""),
+        args.get("file_type", ""),
+        args.get("exclude_file_types", ""),
+        args.get("limit", 10),
     ),
     "find_dependencies": lambda args: find_dependencies_tool(args["repo_name"]),
     "trace_impact": lambda args: trace_impact_tool(args["repo_name"], args.get("depth", 2)),
@@ -82,6 +87,7 @@ TOOLS: dict[str, callable] = {
     ),
     "health_check": lambda args: health_check_tool(),
     "visualize_graph": lambda args: visualize_graph_tool(args.get("repo", ""), args.get("edge_type", "")),
+    "diff_provider_config": lambda args: diff_provider_config_tool(args["provider_a"], args["provider_b"]),
 }
 
 

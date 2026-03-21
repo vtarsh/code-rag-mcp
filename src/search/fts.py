@@ -96,6 +96,7 @@ def fts_search(
     query: str,
     repo: str = "",
     file_type: str = "",
+    exclude_file_types: str = "",
     limit: int = 50,
 ) -> list[SearchResult]:
     """Run FTS5 keyword search — returns ALL candidates for fusion.
@@ -108,6 +109,7 @@ def fts_search(
         query: Raw search query (will be sanitized for FTS5)
         repo: Optional repo name filter (partial match)
         file_type: Optional file type filter (exact match)
+        exclude_file_types: Optional comma-separated file types to exclude (e.g. "gotchas,task")
         limit: Max candidates to fetch from DB (pool for fusion)
 
     Returns list of SearchResult sorted by FTS5 rank.
@@ -124,6 +126,12 @@ def fts_search(
         if file_type:
             where_clauses.append("file_type = ?")
             params.append(file_type)
+        if exclude_file_types:
+            excluded = [ft.strip() for ft in exclude_file_types.split(",") if ft.strip()]
+            if excluded:
+                placeholders = ",".join("?" * len(excluded))
+                where_clauses.append(f"file_type NOT IN ({placeholders})")
+                params.extend(excluded)
 
         where = " AND ".join(where_clauses)
 

@@ -14,6 +14,7 @@ def vector_search(
     query: str,
     repo: str = "",
     file_type: str = "",
+    exclude_file_types: str = "",
     limit: int = 20,
 ) -> tuple[list[dict], str | None]:
     """Run vector similarity search.
@@ -40,6 +41,12 @@ def vector_search(
     if file_type:
         safe_ft = file_type.replace("'", "''")
         filters.append(f"file_type = '{safe_ft}'")
+    if exclude_file_types:
+        for ft in exclude_file_types.split(","):
+            ft = ft.strip()
+            if ft:
+                safe_ft = ft.replace("'", "''")
+                filters.append(f"file_type != '{safe_ft}'")
 
     where = " AND ".join(filters) if filters else None
 
