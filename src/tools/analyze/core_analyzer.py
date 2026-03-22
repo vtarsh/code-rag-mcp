@@ -203,7 +203,17 @@ def _section_co_occurrence(ctx: AnalysisContext) -> str:
     import json
     from collections import Counter
 
-    rows = ctx.conn.execute("SELECT repos_changed FROM task_history WHERE ticket_id LIKE 'CORE-%'").fetchall()
+    # Use tasks from same prefix group for co-occurrence (CORE with CORE, BO with BO, etc.)
+    from .base import extract_task_id
+
+    task_id = extract_task_id(ctx.description)
+    task_prefix = task_id.split("-")[0].upper() if task_id else ""
+    if task_prefix and task_prefix in ("CORE", "BO", "HS", "PI"):
+        rows = ctx.conn.execute(
+            "SELECT repos_changed FROM task_history WHERE ticket_id LIKE ?", (f"{task_prefix}-%",)
+        ).fetchall()
+    else:
+        rows = ctx.conn.execute("SELECT repos_changed FROM task_history").fetchall()
     if len(rows) < 5:
         return ""
 
