@@ -140,7 +140,7 @@ CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=my-org python3 scripts/benchmark_f
 ```
 
 Current scores: conceptual 0.85, realworld 0.83, flows 0.875
-analyze_task recall: CORE 83%, PI 78%, BO 67%, HS 100% (total 80.4% on 105 tasks)
+analyze_task recall: CORE 84%, PI 79%, BO 67%, HS 100% (total 80.8% on 105 tasks)
 
 ## Gotchas
 
