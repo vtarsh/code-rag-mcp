@@ -420,14 +420,16 @@ def _section_keyword_scan(ctx: AnalysisContext, classification: TaskClassificati
         except Exception:
             continue
 
-    # Phase 2: Single keywords — also check repo name matches (high signal)
+    # Phase 2: Repo name matching — lower threshold (4+ chars) since repo names are specific
     all_repo_names = [r["name"] for r in ctx.conn.execute("SELECT name FROM repos").fetchall()]
-    for keyword in scan_words[:8]:
-        # Repo name matching: if keyword appears in repo name, it's highly relevant
+    name_words = [w for w in ctx.words if len(w) >= 4 and w not in _KEYWORD_STOP_WORDS]
+    for keyword in name_words[:12]:
         for rname in all_repo_names:
             if keyword in rname and rname not in already_found:
                 new_finds.setdefault(rname, []).append(f"{keyword}(name)")
 
+    # Phase 3: Single keywords in content (higher threshold: >5 chars)
+    for keyword in scan_words[:8]:
         try:
             rows = ctx.conn.execute(
                 "SELECT DISTINCT repo_name FROM chunks WHERE chunks MATCH ? LIMIT 20",
