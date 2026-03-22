@@ -108,6 +108,20 @@ def classify_task(
     scores.sort(key=lambda x: x[1], reverse=True)
     best_domain, best_score, best_matched, best_seeds = scores[0]
 
+    # Multi-domain: if other domains score ≥50% of best, union their seed_repos
+    all_keywords = list(best_matched)
+    all_seeds = list(best_seeds)
+    secondary_domains: list[str] = []
+    for domain_name, score, matched, seeds in scores[1:]:
+        if score >= best_score * 0.5:
+            secondary_domains.append(domain_name)
+            for s in seeds:
+                if s not in all_seeds:
+                    all_seeds.append(s)
+            for kw in matched:
+                if kw not in all_keywords:
+                    all_keywords.append(kw)
+
     # Confidence: normalize score (cap at 1.0)
     confidence = min(best_score / 4.0, 1.0)
 
@@ -115,10 +129,14 @@ def classify_task(
     if task_prefix == "CORE" and best_domain.startswith("core-"):
         confidence = min(confidence + 0.2, 1.0)
 
+    domain_label = best_domain
+    if secondary_domains:
+        domain_label = f"{best_domain}+{'+'.join(secondary_domains[:2])}"
+
     return TaskClassification(
-        domain=best_domain,
+        domain=domain_label,
         provider="",
         confidence=confidence,
-        matched_keywords=best_matched,
-        seed_repos=best_seeds,
+        matched_keywords=all_keywords,
+        seed_repos=all_seeds,
     )

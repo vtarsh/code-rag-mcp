@@ -13,7 +13,8 @@ from .classifier import TaskClassification
 
 def run_core_analysis(ctx: AnalysisContext, classification: TaskClassification) -> str:
     """Run CORE-specific analysis sections. Returns combined markdown."""
-    if not classification.domain.startswith("core-") and classification.domain not in ("bo", "hs", "unknown"):
+    primary = classification.domain.split("+")[0]
+    if not primary.startswith("core-") and primary not in ("bo", "hs", "unknown"):
         return ""
 
     output = ""
