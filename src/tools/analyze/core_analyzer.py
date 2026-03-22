@@ -21,6 +21,7 @@ def run_core_analysis(ctx: AnalysisContext, classification: TaskClassification) 
     output += _section_domain_repos(ctx, classification)
     output += _section_cascade(ctx, classification)
     output += _section_provider_fanout(ctx)
+    output += _section_function_search(ctx)
     output += _section_keyword_scan(ctx, classification)
     return output
 
@@ -323,6 +324,66 @@ def _section_provider_fanout(ctx: AnalysisContext) -> str:
         ctx.findings.append(("fanout", repo))
         output += f"  - **{repo}**\n"
     output += "\n"
+    return output
+
+
+def _section_function_search(ctx: AnalysisContext) -> str:
+    """Search for function/method names mentioned in description across all repos.
+
+    Detects camelCase (createAuditLog), snake_case (create_audit_log), and
+    dotted names (audit.create) in description, then finds all repos that
+    reference them. High precision for shared lib bug fixes.
+    """
+    # Extract function-like names from description
+    # camelCase: createAuditLog, handlePayment, getProviderConfig
+    camel_funcs = re.findall(r"\b[a-z][a-zA-Z]*[A-Z][a-zA-Z]*\b", ctx.description)
+    # snake_case with 2+ parts: create_audit_log
+    snake_funcs = re.findall(r"\b[a-z]+(?:_[a-z]+){1,}\b", ctx.description)
+    # Also generate shorter camelCase prefixes (createAuditLog → createAudit)
+    camel_prefixes = []
+    for func in camel_funcs:
+        parts = re.findall(r"[A-Z]?[a-z]+", func)
+        if len(parts) >= 3:
+            # Try prefix without last part (createAuditLog → createAudit)
+            prefix = "".join(parts[:-1])
+            if len(prefix) >= 8 and prefix != func:
+                camel_prefixes.append(prefix)
+    # Filter: min 8 chars, not common words
+    func_names = [f for f in set(camel_funcs + snake_funcs + camel_prefixes) if len(f) >= 8]
+
+    if not func_names:
+        return ""
+
+    already_found = {rname for _, rname in ctx.findings}
+    func_repos: dict[str, list[str]] = {}  # repo → [functions found]
+
+    for func in func_names:
+        try:
+            rows = ctx.conn.execute(
+                "SELECT DISTINCT repo_name FROM chunks WHERE chunks MATCH ? LIMIT 50",
+                (f'"{func}"',),
+            ).fetchall()
+            for row in rows:
+                repo = row["repo_name"]
+                if repo not in already_found:
+                    func_repos.setdefault(repo, []).append(func)
+        except Exception:
+            continue
+
+    if not func_repos:
+        return ""
+
+    output = "## Function Reference Search\n\n"
+    output += f"_Repos referencing function(s): {', '.join(func_names)}_\n\n"
+
+    # Sort by number of function matches
+    sorted_repos = sorted(func_repos.items(), key=lambda x: len(x[1]), reverse=True)
+
+    for repo, funcs in sorted_repos[:20]:
+        ctx.findings.append(("function", repo))
+        output += f"  - **{repo}** — {', '.join(funcs)}\n"
+
+    output += f"\n_Total: {len(func_repos)} repos reference these functions._\n\n"
     return output
 
 
