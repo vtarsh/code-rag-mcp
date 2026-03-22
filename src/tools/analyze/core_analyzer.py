@@ -312,10 +312,15 @@ def _section_provider_fanout(ctx: AnalysisContext) -> str:
 
 
 def _section_keyword_scan(ctx: AnalysisContext, classification: TaskClassification) -> str:
-    """Broad FTS search across ALL repos for task-specific keywords."""
-    # Use keywords that are specific to this task (not generic stop words)
+    """Broad FTS search across ALL repos for task-specific keywords + compound terms."""
+    # Extract compound terms (underscored/hyphenated) from original description
+    compound_terms = re.findall(r"[a-zA-Z]+(?:[_-][a-zA-Z]+){1,}", ctx.description)
+    # Also extract camelCase compounds
+    camel_terms = re.findall(r"[a-z]+(?:[A-Z][a-z]+){1,}", ctx.description)
+
+    # Use single words that are specific to this task
     scan_words = [w for w in ctx.words if len(w) > 5 and w not in _KEYWORD_STOP_WORDS]
-    if not scan_words:
+    if not scan_words and not compound_terms and not camel_terms:
         return ""
 
     # Skip words that are too common (would match too many repos)
@@ -323,6 +328,23 @@ def _section_keyword_scan(ctx: AnalysisContext, classification: TaskClassificati
 
     new_finds: dict[str, list[str]] = {}  # repo → [matched keywords]
 
+    # Phase 1: Compound terms (high precision — search as exact phrases)
+    for term in compound_terms + camel_terms:
+        if len(term) < 8:
+            continue
+        try:
+            rows = ctx.conn.execute(
+                "SELECT DISTINCT repo_name FROM chunks WHERE chunks MATCH ? LIMIT 30",
+                (f'"{term}"',),
+            ).fetchall()
+            for row in rows:
+                repo = row["repo_name"]
+                if repo not in already_found:
+                    new_finds.setdefault(repo, []).append(term)
+        except Exception:
+            continue
+
+    # Phase 2: Single keywords (lower precision, need 2+ matches)
     for keyword in scan_words[:8]:
         try:
             rows = ctx.conn.execute(
@@ -342,8 +364,11 @@ def _section_keyword_scan(ctx: AnalysisContext, classification: TaskClassificati
     # Sort by number of keyword matches (more matches = more relevant)
     sorted_finds = sorted(new_finds.items(), key=lambda x: len(x[1]), reverse=True)
 
-    # Only show repos with 2+ keyword matches (reduces noise)
-    strong_finds = [(repo, kws) for repo, kws in sorted_finds if len(kws) >= 2]
+    # Repos matching compound terms count as strong (1 compound = 2 keywords)
+    all_compounds = set(compound_terms + camel_terms)
+    strong_finds = [
+        (repo, kws) for repo, kws in sorted_finds if len(kws) >= 2 or any(kw in all_compounds for kw in kws)
+    ]
 
     if not strong_finds:
         return ""
