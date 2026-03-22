@@ -396,9 +396,9 @@ def analyze_file(conn: sqlite3.Connection, file_path: str) -> None:
     else:
         _analyze_other_file(conn, cl, is_provider_repo, is_webhook_repo)
 
-    # Webhook flow for provider and webhook repos (applies to all file types)
-    provider_name = cl.provider or _extract_provider_from_repo(repo)
-    if is_provider_repo or is_webhook_repo:
+    # Webhook flow for provider and webhook repos — skip if activity file already showed chain
+    if cl.file_type != "activity" and (is_provider_repo or is_webhook_repo):
+        provider_name = cl.provider or _extract_provider_from_repo(repo)
         wh_connections = find_webhook_connections(conn, repo, provider_name)
         if wh_connections:
             print("\n   Webhook flow:")
