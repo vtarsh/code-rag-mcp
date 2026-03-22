@@ -33,6 +33,18 @@ _org = _config.get("org", "my-org")
 NPM_SCOPE = _config.get("npm_scope", f"@{_org}")
 GRPC_DOMAIN_SUFFIX = _config.get("grpc_domain_suffix", "")
 
+# Load conventions for provider prefixes, webhook repos, etc.
+import yaml  # noqa: E402
+
+_conv_path = BASE_DIR / "profiles" / _profile / "conventions.yaml" if _profile else None
+_conv = yaml.safe_load(_conv_path.read_text()) if (_conv_path and _conv_path.exists()) else {}
+PROVIDER_PREFIXES: list[str] = _conv.get("provider_prefixes", ["grpc-apm-", "grpc-providers-"])
+WEBHOOK_REPOS: dict[str, str] = _conv.get("webhook_repos", {})
+GATEWAY_REPO: str = _conv.get("gateway_repo", "")
+PROTO_REPOS: list[str] = _conv.get("proto_repos", ["providers-proto"])
+FEATURE_REPO: str = _conv.get("feature_repo", "")
+CREDENTIALS_REPO: str = _conv.get("credentials_repo", "")
+
 
 def init_graph_tables(conn: sqlite3.Connection):
     """Create graph tables if they don't exist."""
@@ -121,12 +133,8 @@ def parse_grpc_url_edges(conn: sqlite3.Connection):
                 if hostname in ("0.0.0.0", "localhost", "127.0.0.1"):
                     continue
 
-                target_candidates = [
-                    f"grpc-{hostname}",
-                    hostname,
-                    f"grpc-apm-{hostname}",
-                    f"grpc-providers-{hostname}",
-                ]
+                target_candidates = [f"grpc-{hostname}", hostname]
+                target_candidates.extend(f"{p}{hostname}" for p in PROVIDER_PREFIXES)
 
                 target = None
                 for candidate in target_candidates:
@@ -145,12 +153,8 @@ def parse_grpc_url_edges(conn: sqlite3.Connection):
             # Convert CORE_MERCHANTS → core-merchants
             service_name = var_prefix.lower().replace("_", "-")
 
-            target_candidates = [
-                f"grpc-{service_name}",
-                service_name,
-                f"grpc-apm-{service_name}",
-                f"grpc-providers-{service_name}",
-            ]
+            target_candidates = [f"grpc-{service_name}", service_name]
+            target_candidates.extend(f"{p}{service_name}" for p in PROVIDER_PREFIXES)
 
             target = None
             for candidate in target_candidates:
@@ -206,7 +210,7 @@ def _classify_npm_dep(pkg_name: str, target: str | None) -> str:
         return "npm_dep_proto"
     if clean_name in _TOOLING_PACKAGES or pkg_name in _TOOLING_PACKAGES:
         return "npm_dep_tooling"
-    if target and any(target.startswith(p) for p in ("libs-types", "providers-proto", "node-libs-envoy-proto")):
+    if target and any(target.startswith(p) for p in [*PROTO_REPOS, "node-libs-envoy-proto"]):
         return "npm_dep_proto"
     if target and any(target.startswith(p) for p in ("eslint-", "commitlint-", "tailwind-", "prettier-")):
         return "npm_dep_tooling"
@@ -311,7 +315,7 @@ def parse_proto_import_edges(conn: sqlite3.Connection):
             if "types/protos/" in imported:
                 edges.append((source, f"pkg:{NPM_SCOPE}/types", "proto_import", imported))
             elif "providers.proto" in imported:
-                edges.append((source, "providers-proto", "proto_import", imported))
+                edges.append((source, PROTO_REPOS[0] if PROTO_REPOS else "providers-proto", "proto_import", imported))
             else:
                 edges.append((source, f"proto:{imported}", "proto_import", imported))
 
@@ -338,10 +342,12 @@ def parse_webhook_edges(conn: sqlite3.Connection):
     edges = []
     repo_names = set(r[0] for r in conn.execute("SELECT name FROM repos").fetchall())
 
-    # 1. Parse express-webhooks routes: webhook.bind(null, 'provider')
+    # 1. Parse webhook dispatch repo routes
+    _wh_dispatch = WEBHOOK_REPOS.get("dispatch", "express-webhooks")
+    _wh_handler = WEBHOOK_REPOS.get("handler", "workflow-provider-webhooks")
     route_rows = conn.execute(
-        "SELECT content FROM chunks WHERE repo_name = 'express-webhooks' AND "
-        "(file_path LIKE '%routes%' OR file_path LIKE '%webhook%')"
+        "SELECT content FROM chunks WHERE repo_name = ? AND (file_path LIKE '%routes%' OR file_path LIKE '%webhook%')",
+        (_wh_dispatch,),
     ).fetchall()
 
     webhook_providers_express = set()
@@ -352,10 +358,11 @@ def parse_webhook_edges(conn: sqlite3.Connection):
             provider = match.group(1)
             webhook_providers_express.add(provider)
 
-    # 2. Parse workflow-provider-webhooks: provider handler map
+    # 2. Parse webhook handler repo: provider handler map
     handler_rows = conn.execute(
-        "SELECT content FROM chunks WHERE repo_name = 'workflow-provider-webhooks' AND "
-        "(file_path LIKE '%run-activities%' OR file_path LIKE '%activities/index%')"
+        "SELECT content FROM chunks WHERE repo_name = ? AND "
+        "(file_path LIKE '%run-activities%' OR file_path LIKE '%activities/index%')",
+        (_wh_handler,),
     ).fetchall()
 
     webhook_providers_workflow = set()
@@ -372,8 +379,8 @@ def parse_webhook_edges(conn: sqlite3.Connection):
 
     # Also scan activity directories — each subdirectory is a provider
     activity_dirs = conn.execute(
-        "SELECT DISTINCT file_path FROM chunks WHERE repo_name = 'workflow-provider-webhooks' AND "
-        "file_path LIKE '%activities/%/%.js'"
+        "SELECT DISTINCT file_path FROM chunks WHERE repo_name = ? AND file_path LIKE '%activities/%/%.js'",
+        (_wh_handler,),
     ).fetchall()
 
     for row in activity_dirs:
@@ -403,26 +410,26 @@ def parse_webhook_edges(conn: sqlite3.Connection):
     # Build edges
     all_providers = webhook_providers_express | webhook_providers_workflow | callback_providers
 
-    # express-webhooks is a forwarding layer to workflow-provider-webhooks
-    # Even if we can't parse routes, we know the architectural relationship
-    if "express-webhooks" in repo_names and "workflow-provider-webhooks" in repo_names:
-        edges.append(("express-webhooks", "workflow-provider-webhooks", "webhook_dispatch", "all-providers"))
+    # Dispatch repo forwards to handler repo
+    if _wh_dispatch in repo_names and _wh_handler in repo_names:
+        edges.append((_wh_dispatch, _wh_handler, "webhook_dispatch", "all-providers"))
 
     for provider in all_providers:
         # Find the provider repo
         target = None
-        for candidate in [f"grpc-apm-{provider}", f"grpc-providers-{provider}"]:
+        for prefix in PROVIDER_PREFIXES:
+            candidate = f"{prefix}{provider}"
             if candidate in repo_names:
                 target = candidate
                 break
 
-        # express-webhooks → workflow-provider-webhooks (dispatch)
-        if provider in webhook_providers_express and "workflow-provider-webhooks" in repo_names:
-            edges.append(("express-webhooks", "workflow-provider-webhooks", "webhook_dispatch", provider))
+        # dispatch → handler (per provider)
+        if provider in webhook_providers_express and _wh_handler in repo_names:
+            edges.append((_wh_dispatch, _wh_handler, "webhook_dispatch", provider))
 
-        # workflow-provider-webhooks → provider repo (handler)
+        # handler → provider repo
         if provider in webhook_providers_workflow and target:
-            edges.append(("workflow-provider-webhooks", target, "webhook_handler", provider))
+            edges.append((_wh_handler, target, "webhook_handler", provider))
 
         # express-api-callbacks → provider repo (callback)
         if provider in callback_providers and target:
@@ -500,14 +507,8 @@ def parse_grpc_client_require_edges(conn: sqlite3.Connection):
                 continue
 
             # Try to resolve to a repo
-            target_candidates = [
-                f"grpc-{pkg_name}",
-                f"grpc-core-{pkg_name}",
-                f"grpc-apm-{pkg_name}",
-                f"grpc-providers-{pkg_name}",
-                pkg_name,
-                f"node-libs-{pkg_name}",
-            ]
+            target_candidates = [f"grpc-{pkg_name}", f"grpc-core-{pkg_name}", pkg_name, f"node-libs-{pkg_name}"]
+            target_candidates.extend(f"{p}{pkg_name}" for p in PROVIDER_PREFIXES)
 
             target = None
             for candidate in target_candidates:
@@ -608,14 +609,9 @@ def parse_grpc_method_call_edges(conn: sqlite3.Connection):
     }
 
     def _resolve_pkg_to_repo(pkg: str, source: str) -> str | None:
-        for candidate in [
-            f"grpc-{pkg}",
-            f"grpc-core-{pkg}",
-            f"grpc-apm-{pkg}",
-            f"grpc-providers-{pkg}",
-            pkg,
-            f"node-libs-{pkg}",
-        ]:
+        candidates = [f"grpc-{pkg}", f"grpc-core-{pkg}", pkg, f"node-libs-{pkg}"]
+        candidates.extend(f"{p}{pkg}" for p in PROVIDER_PREFIXES)
+        for candidate in candidates:
             if candidate in repo_set and candidate != source:
                 return candidate
         return None
@@ -1767,7 +1763,9 @@ def parse_connection_validation_edges(conn: sqlite3.Connection):
     known_repos = {r[0] for r in conn.execute("SELECT name FROM graph_nodes").fetchall()}
     edges: list[tuple[str, str, str, str]] = []
 
-    # express-api-v1 validates against connections
+    _feature = FEATURE_REPO or "grpc-providers-features"
+    _gateway = GATEWAY_REPO or "grpc-payment-gateway"
+
     if "express-api-v1" in known_repos and "grpc-core-connections" in known_repos:
         edges.append(
             (
@@ -1778,27 +1776,18 @@ def parse_connection_validation_edges(conn: sqlite3.Connection):
             )
         )
 
-    # express-api-v1 uses config from providers-features (defaultProcessorMap)
-    if "express-api-v1" in known_repos and "grpc-providers-features" in known_repos:
+    if "express-api-v1" in known_repos and _feature in known_repos:
         edges.append(
             (
                 "express-api-v1",
-                "grpc-providers-features",
+                _feature,
                 "flow_step",
                 "uses defaultProcessorMap from seeds.cql for payment method validation",
             )
         )
 
-    # grpc-payment-gateway checks verificationFeatureFlag from providers-features
-    if "grpc-payment-gateway" in known_repos and "grpc-providers-features" in known_repos:
-        edges.append(
-            (
-                "grpc-payment-gateway",
-                "grpc-providers-features",
-                "flow_step",
-                "checks verificationFeatureFlag before verification processing",
-            )
-        )
+    if _gateway in known_repos and _feature in known_repos:
+        edges.append((_gateway, _feature, "flow_step", "checks verificationFeatureFlag before verification processing"))
 
     if edges:
         conn.executemany(
@@ -1969,7 +1958,28 @@ def main():
     print("\n20. Parsing merchant entity edges...")
     parse_merchant_entity_edges(conn)
 
-    print("\n21. Building package-to-repo map...")
+    print("\n21. Gateway runtime routing edges...")
+    if GATEWAY_REPO:
+        known = {r[0] for r in conn.execute("SELECT name FROM graph_nodes").fetchall()}
+        provider_repos = [r for r in known if any(r.startswith(p) for p in PROVIDER_PREFIXES)]
+        rt_edges = []
+        for pr in provider_repos:
+            rt_edges.append((GATEWAY_REPO, pr, "runtime_routing", "gateway routes to provider at runtime"))
+        if rt_edges:
+            conn.executemany(
+                "INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?,?,?,?)", rt_edges
+            )
+            conn.commit()
+        # Also add api_gateway edge: express-api-v1 → gateway
+        if "express-api-v1" in known and GATEWAY_REPO in known:
+            conn.execute(
+                "INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?,?,?,?)",
+                ("express-api-v1", GATEWAY_REPO, "api_gateway", "API routes payment requests to gateway"),
+            )
+            conn.commit()
+        print(f"  Runtime routing: {len(rt_edges)} provider routes + 1 api_gateway")
+
+    print("\n22. Building package-to-repo map...")
     build_package_repo_map(conn)
 
     print("\n22. Building env var index...")
