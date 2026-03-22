@@ -48,6 +48,11 @@ def _gh_api(endpoint: str) -> dict | list | None:
     return None
 
 
+def _task_id_matches(task_id: str, text: str) -> bool:
+    """Check if task_id matches in text with word boundary (CORE-100 != CORE-1002)."""
+    return bool(re.search(rf"(?i)\b{re.escape(task_id)}\b", text))
+
+
 def _find_task_branches(repos: list[str], task_id: str) -> dict[str, list[str]]:
     """Search for branches matching task_id in given repos."""
     results: dict[str, list[str]] = {}
@@ -56,7 +61,7 @@ def _find_task_branches(repos: list[str], task_id: str) -> dict[str, list[str]]:
             continue
         branches = _gh_api(f"repos/{ORG}/{repo_name}/branches")
         if branches and isinstance(branches, list):
-            matching = [b["name"] for b in branches if task_id.lower() in b["name"].lower()]
+            matching = [b["name"] for b in branches if _task_id_matches(task_id, b["name"])]
             if matching:
                 results[repo_name] = matching
     return results
@@ -75,7 +80,7 @@ def _find_task_prs(repos: list[str], task_id: str) -> dict[str, list[dict]]:
         for pr in prs:
             head_ref = pr.get("head", {}).get("ref", "")
             title = pr.get("title", "")
-            if task_id.lower() in head_ref.lower() or task_id.lower() in title.lower():
+            if _task_id_matches(task_id, head_ref) or _task_id_matches(task_id, title):
                 pr_info = {
                     "number": pr["number"],
                     "title": pr["title"],
@@ -177,6 +182,9 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
 
     # Section 10: provider checklist (infrastructure repos)
     output += _section_provider_checklist(conn, provider, findings)
+
+    # Section 11: CI risk (recent failures in affected repos)
+    output += _section_ci_risk(conn, findings)
 
     return output
 
@@ -744,6 +752,41 @@ def _section_provider_checklist(conn: sqlite3.Connection, provider: str, finding
             output += f" ({provider_match} references found)"
         output += "\n"
 
+    output += "\n"
+    return output
+
+
+def _section_ci_risk(conn: sqlite3.Connection, findings: list[tuple[str, str]]) -> str:
+    """Section 11: CI risk — recent failures in affected repos."""
+    # Check if ci_runs table exists
+    has_ci = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ci_runs'").fetchone()
+    if not has_ci:
+        return ""
+
+    finding_repos = {rname for _, rname in findings}
+    if not finding_repos:
+        return ""
+
+    risky: list[tuple[str, int, int]] = []
+    for repo in sorted(finding_repos):
+        row = conn.execute(
+            """SELECT COUNT(*) as total,
+                      SUM(CASE WHEN conclusion = 'failure' THEN 1 ELSE 0 END) as fails
+               FROM ci_runs WHERE repo_name = ?""",
+            (repo,),
+        ).fetchone()
+        if row and row["fails"] and row["fails"] > 0:
+            risky.append((repo, row["fails"], row["total"]))
+
+    if not risky:
+        return ""
+
+    output = "## 11. CI Risk\n\n"
+    risky.sort(key=lambda x: x[1], reverse=True)
+    for repo, fails, total in risky:
+        pct = fails / total * 100 if total > 0 else 0
+        level = "HIGH" if pct > 30 else "MEDIUM" if pct > 15 else "LOW"
+        output += f"- **{repo}**: {fails}/{total} runs failed ({pct:.0f}%) — {level} risk\n"
     output += "\n"
     return output
 
