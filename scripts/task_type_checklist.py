@@ -62,7 +62,18 @@ CREDENTIAL_FILES = {
 TASK_TYPES = {
     "provider-integration": {
         "description": "New APM/provider integration or major provider feature",
-        "detect_keywords": ["integration", "provider", "apm", "add support"],
+        "detect_keywords": [
+            "integration",
+            "provider",
+            "apm",
+            "add support",
+            "add bancontact",
+            "blik",
+            "one click",
+            "revalidate",
+            "new flow",
+            "pay by bank",
+        ],
         "detect_project": "PI",
         "always_repos": [
             ("grpc-providers-credentials", "Credential validation — libs/{provider}/validation-strategy.js", 19),
@@ -78,6 +89,7 @@ TASK_TYPES = {
             ("grpc-core-schemas", "Schema updates for new payment type", 4),
             ("next-web-authorizing-transactions", "Frontend — redirect/auth transaction UI", 5),
             ("shared-forms", "Shared UI form components", 4),
+            ("next-web-alternative-payment-methods", "APM selection frontend UI", 2),
             ("grpc-webhooks-paycom", "Webhook notification processing", 3),
             ("grpc-providers-storage", "Provider file/data storage", 3),
             ("e2e-tests", "End-to-end test coverage", 2),
@@ -141,6 +153,9 @@ def detect_task_type(summary: str, project: str) -> str | None:
             continue
         if any(kw in summary_lower for kw in config["detect_keywords"]):
             return type_name
+    # Fallback: all PI tasks default to provider-integration
+    if project == "PI":
+        return "provider-integration"
     return None
 
 
