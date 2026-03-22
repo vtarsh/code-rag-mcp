@@ -125,6 +125,86 @@ Separate agents call analyze_task via MCP and compare what it found vs what manu
 ### 4. Identify gaps
 Whatever manual agents found but MCP missed = improvement opportunity.
 
+## Auto-Collection
+
+`auto_collect.py` — batch collection of recently closed Jira tasks.
+
+```bash
+# Collect PI + CORE tasks closed in last 30 days
+python3 scripts/auto_collect.py --projects=PI,CORE --days=30
+
+# Dry run (show what would be collected)
+python3 scripts/auto_collect.py --projects=PI,CORE,BO,HS --days=90 --dry-run
+```
+
+Runs: Jira JQL search → for each new task → `collect_task.py` → `cross_validate_task.py` → `analyze_gaps.py`.
+Scheduled via launchd every 6 hours.
+
+## benchmarks.yaml
+
+Profile-specific benchmark queries in `profiles/{name}/benchmarks.yaml`:
+
+```yaml
+queries:
+  - id: Q1-concept
+    query: "What retry constants does X use?"
+    expected_repos: [repo-a, repo-b]
+    expected_content: ["RETRY_COUNT", "MAX_RETRIES"]
+
+  - id: Q2-realworld
+    query: "How does payment flow work for provider Y?"
+    expected_repos: [repo-c, repo-d]
+    min_recall: 0.8
+```
+
+Used by `benchmark_queries.py` (conceptual) and `benchmark_realworld.py` (real-world).
+Each query has expected repos/content — score = weighted recall of expected items found.
+
+## Agent-Based Validation (Isolated, No Hints)
+
+The most thorough validation uses **parallel background agents** that work independently:
+
+### Phase 1: Independent Research (3-5 agents)
+
+Each agent gets ONLY the task summary (e.g., "implement sale for Nuvei"). No hints about what repos are expected. Each agent independently:
+
+- Searches codebase via `grep`, file exploration
+- Traces dependencies in the graph database
+- Looks at task_history for similar past tasks
+- Searches GitHub PRs/branches if relevant
+
+Each agent builds their own list of "repos that should be affected".
+
+### Phase 2: MCP Comparison (separate agents)
+
+Different agents call `analyze_task` via MCP tool with the same description. They extract the found repos from the output.
+
+### Phase 3: Synthesis (main session)
+
+The main session collects results from all agents and compares:
+- What did manual research agents find?
+- What did MCP agents find?
+- What's in the ground truth (task_history)?
+
+Gaps between manual and MCP = improvement opportunities.
+This ensures the tool is tested blindly — agents don't know what answer is "correct".
+
+### Why Isolated Agents Matter
+
+- **No confirmation bias**: agents don't know what we expect to find
+- **Different angles**: one agent greps code, another traces graph, another checks PRs
+- **Honest assessment**: if agent finds something MCP missed, it's a real gap
+- **Reproducible**: any session can re-run the same validation
+
+Example agent prompt (for PI task validation):
+```
+"You are analyzing task PI-54: Trustly verification flow.
+Find ALL repos that would need changes. Use grep, graph queries,
+task_history. Report your findings."
+```
+
+No mention of analyze_task, no expected repos, no hints.
+
 ## Current Scores (2026-03-22)
 
 | Group | Recall | Tasks |
