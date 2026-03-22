@@ -58,5 +58,27 @@ credentials*
 patterns-export.json
 *.db
 
+# Org-specific scripts (contain internal repo names, Jira tokens, provider logic)
+scripts/auto_collect.py
+scripts/ci-pattern-checker.py
+scripts/collect_ci_runs.py
+scripts/collect_task.py
+scripts/cross_validate_task.py
+scripts/task_type_checklist.py
+scripts/analyze_change_impact.py
+scripts/check_pr_patterns.py
+scripts/predict_failures.py
+scripts/build_method_matrix.py
+scripts/method_level_gaps.py
+scripts/analyze_developer_patterns.py
+scripts/analyze_file_patterns.py
+scripts/analyze_gaps.py
+scripts/validate_gaps.py
+scripts/export_patterns.py
+scripts/manage_ground_truth.py
+scripts/semantic_gap_scorer.py
+scripts/build_test_map.py
+scripts/tavily-docs-crawler.py
+
 # Secrets (API keys, tokens)
 .secrets/
