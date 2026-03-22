@@ -19,10 +19,14 @@ def run_core_analysis(ctx: AnalysisContext, classification: TaskClassification) 
     output = ""
     output += _section_domain_repos(ctx, classification)
     output += _section_cascade(ctx, classification)
-    output += _section_co_occurrence(ctx)
     output += _section_provider_fanout(ctx)
     output += _section_keyword_scan(ctx, classification)
     return output
+
+
+def run_co_occurrence(ctx: AnalysisContext) -> str:
+    """Run co-occurrence boost for ANY domain (PI, CORE, BO, HS). Called from orchestrator."""
+    return _section_co_occurrence(ctx)
 
 
 def _section_domain_repos(ctx: AnalysisContext, classification: TaskClassification) -> str:

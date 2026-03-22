@@ -79,7 +79,7 @@ def analyze_task_tool(description: str, provider: str = "") -> str:
 def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str) -> str:
     """Orchestrate task analysis. Dispatches to shared + domain-specific sections."""
     from .classifier import classify_task
-    from .core_analyzer import run_core_analysis
+    from .core_analyzer import run_co_occurrence, run_core_analysis
 
     words = set(re.findall(r"[a-zA-Z]{3,}", description.lower()))
 
@@ -115,6 +115,9 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
 
     # CORE/BO/HS-specific sections (when not PI)
     output += run_core_analysis(ctx, classification)
+
+    # Co-occurrence boost (all domains — data-driven from task_history)
+    output += run_co_occurrence(ctx)
 
     # Shared analysis sections
     method_output, task_methods, method_status = section_methods(ctx)
