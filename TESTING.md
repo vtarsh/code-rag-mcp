@@ -164,30 +164,24 @@ Each query has expected repos/content — score = weighted recall of expected it
 
 The most thorough validation uses **parallel background agents** that work independently:
 
-### Phase 1: Independent Research (3-5 agents)
+### Phase 1: Background Agents Search via MCP (3-5 agents in parallel)
 
-Each agent gets ONLY the task summary (e.g., "implement sale for Nuvei"). No hints about what repos are expected. Each agent independently:
+Each agent gets ONLY the task summary (e.g., "implement sale for Nuvei"). **No hints** about what repos are expected, no ground truth. Each agent independently calls `analyze_task` MCP tool and returns what it found. Agents don't know what the "correct" answer is.
 
-- Searches codebase via `grep`, file exploration
-- Traces dependencies in the graph database
-- Looks at task_history for similar past tasks
-- Searches GitHub PRs/branches if relevant
+Different agents can also approach from different angles:
+- One calls `analyze_task` and extracts found repos
+- Another searches codebase via `grep`, traces graph edges manually
+- Another looks at task_history for similar past tasks
 
-Each agent builds their own list of "repos that should be affected".
+### Phase 2: Synthesis by Main Session
 
-### Phase 2: MCP Comparison (separate agents)
+The main session collects results from ALL background agents and compares them with ground truth (task_history.repos_changed):
+- What did each agent find?
+- What's in the ground truth?
+- What was missed?
+- What was found that's NOT in ground truth (false positives)?
 
-Different agents call `analyze_task` via MCP tool with the same description. They extract the found repos from the output.
-
-### Phase 3: Synthesis (main session)
-
-The main session collects results from all agents and compares:
-- What did manual research agents find?
-- What did MCP agents find?
-- What's in the ground truth (task_history)?
-
-Gaps between manual and MCP = improvement opportunities.
-This ensures the tool is tested blindly — agents don't know what answer is "correct".
+Gaps = improvement opportunities. Main session decides what generic mechanism to add.
 
 ### Why Isolated Agents Matter
 
