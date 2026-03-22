@@ -28,18 +28,69 @@ DB_PATH = _BASE_DIR / "db" / "knowledge.db"
 CONFIDENCE_THRESHOLD = 0.7
 
 
-def extract_methods_from_files(files_changed: list[str]) -> set[str]:
-    """Extract method names from files_changed paths.
+_SKIP_NAMES = {
+    "index",
+    "example",
+    "example-activity",
+    "types",
+    "constants",
+    "consts",
+    "config",
+    "utils",
+    "helpers",
+    "common",
+}
 
-    files_changed entries look like: "repo-name/methods/verification.js"
+
+def extract_methods_from_files(files_changed: list[str]) -> set[str]:
+    """Extract method/function names from files_changed paths.
+
+    files_changed entries look like:
+      "repo-name/methods/verification.js"
+      "repo-name/workflows/activities/trustly/handle-activities.js"
+      "repo-name/libs/map-response.js"
+      "repo-name/workflows/src/activities/fetch-payment-transaction.ts"
     """
     methods = set()
     for fp in files_changed:
-        m = re.search(r"methods/([^/]+)\.js$", fp)
+        # Skip test/spec files
+        if ".spec." in fp or "/test" in fp:
+            continue
+
+        # methods/*.js
+        m = re.search(r"methods/([^/]+)\.(js|ts)$", fp)
         if m:
             name = m.group(1)
-            if name != "index":
+            if name not in _SKIP_NAMES:
                 methods.add(name)
+            continue
+
+        # workflows/activities/{provider}/{name}.js or workflows/activities/{name}.js
+        m = re.search(r"workflows/(?:src/)?activities/(?:([^/]+)/)?([^/]+)\.(js|ts)$", fp)
+        if m:
+            provider = m.group(1)
+            name = m.group(2)
+            if name not in _SKIP_NAMES:
+                methods.add(f"{provider}/{name}" if provider else name)
+            continue
+
+        # libs/{subdir}/{name}.js or libs/{name}.js
+        m = re.search(r"libs/(?:([^/]+)/)?([^/]+)\.(js|ts)$", fp)
+        if m:
+            subdir = m.group(1)
+            name = m.group(2)
+            if name not in _SKIP_NAMES:
+                methods.add(f"{subdir}/{name}" if subdir else name)
+            continue
+
+        # workflows/src/workflows/{name}.ts
+        m = re.search(r"workflows/(?:src/)?workflows/([^/]+)\.(js|ts)$", fp)
+        if m:
+            name = m.group(1)
+            if name not in _SKIP_NAMES:
+                methods.add(name)
+            continue
+
     return methods
 
 

@@ -6,6 +6,8 @@ Usage:
     python3 predict_failures.py --repo grpc-apm-trustly
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import os

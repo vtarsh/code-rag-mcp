@@ -28,11 +28,11 @@ RUNS_PER_REPO = 10
 API_DELAY = 0.5  # seconds between API calls
 
 
-def get_repos(db_path: Path, limit: int) -> list[str]:
+def get_repos(db_path: Path, limit: int, offset: int = 0) -> list[str]:
     """Get repo names from knowledge DB."""
     conn = sqlite3.connect(str(db_path))
     try:
-        rows = conn.execute("SELECT DISTINCT name FROM repos LIMIT ?", (limit,)).fetchall()
+        rows = conn.execute("SELECT DISTINCT name FROM repos LIMIT ? OFFSET ?", (limit, offset)).fetchall()
         return [r[0] for r in rows]
     finally:
         conn.close()
@@ -129,6 +129,7 @@ def save_runs(db_path: Path, repo: str, runs: list[dict]) -> int:
 def main():
     parser = argparse.ArgumentParser(description="Collect CI run data from pay-com repos")
     parser.add_argument("--repos", type=int, default=50, help="Max repos to query from DB")
+    parser.add_argument("--offset", type=int, default=0, help="Skip first N repos")
     parser.add_argument("--dry-run", action="store_true", help="Print without saving to DB")
     args = parser.parse_args()
 
@@ -142,7 +143,7 @@ def main():
 
     # Cap repos at MAX_REPOS per run
     repo_limit = min(args.repos, MAX_REPOS)
-    repos = get_repos(DB_PATH, repo_limit)
+    repos = get_repos(DB_PATH, repo_limit, args.offset)
     if not repos:
         print("No repos found in DB")
         sys.exit(1)
