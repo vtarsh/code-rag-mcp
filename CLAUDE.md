@@ -75,7 +75,15 @@ src/
 │   ├── queries.py     # BFS, shortest path, hub penalty
 │   └── service.py     # Tool implementations
 └── tools/             # Composite tools
-    ├── analyze.py     # analyze_task (8 section helpers + GitHub API)
+    ├── analyze/       # analyze_task package (modular, domain-aware)
+    │   ├── __init__.py         # Orchestrator + backward compat re-exports
+    │   ├── base.py             # AnalysisContext, shared types
+    │   ├── classifier.py       # Task domain classifier (7 domains)
+    │   ├── core_analyzer.py    # CORE: cascade prediction, keyword scan
+    │   ├── pi_analyzer.py      # PI: provider, webhooks, impact, checklist
+    │   ├── shared_sections.py  # Universal: gotchas, patterns, proto, gateway, completeness
+    │   ├── github_helpers.py   # GitHub API interaction
+    │   └── method_helpers.py   # gRPC method checks
     ├── context.py     # context_builder (search + deps + proto)
     └── service.py     # repo_overview, list_repos, health_check, visualize_graph
 profiles/              # Org-specific data (git-ignored except example/)
