@@ -38,7 +38,7 @@ profiles/{name}/
 ├── glossary.yaml         # Domain abbreviations → expanded terms
 ├── phrase_glossary.yaml  # Multi-word concept expansion rules
 ├── known_flows.yaml      # Business flow entry points for trace_chain
-├── conventions.yaml      # Org repo naming patterns, infra repos, impact hints
+├── conventions.yaml      # Org repo naming patterns, infra repos, impact hints, domain_patterns
 ├── install.sh            # Symlinks profile scripts into project scripts/
 ├── uninstall.sh          # Removes symlinked scripts
 ├── scripts/              # Org-specific analysis scripts (symlinked into project)
@@ -120,7 +120,11 @@ All sessions share one daemon process. Proxy auto-starts daemon if not running.
 - `search` — hybrid search with `exclude_file_types` parameter (e.g. "gotchas")
 - `find_dependencies`, `trace_impact`, `trace_flow`, `trace_chain` — graph tools
 - `repo_overview`, `list_repos` — browsing
-- `analyze_task` — 10-section analysis (gotchas, patterns, provider, proto, webhooks, gateway, impact, methods, GitHub, completeness, change impact consumers, provider checklist)
+- `analyze_task` — domain-aware multi-section analysis (see `src/tools/analyze/` package)
+  - Shared: gotchas, task patterns, file patterns, proto, gateway, methods, GitHub, completeness, CI risk
+  - PI: provider repos, webhooks, impact, change impact, provider checklist
+  - CORE/BO/HS: domain classifier, cascade (up+downstream), co-occurrence, fan-out, keyword scan
+  - Recall: CORE 78%, PI 73%, BO 67%, HS 100% (75.7% total on 105 tasks)
 - `context_builder` — search + deps + proto in one call
 - `diff_provider_config` — compares two providers' feature flags from seeds.cql (handles multi-PMT)
 - `health_check`, `visualize_graph` — diagnostics
@@ -135,12 +139,13 @@ CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=my-org python3 scripts/benchmark_f
 ```
 
 Current scores: conceptual 0.85, realworld 0.83, flows 0.875
+analyze_task recall: CORE 78%, PI 73%, BO 67%, HS 100% (total 75.7% on 105 tasks)
 
 ## Gotchas
 
 - `build_index.py` recreates DB from scratch — run `build_graph.py` after to restore graph_edges
 - `build_graph.py` also runs `build_env_index.py` (step 19) — env var table + map-type var chunks
-- `analyze.py` has 9 section helpers (0–8) — Section 0.5 searches tasks, add new sections as separate functions
+- `analyze/` is a package (8 modules) — add new domains via classifier.py + new analyzer file
 - Glossaries loaded from profile YAML at import time — restart daemon after editing
 - Graph viz virtual nodes (pkg:, proto:, route:) are filtered in visualize_graph.py and queries.py
 - FTS5 virtual tables cannot have columns added — use separate tables (chunk_meta, env_vars)
