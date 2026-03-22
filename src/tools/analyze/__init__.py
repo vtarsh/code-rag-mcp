@@ -41,6 +41,7 @@ __all__ = [
     "subprocess",
 ]
 from .pi_analyzer import (
+    section_bulk_providers,
     section_change_impact,
     section_impact,
     section_provider,
@@ -108,6 +109,7 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
 
     # PI-specific sections (only when provider detected)
     output += section_provider(ctx)
+    output += section_bulk_providers(ctx)
     output += section_proto(ctx)
     output += section_webhooks(ctx)
     output += section_gateway(ctx)

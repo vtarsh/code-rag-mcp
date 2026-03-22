@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from pathlib import Path
 
@@ -28,6 +29,42 @@ def detect_provider(conn: sqlite3.Connection, words: set[str]) -> str:
         if p in words:
             return p
     return ""
+
+
+_BULK_PATTERNS = re.compile(
+    r"\b(?:all|every|each|all live|across all)\s+(?:providers?|integrations?|apm)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_bulk_provider_task(description: str) -> bool:
+    """Detect if task targets all providers rather than a specific one."""
+    return bool(_BULK_PATTERNS.search(description))
+
+
+def section_bulk_providers(ctx: AnalysisContext) -> str:
+    """When task targets all providers, list them all via gateway routing."""
+    if ctx.provider or not _is_bulk_provider_task(ctx.description):
+        return ""
+    if not GATEWAY_REPO:
+        return ""
+
+    routed = ctx.conn.execute(
+        """SELECT DISTINCT target FROM graph_edges
+           WHERE source = ? AND edge_type = 'runtime_routing'
+           ORDER BY target""",
+        (GATEWAY_REPO,),
+    ).fetchall()
+    if not routed:
+        return ""
+
+    output = f"## Bulk Provider Change ({len(routed)} providers)\n\n"
+    output += "_Task targets all providers — listing all routed repos:_\n\n"
+    for r in routed:
+        ctx.findings.append(("provider", r["target"]))
+        output += f"  - **{r['target']}**\n"
+    output += "\n"
+    return output
 
 
 def section_provider(ctx: AnalysisContext) -> str:
