@@ -38,6 +38,9 @@ profiles/{name}/
 ├── glossary.yaml         # Domain abbreviations → expanded terms
 ├── phrase_glossary.yaml  # Multi-word concept expansion rules
 ├── known_flows.yaml      # Business flow entry points for trace_chain
+├── install.sh            # Symlinks profile scripts into project scripts/
+├── uninstall.sh          # Removes symlinked scripts
+├── scripts/              # Org-specific analysis scripts (symlinked into project)
 └── docs/
     ├── flows/            # YAML flow annotations (indexed as chunks)
     ├── gotchas/          # Markdown gotchas (indexed as high-priority chunks, 1.5x boost)
@@ -45,6 +48,8 @@ profiles/{name}/
     ├── references/       # YAML/MD stable lookup docs (e.g., APM ranking, 1.3x boost)
     └── domain_registry.yaml  # Domain-to-repo mapping
 ```
+
+Profile setup: `cd profiles/{name} && ./install.sh` — creates symlinks for org scripts into `scripts/`.
 
 ## Architecture
 
