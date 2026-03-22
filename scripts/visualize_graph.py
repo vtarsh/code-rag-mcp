@@ -20,6 +20,17 @@ BASE_DIR = Path(os.getenv("CODE_RAG_HOME", Path.home() / ".code-rag"))
 DB_PATH = BASE_DIR / "db" / "knowledge.db"
 OUTPUT_PATH = BASE_DIR / "graph.html"
 
+# Load provider prefixes from conventions
+import yaml  # noqa: E402
+
+_profile = os.getenv("ACTIVE_PROFILE", "")
+if not _profile:
+    _ap = BASE_DIR / ".active_profile"
+    _profile = _ap.read_text().strip() if _ap.exists() else "example"
+_conv_path = BASE_DIR / "profiles" / _profile / "conventions.yaml"
+_conv = yaml.safe_load(_conv_path.read_text()) if _conv_path.exists() else {}
+_PROVIDER_PREFIXES = _conv.get("provider_prefixes", ["grpc-apm-", "grpc-providers-"])
+
 # Edge types that are too noisy to show by default
 NOISY_EDGE_TYPES = {"npm_dep_tooling", "proto_message_def", "proto_service_def"}
 
@@ -28,7 +39,7 @@ HUB_THRESHOLD = 150
 
 # Domain clustering rules: (cluster_name, list_of_prefixes)
 CLUSTER_RULES = [
-    ("Providers", ["grpc-apm-", "grpc-providers-"]),
+    ("Providers", _PROVIDER_PREFIXES),
     ("Core", ["grpc-core-"]),
     ("Workflows", ["workflow-"]),
     ("APIs", ["express-"]),

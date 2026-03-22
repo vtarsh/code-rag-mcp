@@ -29,6 +29,13 @@ _PROFILE_DIR = _BASE_DIR / "profiles" / _PROFILE
 
 EXTRACTED_DIR = _BASE_DIR / "extracted"
 RAW_DIR = _BASE_DIR / "raw"
+
+# Load conventions
+import yaml  # noqa: E402
+
+_conv_path = _PROFILE_DIR / "conventions.yaml"
+_conv = yaml.safe_load(_conv_path.read_text()) if _conv_path.exists() else {}
+FEATURE_REPO: str = _conv.get("feature_repo", "grpc-providers-features")
 # Gotchas/flows/domain_registry from profile (fall back to legacy docs/)
 GOTCHAS_DIR = (
     _PROFILE_DIR / "docs" / "gotchas"
@@ -1586,11 +1593,11 @@ def extract_code_facts(content: str, file_path: str, repo_name: str) -> list[dic
 
 
 def index_seeds(conn: sqlite3.Connection) -> tuple[int, int]:
-    """Index seeds.cql from grpc-providers-features as provider config source of truth.
+    """Index seeds.cql from feature repo as provider config source of truth.
 
     Each INSERT = separate chunk with provider, payment_method_type, features, currencies.
     """
-    seeds_path = RAW_DIR / "grpc-providers-features" / "seeds.cql"
+    seeds_path = RAW_DIR / FEATURE_REPO / "seeds.cql"
     if not seeds_path.is_file():
         return 0, 0
 
@@ -1599,7 +1606,7 @@ def index_seeds(conn: sqlite3.Connection) -> tuple[int, int]:
     except Exception:
         return 0, 0
 
-    chunks = chunk_cql_seeds(content, "grpc-providers-features")
+    chunks = chunk_cql_seeds(content, FEATURE_REPO)
     count = 0
 
     for chunk in chunks:
@@ -1608,7 +1615,7 @@ def index_seeds(conn: sqlite3.Connection) -> tuple[int, int]:
             "VALUES (?, ?, ?, ?, ?, ?)",
             (
                 chunk["content"],
-                "grpc-providers-features",
+                FEATURE_REPO,
                 "seeds.cql",
                 "provider_config",
                 chunk["chunk_type"],
@@ -1635,7 +1642,7 @@ def index_test_scripts(conn: sqlite3.Connection) -> tuple[int, int]:
     files = 0
     chunks = 0
 
-    # Only index scripts from grpc-apm-* repos (most valuable)
+    # Index scripts from all repos that have a scripts/ directory
     for repo_dir in sorted(RAW_DIR.iterdir()):
         if not repo_dir.is_dir():
             continue

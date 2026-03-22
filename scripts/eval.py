@@ -29,6 +29,19 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 _BASE = Path(os.getenv("CODE_RAG_HOME", Path.home() / ".code-rag"))
 DB_PATH = _BASE / "db" / "knowledge.db"
 
+import yaml  # noqa: E402
+
+_profile = os.getenv("ACTIVE_PROFILE", "")
+if not _profile:
+    _ap = _BASE / ".active_profile"
+    _profile = _ap.read_text().strip() if _ap.exists() else "example"
+_conv_path = _BASE / "profiles" / _profile / "conventions.yaml"
+_conv = yaml.safe_load(_conv_path.read_text()) if _conv_path.exists() else {}
+_PROVIDER_PREFIXES = _conv.get("provider_prefixes", ["grpc-apm-"])
+_WEBHOOK_HANDLER = _conv.get("webhook_repos", {}).get("handler", "workflow-provider-webhooks")
+_GATEWAY_REPO = _conv.get("gateway_repo", "grpc-payment-gateway")
+_PROTO_REPOS = _conv.get("proto_repos", ["providers-proto"])
+
 # Importance weights
 W_CRITICAL = 3.0  # proto contract, shared schema — miss = break prod
 W_DIRECT = 2.0  # direct npm dependency
@@ -52,13 +65,7 @@ def generate_eval_queries(conn):
 
     # --- Type 1: "What depends on X?" (direct dependents) ---
     # Pick important shared packages
-    critical_repos = [
-        "providers-proto",
-        "node-libs-types",
-        "node-libs-common",
-        "node-libs-fetch",
-        "node-libs-providers-common",
-    ]
+    critical_repos = [*_PROTO_REPOS, "node-libs-common", "node-libs-fetch", "node-libs-providers-common"]
 
     for repo in critical_repos:
         # Ground truth: all repos with incoming edges to this repo
@@ -119,7 +126,7 @@ def generate_eval_queries(conn):
             )
 
     # --- Type 3: Impact analysis — "if I change X, what breaks?" ---
-    for repo in ["providers-proto", "node-libs-types"]:
+    for repo in _PROTO_REPOS[:2]:
         # BFS to get transitive dependents (depth 2)
         level1 = conn.execute(
             """SELECT DISTINCT source FROM graph_edges
@@ -157,28 +164,29 @@ def generate_eval_queries(conn):
         )
 
     # --- Type 4: Provider task analysis ---
-    providers = conn.execute("SELECT name FROM repos WHERE name LIKE 'grpc-apm-%' LIMIT 8").fetchall()
+    _prefix = _PROVIDER_PREFIXES[0] if _PROVIDER_PREFIXES else "grpc-apm-"
+    providers = conn.execute("SELECT name FROM repos WHERE name LIKE ? LIMIT 8", (f"{_prefix}%",)).fetchall()
 
     for p_row in providers:
         provider_repo = p_row["name"]
-        provider_name = provider_repo.replace("grpc-apm-", "")
+        provider_name = provider_repo[len(_prefix) :]
 
         # Expected: the provider repo + workflow-provider-webhooks + providers-proto + grpc-payment-gateway
-        expected = {
-            provider_repo: W_CRITICAL,
-            "providers-proto": W_CRITICAL,
-        }
+        expected = {provider_repo: W_CRITICAL}
+        if _PROTO_REPOS:
+            expected[_PROTO_REPOS[0]] = W_CRITICAL
 
         # Check if webhook handling exists for this provider
         webhook_check = conn.execute(
-            "SELECT COUNT(*) as cnt FROM chunks WHERE repo_name = 'workflow-provider-webhooks' AND content LIKE ?",
-            (f"%{provider_name}%",),
+            "SELECT COUNT(*) as cnt FROM chunks WHERE repo_name = ? AND content LIKE ?",
+            (_WEBHOOK_HANDLER, f"%{provider_name}%"),
         ).fetchone()
         if webhook_check["cnt"] > 0:
-            expected["workflow-provider-webhooks"] = W_DIRECT
+            expected[_WEBHOOK_HANDLER] = W_DIRECT
 
         # Payment gateway always relevant
-        expected["grpc-payment-gateway"] = W_DIRECT
+        if _GATEWAY_REPO:
+            expected[_GATEWAY_REPO] = W_DIRECT
 
         queries.append(
             {
