@@ -172,7 +172,7 @@ def _section_cascade(ctx: AnalysisContext, classification: TaskClassification) -
             repo: info for repo, info in downstream_hubs.items() if info[1] in service_edge_types or "msg:" not in repo
         }
         # Filter: exclude tooling repos (eslint, mali, tools, grpc-tools)
-        tooling_patterns = {"eslint", "mali", "grpc-tools", "node-libs-tools", "node-libs-grpc"}
+        tooling_patterns = {"eslint", "mali", "grpc-tools", "node-libs-grpc"}
         relevant_hubs = {
             repo: info for repo, info in relevant_hubs.items() if not any(tp in repo for tp in tooling_patterns)
         }
