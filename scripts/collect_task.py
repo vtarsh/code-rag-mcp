@@ -8,6 +8,8 @@ Usage:
     python scripts/collect_task.py PI-54 --force      # overwrite existing
 """
 
+from __future__ import annotations
+
 import json
 import os
 import sqlite3
