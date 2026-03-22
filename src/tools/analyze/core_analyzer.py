@@ -150,8 +150,30 @@ def _section_cascade(ctx: AnalysisContext, classification: TaskClassification) -
             output += "\n"
 
     if downstream_hubs:
+        # Filter out pure tooling/infrastructure (eslint, test tools, etc.)
+        # Keep only repos with service-relevant edge types
+        service_edge_types = {
+            "grpc_call",
+            "grpc_client_usage",
+            "grpc_method_call",
+            "npm_dep_proto",
+            "proto_service_def",
+            "webhook_dispatch",
+            "webhook_handler",
+            "flow_step",
+            "domain_reference",
+        }
+        relevant_hubs = {
+            repo: info for repo, info in downstream_hubs.items() if info[1] in service_edge_types or "msg:" not in repo
+        }
+        # Filter: exclude tooling repos (eslint, mali, tools, grpc-tools)
+        tooling_patterns = {"eslint", "mali", "grpc-tools", "node-libs-tools", "node-libs-grpc"}
+        relevant_hubs = {
+            repo: info for repo, info in relevant_hubs.items() if not any(tp in repo for tp in tooling_patterns)
+        }
+
         output += "_Downstream (shared infrastructure seeds depend on):_\n\n"
-        for repo, (seed, etype, in_deg) in sorted(downstream_hubs.items(), key=lambda x: x[1][2], reverse=True)[:10]:
+        for repo, (seed, etype, in_deg) in sorted(relevant_hubs.items(), key=lambda x: x[1][2], reverse=True)[:15]:
             ctx.findings.append(("downstream", repo))
             output += f"  - **{repo}** ({in_deg} dependents, via {seed}/{etype})\n"
         output += "\n"
