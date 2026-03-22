@@ -26,33 +26,62 @@ DB_PATH = _BASE_DIR / "db" / "knowledge.db"
 if not DB_PATH.exists():
     DB_PATH = Path.home() / ".pay-knowledge" / "db" / "knowledge.db"
 
-# Task type definitions based on statistical analysis of 104 tasks
+# Provider type mapping — derived from boilerplate-node-providers-grpc-service
+PROVIDER_TYPE_MAP = {
+    "card": "grpc-providers-{provider}",
+    "apm": "grpc-apm-{provider}",
+    "mpi": "grpc-mpi-{provider}",
+}
+
+# Standard boilerplate files every provider must have (from boilerplate analysis)
+BOILERPLATE_FILES = {
+    "methods/": "gRPC method handlers (sale, payout, refund, etc.)",
+    "libs/payload-builders/": "API request payload builders per method",
+    "libs/get-credentials.js": "Fetch provider API keys from credentials service",
+    "libs/make-request.js": "HTTP client wrapper for provider API",
+    "libs/map-response.js": "Map provider response to standard format",
+    "libs/statuses-map.js": "Provider status code mapping",
+    "env/consts.js": "Provider-specific constants",
+}
+
+# Standard webhook activity structure
+WEBHOOK_ACTIVITY_FILES = {
+    "activities/{provider}/handle-activities.js": "Main webhook activity router",
+    "activities/{provider}/index.js": "Activity exports",
+    "activities/{provider}/webhook/handle-activities.js": "Webhook-specific activities",
+    "activities/{provider}/webhook/verify-signature.js": "Signature verification",
+}
+
+# Standard credential validation structure
+CREDENTIAL_FILES = {
+    "libs/{provider}/validation-strategy.js": "Credential field validation rules",
+}
+
+
+# Task type definitions based on statistical analysis of 104 tasks + boilerplate
 TASK_TYPES = {
     "provider-integration": {
         "description": "New APM/provider integration or major provider feature",
         "detect_keywords": ["integration", "provider", "apm", "add support"],
         "detect_project": "PI",
         "always_repos": [
-            # These repos appear in 50%+ of PI tasks
-            ("grpc-providers-credentials", "Provider credential storage + validation", 19),
-            ("workflow-provider-webhooks", "Webhook activity handlers for the provider", 18),
-            ("grpc-providers-features", "Feature flags in seeds.cql", 16),
+            ("grpc-providers-credentials", "Credential validation — libs/{provider}/validation-strategy.js", 19),
+            ("workflow-provider-webhooks", "Webhook activities — activities/{provider}/ directory", 18),
+            ("grpc-providers-features", "Feature flags — seeds.cql INSERT for provider", 16),
         ],
         "often_repos": [
-            # These appear in 25-50% of PI tasks
-            ("express-api-internal", "Internal API — process-initialize-data", 11),
-            ("express-webhooks", "Webhook route registration for the provider", 8),
-            ("libs-types", "Proto common.proto updates", 7),
+            ("express-api-internal", "Internal API — process-initialize-data.js", 11),
+            ("express-webhooks", "Webhook route — src/routes/provider/index.js (add route for provider)", 8),
+            ("libs-types", "Proto common.proto updates (if new fields needed)", 7),
+            ("express-api-callbacks", "Callback URL route — src/routes/{provider}-apm-callback.js", 6),
             ("express-api-v1", "API v1 — payment type consts", 5),
-            ("express-api-callbacks", "Callback URL handling", 6),
             ("grpc-core-schemas", "Schema updates for new payment type", 4),
             ("grpc-webhooks-paycom", "Webhook notification processing", 3),
             ("e2e-tests", "End-to-end test coverage", 2),
         ],
         "provider_specific": [
-            # These depend on the specific provider
-            ("grpc-apm-{provider}", "APM adapter service for the provider"),
-            ("grpc-providers-{provider}", "Provider SDK/API integration"),
+            ("grpc-apm-{provider}", "APM adapter — clone from boilerplate-node-providers-grpc-service"),
+            ("grpc-providers-{provider}", "Card provider — clone from boilerplate-node-providers-grpc-service"),
         ],
     },
     "webhook-fix": {
@@ -138,6 +167,27 @@ def show_checklist(task_type: str, provider: str | None = None):
             repo = template.replace("{provider}", provider)
             print(f"  [ ] {repo}")
             print(f"      {desc}")
+
+    # Show boilerplate file structure for new provider
+    if provider and task_type == "provider-integration":
+        print(f"\n📦 BOILERPLATE FILES (standard structure for {provider}):")
+        print("  Source: boilerplate-node-providers-grpc-service")
+        for path, desc in BOILERPLATE_FILES.items():
+            print(f"    {path:<40} {desc}")
+
+        print("\n🔗 WEBHOOK ACTIVITIES (workflow-provider-webhooks):")
+        for template, desc in WEBHOOK_ACTIVITY_FILES.items():
+            path = template.replace("{provider}", provider)
+            print(f"    {path:<55} {desc}")
+
+        print("\n🔑 CREDENTIALS (grpc-providers-credentials):")
+        for template, desc in CREDENTIAL_FILES.items():
+            path = template.replace("{provider}", provider)
+            print(f"    {path:<55} {desc}")
+
+        print("\n⚙️  SEEDS.CQL (grpc-providers-features):")
+        print(f"    Add rows for provider='{provider}' with supported operations")
+        print("    Required fields: payment_method_type, verification, payout, etc.")
 
     print()
 
