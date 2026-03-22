@@ -76,7 +76,10 @@ TASK_TYPES = {
             ("express-api-callbacks", "Callback URL route — src/routes/{provider}-apm-callback.js", 6),
             ("express-api-v1", "API v1 — payment type consts", 5),
             ("grpc-core-schemas", "Schema updates for new payment type", 4),
+            ("next-web-authorizing-transactions", "Frontend — redirect/auth transaction UI", 5),
+            ("shared-forms", "Shared UI form components", 4),
             ("grpc-webhooks-paycom", "Webhook notification processing", 3),
+            ("grpc-providers-storage", "Provider file/data storage", 3),
             ("e2e-tests", "End-to-end test coverage", 2),
         ],
         "provider_specific": [
@@ -102,15 +105,19 @@ TASK_TYPES = {
     },
     "payment-method": {
         "description": "Add new payment method type or modify existing",
-        "detect_keywords": ["payment method", "payout", "refund", "verification", "sale"],
+        "detect_keywords": ["payment method", "payout", "refund", "verification", "sale", "cancellation", "completion"],
         "detect_project": "PI",
         "always_repos": [
             ("grpc-providers-features", "Feature flags — enable method in seeds.cql", 16),
-            ("grpc-providers-credentials", "Credential config for the method", 19),
+            ("workflow-provider-webhooks", "Webhook activities — may need new event handling", 18),
         ],
         "often_repos": [
+            ("grpc-providers-credentials", "Credential config for the method", 19),
+            ("express-api-internal", "Internal API — process-initialize-data", 11),
+            ("express-webhooks", "Webhook route registration", 8),
             ("grpc-payment-gateway", "Gateway routing — if new method type", 5),
             ("libs-types", "Proto updates for new request/response fields", 7),
+            ("workflow-payment-completion", "Payment completion workflow (for payouts/captures)", 1),
         ],
         "provider_specific": [
             ("grpc-apm-{provider}", "Method handler implementation"),
@@ -161,14 +168,18 @@ def show_checklist(task_type: str, provider: str | None = None):
         print(f"  [ ] {repo}")
         print(f"      {desc} (changed in {count}/40 PI tasks)")
 
-    if provider and config.get("provider_specific"):
-        print(f"\n🔧 PROVIDER-SPECIFIC ({provider}):")
-        for template, desc in config["provider_specific"]:
-            repo = template.replace("{provider}", provider)
-            print(f"  [ ] {repo}")
-            print(f"      {desc}")
+    # Support multiple providers (comma-separated or auto-detected from repos)
+    providers = [p.strip() for p in (provider or "").split(",") if p.strip()]
+    if providers and config.get("provider_specific"):
+        print(f"\n🔧 PROVIDER-SPECIFIC ({', '.join(providers)}):")
+        for p in providers:
+            for template, desc in config["provider_specific"]:
+                repo = template.replace("{provider}", p)
+                print(f"  [ ] {repo}")
+                print(f"      {desc}")
 
     # Show boilerplate file structure for new provider
+    provider = providers[0] if providers else None
     if provider and task_type == "provider-integration":
         print(f"\n📦 BOILERPLATE FILES (standard structure for {provider}):")
         print("  Source: boilerplate-node-providers-grpc-service")
@@ -236,15 +247,32 @@ def main():
         return
 
     if args.detect:
-        # Try to detect from summary
         project = args.detect.split("-")[0] if "-" in args.detect else ""
         conn = get_db()
-        row = conn.execute("SELECT summary FROM task_history WHERE ticket_id = ?", (args.detect.upper(),)).fetchone()
+        row = conn.execute(
+            "SELECT summary, repos_changed FROM task_history WHERE ticket_id = ?",
+            (args.detect.upper(),),
+        ).fetchone()
         if row:
             detected = detect_task_type(row["summary"], project.upper())
+            # Auto-detect provider(s) from repos_changed if not specified
+            provider = args.provider
+            if not provider:
+                repos = json.loads(row["repos_changed"] or "[]")
+                providers_found = []
+                infra = {"credentials", "features", "mapping", "storage", "sandbox", "configurations"}
+                for r in repos:
+                    for pfx in ("grpc-apm-", "grpc-providers-", "grpc-mpi-"):
+                        if r.startswith(pfx):
+                            suffix = r[len(pfx) :]
+                            if suffix not in infra:
+                                providers_found.append(suffix)
+                provider = ",".join(sorted(set(providers_found))) if providers_found else None
             if detected:
                 print(f"Detected type: {detected}")
-                show_checklist(detected, args.provider)
+                if provider:
+                    print(f"Detected provider(s): {provider}")
+                show_checklist(detected, provider)
             else:
                 print(f"Could not detect task type from: {row['summary']}")
         else:
