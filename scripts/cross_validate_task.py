@@ -11,6 +11,8 @@ Usage:
     python scripts/cross_validate_task.py PI-54 --dry-run    # print without saving
 """
 
+from __future__ import annotations
+
 import json
 import os
 import sqlite3
@@ -97,6 +99,91 @@ def extract_repos_from_text(text: str) -> set[str]:
             repos.add(candidate)
 
     return repos
+
+
+# ---------------------------------------------------------------------------
+# Generic Filtering Rules (no hardcoded repo names)
+# ---------------------------------------------------------------------------
+
+PROVIDER_ADAPTER_PREFIXES = ("grpc-apm-", "grpc-providers-", "grpc-mpi-")
+PROVIDER_INFRA_SUFFIXES = ("configurations", "features", "mapping", "storage", "credentials", "sandbox")
+SHARED_LIB_PREFIXES = ("node-libs-", "libs-")
+INFRA_PREFIXES = ("boilerplate-", "drone-plugin", "drone-templates", "github-", "helm-", "flux2-", "devops-")
+FRONTEND_SUFFIXES = ("-web",)
+WORKFLOW_DOMAINS: dict[str, set[str]] = {
+    "reconciliation": {"reconciliation", "recon", "matching"},
+    "settlement": {"settlement", "payout", "funding"},
+    "dispute": {"dispute", "chargeback", "representment"},
+    "onboarding": {"onboarding", "kyc", "merchant setup"},
+}
+ORCHESTRATION_KEYWORDS = {
+    "routing",
+    "gateway",
+    "orchestrat",
+    "dispatch",
+    "middleware",
+    "pricing",
+    "risk check",
+    "3ds",
+    "sca",
+    "payment method type",
+    "new payment method",
+    "api endpoint",
+    "rate limit",
+}
+
+HUB_INCOMING_THRESHOLD = 40
+HUB_OUTGOING_THRESHOLD = 80
+
+
+def _is_provider_adapter(repo: str) -> bool:
+    """Check if repo is a provider adapter (grpc-apm-X, grpc-providers-X)."""
+    for prefix in PROVIDER_ADAPTER_PREFIXES:
+        if repo.startswith(prefix):
+            suffix = repo[len(prefix) :]
+            return suffix not in PROVIDER_INFRA_SUFFIXES
+    return False
+
+
+def _extract_provider(repo: str) -> str | None:
+    for prefix in PROVIDER_ADAPTER_PREFIXES:
+        if repo.startswith(prefix):
+            return repo[len(prefix) :]
+    return None
+
+
+def _is_provider_relevant(repo: str, summary_lower: str, repos_changed: set[str]) -> bool:
+    """Provider adapter relevant only if task or changed repos mention that provider."""
+    if not _is_provider_adapter(repo):
+        return True
+    provider = _extract_provider(repo)
+    if not provider:
+        return True
+    # Relevant if provider name in summary or in any changed repo
+    if provider in summary_lower:
+        return True
+    return any(provider in changed for changed in repos_changed)
+
+
+def _is_workflow_relevant(repo: str, summary_lower: str) -> bool:
+    if not repo.startswith("workflow-"):
+        return True
+    repo_lower = repo.lower()
+    for domain, keywords in WORKFLOW_DOMAINS.items():
+        if domain in repo_lower:
+            return any(kw in summary_lower for kw in keywords)
+    return True  # unknown domain -> don't filter
+
+
+def _is_infra_or_frontend(repo: str) -> bool:
+    for prefix in INFRA_PREFIXES:
+        if repo.startswith(prefix):
+            return True
+    return any(repo.endswith(suffix) for suffix in FRONTEND_SUFFIXES)
+
+
+def _is_shared_lib(repo: str) -> bool:
+    return any(repo.startswith(p) for p in SHARED_LIB_PREFIXES)
 
 
 # ---------------------------------------------------------------------------
@@ -191,93 +278,12 @@ def cross_validate(ticket_id: str, *, dry_run: bool = False) -> list[dict]:
         potential_gaps = potential_gaps & existing_repos
 
         # ---------------------------------------------------------------
-        # ---------------------------------------------------------------
-        # 5-Tier Noise Filter (Phase 10 — precision-focused)
+        # Generic Pattern-Based Noise Filter
         # ---------------------------------------------------------------
         content_found = search_repos | context_repos | targeted_repos
         summary_lower = summary.lower()
 
-        # Tier 1: Auto-exclude — always noise, regardless of confidence
-        TIER1_ALWAYS_EXCLUDE = {
-            # Frontends / plugins
-            "receipts-web",
-            "woocommerce-gateway-paycom",
-            "node-libs-envoy-proto",
-            # Reconciliation workflows
-            "workflow-reconciliation-authorization",
-            "workflow-reconciliation-avs",
-            "workflow-reconciliation-bank-accounts",
-            "workflow-reconciliation-file-processing",
-            "workflow-reverse-reconciliation",
-            "workflow-worldpay-reconciliation-exchange-rates",
-            "workflow-silverflow-reconciliation-settlement",
-            "workflow-reconciliation-chargeback",
-            "workflow-reconciliation-processing",
-            "workflow-reconciliation-ach-output",
-            "workflow-reconciliation-fraud",
-            "workflow-reconciliation-bank-transfer",
-            # Hub webhook repos (connect to everything)
-            "express-webhooks-zimpler",
-            "express-webhooks-moneybite",
-            # Dormant repos (verified <5 commits/year, thin proxy or static)
-            "express-api-webhooks",  # 22 commits lifetime, CRUD proxy over grpc-core-webhooks
-            "workflow-sub-payments-master",  # 20 commits lifetime, batch processor
-            "workflow-subscriptions-manager",  # static, last code change Sep 2025
-        }
-
-        # Tier 2: Hub libs — exclude below confidence threshold
-        TIER2_HUB_LIBS = {
-            "libs-types",
-            "node-libs-common",
-            "grpc-core-schemas",
-            "providers-proto",
-            "space-web",
-            "grpc-loggers-rest",
-            "express-vault",
-        }
-        TIER2_CONFIDENCE_FLOOR = 0.45
-
-        # Tier 3: Reconciliation/settlement repos — exclude unless task is about recon
-        TIER3_RECON_REPOS = {
-            "workflow-nets-reconciliation-settlement",
-            "workflow-crb-account-activity-reconciliation",
-            "workflow-worldpay-reconciliation-settlement",
-            "workflow-credorax-reconciliation-settlement",
-            "workflow-tabapay-reconciliation-settlement",
-            "workflow-transaction-reconciliation",
-            "workflow-reconciliation-processing",
-            "grpc-reconciliation-config",
-            "grpc-core-reconciliation",
-        }
-        RECON_KEYWORDS = {"reconciliation", "settlement", "recon"}
-        task_is_about_recon = any(kw in summary_lower for kw in RECON_KEYWORDS)
-
-        # Tier 4: Orchestrator exemption — hub orchestrators only flagged for orchestration tasks
-        ORCHESTRATOR_REPOS = {
-            "grpc-payment-gateway",  # 193 edges, provider-agnostic dispatcher
-            "express-api-v1",  # main API, connects to everything
-        }
-        ORCHESTRATION_KEYWORDS = {
-            "routing",
-            "gateway",
-            "orchestrat",
-            "dispatch",
-            "middleware",
-            "pricing",
-            "risk check",
-            "3ds",
-            "sca",
-            "payment method type",
-            "new payment method",
-            "api endpoint",
-            "rate limit",
-        }
-        task_is_orchestration = any(kw in summary_lower for kw in ORCHESTRATION_KEYWORDS)
-
-        # Infra prefixes — still filter unless found by content search
-        infra_prefixes = ("node-libs-", "libs-", "mali", "pkg:")
-
-        # Tier 5: Hub detection — repos with >15 incoming edges, their graph neighbors are noisy
+        # Hub detection (structural) — repos with many edges are noisy neighbors
         hub_callers: set[str] = set()
         db2 = sqlite3.connect(str(DB_PATH))
         try:
@@ -285,14 +291,13 @@ def cross_validate(ticket_id: str, *, dry_run: bool = False) -> list[dict]:
                 incoming = db2.execute(
                     "SELECT COUNT(DISTINCT source) FROM graph_edges WHERE target = ?", (repo,)
                 ).fetchone()[0]
-                # Exclude runtime_routing edges from main_flow detection (dynamic dispatch, not code coupling)
                 outgoing_structural = db2.execute(
                     """SELECT COUNT(DISTINCT target) FROM graph_edges
                        WHERE source = ? AND edge_type NOT IN ('runtime_routing', 'npm_dep', 'npm_dep_tooling')""",
                     (repo,),
                 ).fetchone()[0]
 
-                if incoming > 15:
+                if incoming > HUB_INCOMING_THRESHOLD:
                     callers = db2.execute(
                         "SELECT DISTINCT source FROM graph_edges WHERE target = ?", (repo,)
                     ).fetchall()
@@ -300,7 +305,7 @@ def cross_validate(ticket_id: str, *, dry_run: bool = False) -> list[dict]:
                         if c not in content_found:
                             hub_callers.add(c)
 
-                if outgoing_structural > 10:
+                if outgoing_structural > HUB_OUTGOING_THRESHOLD:
                     targets = db2.execute(
                         """SELECT DISTINCT target FROM graph_edges
                            WHERE source = ? AND edge_type NOT IN ('runtime_routing', 'npm_dep', 'npm_dep_tooling')""",
@@ -314,20 +319,19 @@ def cross_validate(ticket_id: str, *, dry_run: bool = False) -> list[dict]:
 
         filtered_gaps = set()
         for repo in potential_gaps:
-            # Tier 1: always exclude
-            if repo in TIER1_ALWAYS_EXCLUDE:
+            # Rule 1: Provider adapter isolation
+            if not _is_provider_relevant(repo, summary_lower, repos_changed):
                 continue
-            # Tier 3: recon repos only if task is about recon
-            if repo in TIER3_RECON_REPOS and not task_is_about_recon:
+            # Rule 2: Workflow domain filtering
+            if not _is_workflow_relevant(repo, summary_lower):
                 continue
-            # Tier 4: orchestrators only if task is about orchestration
-            if repo in ORCHESTRATOR_REPOS and not task_is_orchestration and repo not in content_found:
+            # Rule 3: Infra/frontend exclusion
+            if _is_infra_or_frontend(repo) and repo not in content_found:
                 continue
-            # Infra prefix filter
-            is_infra = any(repo.startswith(p) for p in infra_prefixes)
-            if is_infra and repo not in content_found:
+            # Rule 4: Shared lib exclusion
+            if _is_shared_lib(repo) and repo not in content_found:
                 continue
-            # Tier 5: Hub caller filter
+            # Rule 5: Hub detection (structural)
             if repo in hub_callers:
                 continue
             filtered_gaps.add(repo)
@@ -375,12 +379,6 @@ def cross_validate(ticket_id: str, *, dry_run: bool = False) -> list[dict]:
             # Graph + content combo (still good signal)
             if repo in trace_repos and (repo in search_repos or repo in context_repos or repo in targeted_repos):
                 confidence = min(1.0, confidence + 0.1)
-
-            # Tier 2: Hub libs dampening — reduce confidence, skip if below floor
-            if repo in TIER2_HUB_LIBS:
-                confidence = confidence * 0.6  # dampen hub lib confidence
-                if confidence < TIER2_CONFIDENCE_FLOOR:
-                    continue
 
             # Method-level boost (93.3% precision — use as positive signal only)
             task_methods = set()
