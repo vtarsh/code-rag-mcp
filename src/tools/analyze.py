@@ -141,6 +141,12 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
     # Section 0.5: existing task documents
     output += _section_existing_tasks(conn, provider, words)
 
+    # Section 0.6: learned patterns from task history (also injects into findings)
+    output += _section_task_patterns(conn, provider, words, findings)
+
+    # Section 0.7: file-level patterns
+    output += _section_file_patterns(conn, provider, words, findings)
+
     # Sections 1-5: gather findings
     output += _section_provider(conn, provider, words, findings)
     output += _section_proto(conn, words, findings)
@@ -249,6 +255,218 @@ def _section_existing_tasks(conn: sqlite3.Connection, provider: str, words: set[
         snip = strip_repo_tag(row["snippet"])
         output += f"**{row['repo_name']}** ({row['chunk_type']}): {snip}\n\n"
     return output
+
+
+def _section_task_patterns(
+    conn: sqlite3.Connection, provider: str, words: set[str], findings: list[tuple[str, str]]
+) -> str:
+    """Section 0.6: Surface learned patterns from task history.
+
+    Checks task_patterns table for co-occurrence, upstream_caller, and cluster
+    patterns. Shows proactive suggestions and injects pattern repos into findings.
+    """
+    output_parts: list[str] = []
+    pattern_repos: list[tuple[str, str, int]] = []  # (repo, reason, occurrences)
+
+    # 1. Check task_patterns for relevant patterns
+    try:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        if "task_patterns" not in tables:
+            return ""
+
+        patterns = conn.execute(
+            "SELECT pattern_type, missed_repo, trigger_repos, occurrences, confidence "
+            "FROM task_patterns ORDER BY occurrences DESC"
+        ).fetchall()
+        if not patterns:
+            return ""
+    except Exception:
+        return ""
+
+    # 2. Search task_history for similar past tasks
+    similar_tasks: list[dict] = []
+    try:
+        if "task_history_fts" in tables:
+            search_terms = []
+            if provider:
+                search_terms.append(provider)
+            for w in words:
+                if len(w) > 5 and w not in _KEYWORD_STOP_WORDS:
+                    search_terms.append(w)
+            if search_terms:
+                fts_query = " OR ".join(search_terms[:5])
+                rows = conn.execute(
+                    """SELECT t.ticket_id, t.summary, t.repos_changed, t.files_changed
+                       FROM task_history_fts fts
+                       JOIN task_history t ON t.id = fts.rowid
+                       WHERE task_history_fts MATCH ?
+                       ORDER BY rank LIMIT 3""",
+                    (fts_query,),
+                ).fetchall()
+                for r in rows:
+                    similar_tasks.append(
+                        {
+                            "ticket": r[0],
+                            "summary": r[1],
+                            "repos": json.loads(r[2]) if r[2] else [],
+                            "files": json.loads(r[3]) if r[3] else [],
+                        }
+                    )
+    except Exception:
+        pass
+
+    # 3. Format similar tasks
+    if similar_tasks:
+        output_parts.append("## Historical Task Patterns\n")
+        output_parts.append("_Based on similar past tasks, these repos/files were involved:_\n")
+        for t in similar_tasks:
+            repos_str = ", ".join(t["repos"][:8])
+            if len(t["repos"]) > 8:
+                repos_str += f" (+{len(t['repos']) - 8} more)"
+            output_parts.append(f"**{t['ticket']}** — {t['summary']}\n  Repos: {repos_str}\n")
+
+    # 4. Upstream caller patterns — repos that are ALWAYS missed in main flow
+    upstream_patterns = [p for p in patterns if p[0] == "upstream_caller" and p[3] >= 5]
+    if upstream_patterns:
+        if not output_parts:
+            output_parts.append("## Historical Task Patterns\n")
+        output_parts.append("\n### ⚡ Main Flow Repos (frequently missed)\n")
+        output_parts.append("_These repos are part of the main request flow and were missed in many past tasks:_\n")
+        for p in upstream_patterns[:6]:
+            output_parts.append(f"- **{p[1]}** — missed in {p[3]} past tasks (avg confidence {p[4]:.0%})\n")
+            pattern_repos.append((p[1], "upstream_caller", p[3]))
+
+    # 5. Co-occurrence patterns — when repo X changes, Y is often missed
+    co_patterns = [p for p in patterns if p[0] == "co_occurrence"]
+    relevant_co: list[str] = []
+    for p in co_patterns:
+        trigger_repos = json.loads(p[2]) if isinstance(p[2], str) else p[2]
+        missed = p[1]
+        trigger_words = set()
+        for repo in trigger_repos:
+            trigger_words.update(repo.lower().split("-"))
+        is_relevant = (provider and provider in trigger_words) or bool(words & trigger_words)
+        if is_relevant:
+            relevant_co.append(
+                f"When changing **{', '.join(trigger_repos[:3])}** → also check **{missed}** ({p[3]} past occurrences)"
+            )
+            pattern_repos.append((missed, "co_occurrence", p[3]))
+
+    if relevant_co:
+        if not output_parts:
+            output_parts.append("## Historical Task Patterns\n")
+        output_parts.append("\n### 🔗 Co-occurrence Patterns\n")
+        output_parts.append("_Repos frequently missed together in past tasks:_\n")
+        for p in relevant_co[:5]:
+            output_parts.append(f"- {p}\n")
+
+    # 6. Cluster patterns — repos that are missed TOGETHER
+    cluster_patterns = [p for p in patterns if p[0] == "cluster"]
+    relevant_clusters: list[str] = []
+    for p in cluster_patterns:
+        paired_with = json.loads(p[2]) if isinstance(p[2], str) else p[2]
+        # Relevant if missed_repo or paired_with overlaps with already-found pattern repos
+        known = {r for r, _, _ in pattern_repos}
+        if p[1] in known or any(pw in known for pw in paired_with):
+            relevant_clusters.append(f"**{p[1]}** + **{', '.join(paired_with)}** — co-missed in {p[3]} tasks")
+
+    if relevant_clusters:
+        output_parts.append("\n### 📦 Gap Clusters (repos missed together)\n")
+        for c in relevant_clusters[:5]:
+            output_parts.append(f"- {c}\n")
+
+    # 7. Inject pattern-derived repos into findings for completeness checklist
+    existing_finding_repos = {r for _, r in findings}
+    added = 0
+    for repo, _reason, occurrences in pattern_repos:
+        if repo not in existing_finding_repos and occurrences >= 5:
+            findings.append(("pattern", repo))
+            existing_finding_repos.add(repo)
+            added += 1
+
+    if added:
+        output_parts.append(f"\n_Added {added} pattern-based repos to completeness checklist._\n")
+
+    if output_parts:
+        output_parts.append("\n")
+    return "".join(output_parts)
+
+
+def _section_file_patterns(
+    conn: sqlite3.Connection, provider: str, words: set[str], findings: list[tuple[str, str]]
+) -> str:
+    """Section 0.7: File-level patterns — hub files, directory pairs, cross-repo files."""
+    try:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        if "file_patterns" not in tables:
+            return ""
+    except Exception:
+        return ""
+
+    output_parts: list[str] = []
+    # finding_repos removed — not needed
+
+    # Build relevance filter from provider + words
+    relevant_terms = set(words)
+    if provider:
+        relevant_terms.add(provider)
+
+    # 1. Hub files relevant to this task
+    hub_files = conn.execute(
+        "SELECT source, occurrences FROM file_patterns WHERE pattern_type = 'hub_file' ORDER BY occurrences DESC"
+    ).fetchall()
+    relevant_hubs = []
+    for row in hub_files:
+        source = row[0]
+        source_lower = source.lower()
+        # Match if provider or any task word appears in file path
+        if any(t in source_lower for t in relevant_terms if len(t) > 3):
+            relevant_hubs.append((source, row[1]))
+    if relevant_hubs:
+        output_parts.append("## 📁 File-Level Patterns\n")
+        output_parts.append("### Hub Files (changed in many tasks)\n")
+        for path, occ in relevant_hubs[:5]:
+            output_parts.append(f"- `{path}` — changed in {occ} tasks\n")
+
+    # 2. Directory pairs relevant to this task
+    dir_pairs = conn.execute(
+        "SELECT source, target, occurrences, confidence FROM file_patterns "
+        "WHERE pattern_type = 'dir_pair' AND occurrences >= 3 ORDER BY occurrences DESC"
+    ).fetchall()
+    relevant_dirs = []
+    for row in dir_pairs:
+        src, tgt, occ, conf = row
+        src_lower, tgt_lower = src.lower(), tgt.lower()
+        if any(t in src_lower or t in tgt_lower for t in relevant_terms if len(t) > 3):
+            relevant_dirs.append((src, tgt, occ, conf))
+    if relevant_dirs:
+        if not output_parts:
+            output_parts.append("## 📁 File-Level Patterns\n")
+        output_parts.append("\n### Directory Pairs (co-changed)\n")
+        for src, tgt, occ, conf in relevant_dirs[:6]:
+            output_parts.append(f"- `{src}` ↔ `{tgt}` — {occ} tasks ({conf:.0%} confidence)\n")
+
+    # 3. Cross-repo file pairs
+    cross_files = conn.execute(
+        "SELECT source, target, occurrences, confidence FROM file_patterns "
+        "WHERE pattern_type = 'cross_repo_file' AND occurrences >= 3 ORDER BY occurrences DESC"
+    ).fetchall()
+    relevant_cross = []
+    for row in cross_files:
+        src, tgt, occ, conf = row
+        src_lower, tgt_lower = src.lower(), tgt.lower()
+        if any(t in src_lower or t in tgt_lower for t in relevant_terms if len(t) > 3):
+            relevant_cross.append((src, tgt, occ, conf))
+    if relevant_cross:
+        if not output_parts:
+            output_parts.append("## 📁 File-Level Patterns\n")
+        output_parts.append("\n### Cross-Repo File Pairs\n")
+        for src, tgt, occ, conf in relevant_cross[:5]:
+            output_parts.append(f"- `{src}` → `{tgt}` — {occ} tasks ({conf:.0%} confidence)\n")
+
+    if output_parts:
+        output_parts.append("\n")
+    return "".join(output_parts)
 
 
 def _detect_provider(conn: sqlite3.Connection, words: set[str]) -> str:
@@ -550,6 +768,7 @@ def _section_completeness(
             "proto": "Proto contract",
             "webhook": "Webhook activity",
             "gateway": "Gateway routing",
+            "pattern": "⚡ Pattern-based (historically missed)",
         }.get(ftype, ftype)
         checklist.append((rname, label, status, reason, needs_change))
 

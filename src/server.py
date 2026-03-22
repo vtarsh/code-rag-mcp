@@ -3,8 +3,8 @@
 All tools are registered here with FastMCP.
 Business logic lives in service modules, this file only wires them up.
 
-Tools (12):
-  Search:  search
+Tools (13):
+  Search:  search, search_task_history
   Graph:   find_dependencies, trace_impact, trace_flow, trace_chain
   Tools:   repo_overview, list_repos, analyze_task, context_builder, health_check, visualize_graph
 """
@@ -30,6 +30,7 @@ from src.tools.service import (
     health_check_tool,
     list_repos_tool,
     repo_overview_tool,
+    search_task_history_tool,
     visualize_graph_tool,
 )
 
@@ -57,6 +58,19 @@ def search(query: str, repo: str = "", file_type: str = "", exclude_file_types: 
         limit: Max results to return (default 10, max 20)
     """
     return search_tool(query, repo, file_type, exclude_file_types, limit)
+
+
+@mcp.tool()
+@tracked
+def search_task_history(query: str, developer: str = "", limit: int = 10) -> str:
+    """Search past tasks by description, repos, files, or any keyword.
+
+    Args:
+        query: Search query — keywords or natural language question
+        developer: Optional - filter by developer name (partial match)
+        limit: Max results to return (default 10, max 20)
+    """
+    return search_task_history_tool(query, developer, limit)
 
 
 # --- Graph tools ---

@@ -479,3 +479,81 @@ def visualize_graph_tool(repo: str = "", edge_type: str = "") -> str:
         return output
     except Exception as e:
         return f"Error: {e}"
+
+
+@require_db
+def search_task_history_tool(query: str, developer: str = "", limit: int = 10) -> str:
+    """Search past tasks by description, repos, files, or any keyword.
+
+    Args:
+        query: Search query — keywords or natural language question
+        developer: Optional - filter by developer name (partial match)
+        limit: Max results to return (default 10, max 20)
+    """
+    if not query.strip():
+        return "Error: query cannot be empty"
+    limit = min(max(1, limit), 20)
+
+    conn = get_db()
+    try:
+        # FTS5 search over task_history_fts
+        sql = """
+            SELECT t.ticket_id, t.ticket_type, t.summary, t.developer,
+                   t.jira_status, t.repos_changed, t.files_changed, t.pr_urls,
+                   t.labels, t.components, t.description
+            FROM task_history_fts fts
+            JOIN task_history t ON t.id = fts.rowid
+            WHERE task_history_fts MATCH ?
+        """
+        params: list = [query]
+
+        if developer.strip():
+            sql += " AND t.developer LIKE ?"
+            params.append(f"%{developer.strip()}%")
+
+        sql += " ORDER BY rank LIMIT ?"
+        params.append(limit)
+
+        results = conn.execute(sql, params).fetchall()
+        if not results:
+            return f"No tasks found for: {query}"
+
+        lines = [f"# Task History Search: {query}\n\nFound {len(results)} task(s):\n"]
+        for row in results:
+            (
+                ticket_id,
+                ticket_type,
+                summary,
+                developer_name,
+                status,
+                repos_json,
+                files_json,
+                prs_json,
+                labels_json,
+                components_json,
+                description,
+            ) = row
+            repos = json.loads(repos_json) if repos_json else []
+            files = json.loads(files_json) if files_json else []
+            prs = json.loads(prs_json) if prs_json else []
+            labels = json.loads(labels_json) if labels_json else []
+
+            lines.append(f"## {ticket_id} — {summary}")
+            lines.append(f"Type: {ticket_type} | Status: {status} | Developer: {developer_name}")
+            if labels:
+                lines.append(f"Labels: {', '.join(labels)}")
+            if repos:
+                lines.append(f"Repos ({len(repos)}): {', '.join(repos)}")
+            if files:
+                lines.append(f"Files ({len(files)}): {', '.join(files[:20])}")
+                if len(files) > 20:
+                    lines.append(f"  ... and {len(files) - 20} more")
+            if prs:
+                lines.append(f"PRs ({len(prs)}): {', '.join(prs)}")
+            if description:
+                lines.append(f"Description: {description[:300]}...")
+            lines.append("")
+
+        return "\n".join(lines)
+    finally:
+        conn.close()

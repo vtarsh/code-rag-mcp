@@ -46,6 +46,7 @@ from src.tools.service import (
     health_check_tool,
     list_repos_tool,
     repo_overview_tool,
+    search_task_history_tool,
     visualize_graph_tool,
 )
 
@@ -90,6 +91,9 @@ TOOLS: dict[str, Callable[[dict[str, Any]], str]] = {
     "health_check": lambda args: health_check_tool(),
     "visualize_graph": lambda args: visualize_graph_tool(args.get("repo", ""), args.get("edge_type", "")),
     "diff_provider_config": lambda args: diff_provider_config_tool(args["provider_a"], args["provider_b"]),
+    "search_task_history": lambda args: search_task_history_tool(
+        args["query"], args.get("developer", ""), args.get("limit", 10)
+    ),
 }
 
 
