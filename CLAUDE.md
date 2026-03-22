@@ -156,3 +156,6 @@ analyze_task recall: CORE 78%, PI 73%, BO 67%, HS 100% (total 75.7% on 105 tasks
 - After adding tasks/references, run incremental vectors: `build_vectors.py --repos=task-slug,ref-slug`
 - Task boost tiers: plan/decisions 1.1x, api_spec/description 1.05x, metadata 0.95x, progress 0.7x
 - Tasks in analyze_task are filtered by provider name in repo_name to avoid false positives
+- All scripts use conventions.yaml — zero hardcoded org repo names in src/ and scripts/
+- Full rebuild: extract_artifacts.py → build_index.py → build_graph.py → build_vectors.py (~30 min)
+- build_index.py recreates repos/chunks tables — restore task_history etc. from backup after rebuild
