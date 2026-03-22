@@ -134,7 +134,10 @@ def _section_cascade(ctx: AnalysisContext, classification: TaskClassification) -
 
 
 def _section_co_occurrence(ctx: AnalysisContext) -> str:
-    """Auto-add repos that co-occur with current findings in task_history (≥50% conditional probability)."""
+    """Auto-add repos via two data-driven signals from task_history:
+    1. Co-occurrence: repos that co-change with findings (≥40% conditional probability)
+    2. Universal: repos changed in ≥25% of all CORE tasks (always relevant for CORE)
+    """
     try:
         tables = {r[0] for r in ctx.conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
         if "task_history" not in tables:
@@ -143,52 +146,73 @@ def _section_co_occurrence(ctx: AnalysisContext) -> str:
         return ""
 
     finding_repos = {rname for _, rname in ctx.findings}
-    if not finding_repos:
-        return ""
 
-    # For each finding repo, check what other repos co-occur in ≥50% of CORE tasks
     import json
+    from collections import Counter
 
     rows = ctx.conn.execute("SELECT repos_changed FROM task_history WHERE ticket_id LIKE 'CORE-%'").fetchall()
     if len(rows) < 5:
         return ""
 
-    # Count how often each repo appears and co-occurs with finding repos
-    from collections import Counter
-
     repo_count: Counter[str] = Counter()
-    cooccur_count: Counter[tuple[str, str]] = Counter()  # (finding_repo, other_repo)
+    cooccur_count: Counter[tuple[str, str]] = Counter()
 
     for r in rows:
         task_repos = set(json.loads(r["repos_changed"]) if r["repos_changed"] else [])
         for repo in task_repos:
             repo_count[repo] += 1
-        overlap = finding_repos & task_repos
-        for f_repo in overlap:
-            for other in task_repos:
-                if other not in finding_repos:
-                    cooccur_count[(f_repo, other)] += 1
+        if finding_repos:
+            overlap = finding_repos & task_repos
+            for f_repo in overlap:
+                for other in task_repos:
+                    if other not in finding_repos:
+                        cooccur_count[(f_repo, other)] += 1
 
-    # Find repos with ≥50% conditional probability and ≥3 co-occurrences
-    boosted: dict[str, tuple[str, float]] = {}  # repo → (via, probability)
-    for (f_repo, other), count in cooccur_count.items():
-        if count < 3:
-            continue
-        prob = count / repo_count[f_repo]
-        if prob >= 0.5 and other not in boosted:
-            boosted[other] = (f_repo, prob)
+    output_parts: list[str] = []
+    boosted: set[str] = set()
 
-    if not boosted:
-        return ""
+    # Signal 1: Universal CORE repos (>25% of all CORE tasks)
+    universal_threshold = len(rows) * 0.25
+    universal: list[tuple[str, int]] = []
+    for repo, cnt in repo_count.most_common():
+        if cnt < universal_threshold:
+            break
+        if repo not in finding_repos:
+            universal.append((repo, cnt))
+            boosted.add(repo)
 
-    output = "## Co-occurrence Boost\n\n"
-    output += "_Repos that historically co-change with found repos (≥50% probability):_\n\n"
+    if universal:
+        output_parts.append("## Frequently Changed Repos\n\n")
+        output_parts.append(f"_Repos changed in ≥25% of CORE tasks ({len(rows)} total):_\n\n")
+        for repo, cnt in universal:
+            ctx.findings.append(("universal", repo))
+            pct = cnt / len(rows) * 100
+            output_parts.append(f"  - **{repo}** — {cnt} tasks ({pct:.0f}%)\n")
+        output_parts.append("\n")
 
-    for repo, (via, prob) in sorted(boosted.items(), key=lambda x: x[1][1], reverse=True)[:12]:
-        ctx.findings.append(("co-occurrence", repo))
-        output += f"  - **{repo}** — {prob:.0%} when {via} changes\n"
-    output += "\n"
-    return output
+    # Signal 2: Co-occurrence with findings (≥40% conditional probability, ≥3 tasks)
+    cooccur_boosted: dict[str, tuple[str, float]] = {}
+    if finding_repos:
+        for (f_repo, other), count in cooccur_count.items():
+            if count < 3 or other in finding_repos or other in boosted:
+                continue
+            prob = count / repo_count[f_repo]
+            if prob >= 0.4 and other not in cooccur_boosted:
+                cooccur_boosted[other] = (f_repo, prob)
+
+    if cooccur_boosted:
+        if not output_parts:
+            output_parts.append("## Co-occurrence Boost\n\n")
+        else:
+            output_parts.append("## Co-occurrence Boost\n\n")
+        output_parts.append("_Repos that historically co-change with found repos (≥40%):_\n\n")
+        for repo, (via, prob) in sorted(cooccur_boosted.items(), key=lambda x: x[1][1], reverse=True)[:12]:
+            ctx.findings.append(("co-occurrence", repo))
+            boosted.add(repo)
+            output_parts.append(f"  - **{repo}** — {prob:.0%} when {via} changes\n")
+        output_parts.append("\n")
+
+    return "".join(output_parts)
 
 
 def _section_provider_fanout(ctx: AnalysisContext) -> str:
