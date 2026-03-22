@@ -16,8 +16,9 @@ def detect_provider(conn: sqlite3.Connection, words: set[str]) -> str:
     """Auto-detect provider name from task description words."""
     if not PROVIDER_PREFIXES:
         return ""
-    conditions = " OR ".join(f"name LIKE '{p}%'" for p in PROVIDER_PREFIXES)
-    provider_repos = conn.execute(f"SELECT name FROM repos WHERE {conditions}").fetchall()
+    placeholders = " OR ".join("name LIKE ?" for _ in PROVIDER_PREFIXES)
+    params = [f"{p}%" for p in PROVIDER_PREFIXES]
+    provider_repos = conn.execute(f"SELECT name FROM repos WHERE {placeholders}", params).fetchall()
     provider_names: set[str] = set()
     for r in provider_repos:
         name = r["name"]

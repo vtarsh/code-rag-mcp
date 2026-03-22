@@ -124,7 +124,8 @@ All sessions share one daemon process. Proxy auto-starts daemon if not running.
   - Shared: gotchas, task patterns, file patterns, proto, gateway, methods, GitHub, completeness, CI risk
   - PI: provider repos, webhooks, impact, change impact, provider checklist
   - CORE/BO/HS: domain classifier, cascade (up+downstream), co-occurrence, fan-out, keyword scan
-  - Recall: CORE 78%, PI 73%, BO 67%, HS 100% (75.7% total on 105 tasks)
+  - Recall: CORE 83%, PI 78%, BO 67%, HS 100% (80.4% total on 105 tasks)
+  - 10 mechanisms: classifier, cascade, downstream, co-occurrence, universal, fan-out, bulk, keyword, function, domain
 - `context_builder` — search + deps + proto in one call
 - `diff_provider_config` — compares two providers' feature flags from seeds.cql (handles multi-PMT)
 - `health_check`, `visualize_graph` — diagnostics
@@ -139,7 +140,7 @@ CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=my-org python3 scripts/benchmark_f
 ```
 
 Current scores: conceptual 0.85, realworld 0.83, flows 0.875
-analyze_task recall: CORE 78%, PI 73%, BO 67%, HS 100% (total 75.7% on 105 tasks)
+analyze_task recall: CORE 83%, PI 78%, BO 67%, HS 100% (total 80.4% on 105 tasks)
 
 ## Gotchas
 
