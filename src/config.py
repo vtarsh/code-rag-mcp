@@ -128,6 +128,9 @@ INFRA_REPOS: list[dict] = _conventions.get("infra_repos", [])
 # Infra repo suffixes to exclude from provider detection
 INFRA_SUFFIXES: set[str] = set(_conventions.get("infra_suffixes", []))
 
+# Domain classification patterns for non-PI tasks
+DOMAIN_PATTERNS: dict[str, dict] = _conventions.get("domain_patterns", {})
+
 # --- Graph constants ---
 # Meaningful edge types for flow tracing (ordered by signal strength).
 # These are generic — not org-specific.
