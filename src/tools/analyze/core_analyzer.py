@@ -19,6 +19,8 @@ def run_core_analysis(ctx: AnalysisContext, classification: TaskClassification) 
     output = ""
     output += _section_domain_repos(ctx, classification)
     output += _section_cascade(ctx, classification)
+    output += _section_co_occurrence(ctx)
+    output += _section_provider_fanout(ctx)
     output += _section_keyword_scan(ctx, classification)
     return output
 
@@ -128,6 +130,107 @@ def _section_cascade(ctx: AnalysisContext, classification: TaskClassification) -
         output += "\n"
 
     output += f"_Total: {len(all_affected)} repos potentially affected._\n\n"
+    return output
+
+
+def _section_co_occurrence(ctx: AnalysisContext) -> str:
+    """Auto-add repos that co-occur with current findings in task_history (≥50% conditional probability)."""
+    try:
+        tables = {r[0] for r in ctx.conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        if "task_history" not in tables:
+            return ""
+    except Exception:
+        return ""
+
+    finding_repos = {rname for _, rname in ctx.findings}
+    if not finding_repos:
+        return ""
+
+    # For each finding repo, check what other repos co-occur in ≥50% of CORE tasks
+    import json
+
+    rows = ctx.conn.execute("SELECT repos_changed FROM task_history WHERE ticket_id LIKE 'CORE-%'").fetchall()
+    if len(rows) < 5:
+        return ""
+
+    # Count how often each repo appears and co-occurs with finding repos
+    from collections import Counter
+
+    repo_count: Counter[str] = Counter()
+    cooccur_count: Counter[tuple[str, str]] = Counter()  # (finding_repo, other_repo)
+
+    for r in rows:
+        task_repos = set(json.loads(r["repos_changed"]) if r["repos_changed"] else [])
+        for repo in task_repos:
+            repo_count[repo] += 1
+        overlap = finding_repos & task_repos
+        for f_repo in overlap:
+            for other in task_repos:
+                if other not in finding_repos:
+                    cooccur_count[(f_repo, other)] += 1
+
+    # Find repos with ≥50% conditional probability and ≥3 co-occurrences
+    boosted: dict[str, tuple[str, float]] = {}  # repo → (via, probability)
+    for (f_repo, other), count in cooccur_count.items():
+        if count < 3:
+            continue
+        prob = count / repo_count[f_repo]
+        if prob >= 0.5 and other not in boosted:
+            boosted[other] = (f_repo, prob)
+
+    if not boosted:
+        return ""
+
+    output = "## Co-occurrence Boost\n\n"
+    output += "_Repos that historically co-change with found repos (≥50% probability):_\n\n"
+
+    for repo, (via, prob) in sorted(boosted.items(), key=lambda x: x[1][1], reverse=True)[:12]:
+        ctx.findings.append(("co-occurrence", repo))
+        output += f"  - **{repo}** — {prob:.0%} when {via} changes\n"
+    output += "\n"
+    return output
+
+
+def _section_provider_fanout(ctx: AnalysisContext) -> str:
+    """When cascade touches proto/types repos, enumerate all providers via runtime_routing."""
+    from src.config import GATEWAY_REPO
+
+    if not GATEWAY_REPO:
+        return ""
+
+    finding_repos = {rname for _, rname in ctx.findings}
+
+    # Check if any finding is a proto/types repo that providers depend on
+    proto_like = {"providers-proto", "libs-types", "node-libs-providers-common"}
+    trigger_repos = finding_repos & proto_like
+
+    if not trigger_repos:
+        return ""
+
+    # Get all providers via runtime_routing from gateway
+    routed = ctx.conn.execute(
+        """SELECT DISTINCT target FROM graph_edges
+           WHERE source = ? AND edge_type = 'runtime_routing'
+           ORDER BY target""",
+        (GATEWAY_REPO,),
+    ).fetchall()
+
+    if not routed:
+        return ""
+
+    already = finding_repos
+    new_providers = [r["target"] for r in routed if r["target"] not in already]
+
+    if not new_providers:
+        return ""
+
+    output = f"## Provider Fan-out ({len(new_providers)} providers)\n\n"
+    output += f"_Changes to {', '.join(sorted(trigger_repos))} affect all providers via gateway routing:_\n\n"
+
+    for repo in new_providers:
+        ctx.findings.append(("fanout", repo))
+        output += f"  - **{repo}**\n"
+    output += "\n"
     return output
 
 
