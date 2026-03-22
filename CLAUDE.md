@@ -38,6 +38,7 @@ profiles/{name}/
 ├── glossary.yaml         # Domain abbreviations → expanded terms
 ├── phrase_glossary.yaml  # Multi-word concept expansion rules
 ├── known_flows.yaml      # Business flow entry points for trace_chain
+├── conventions.yaml      # Org repo naming patterns, infra repos, impact hints
 ├── install.sh            # Symlinks profile scripts into project scripts/
 ├── uninstall.sh          # Removes symlinked scripts
 ├── scripts/              # Org-specific analysis scripts (symlinked into project)
@@ -111,7 +112,8 @@ All sessions share one daemon process. Proxy auto-starts daemon if not running.
 - `search` — hybrid search with `exclude_file_types` parameter (e.g. "gotchas")
 - `find_dependencies`, `trace_impact`, `trace_flow`, `trace_chain` — graph tools
 - `repo_overview`, `list_repos` — browsing
-- `analyze_task`, `context_builder` — composite
+- `analyze_task` — 10-section analysis (gotchas, patterns, provider, proto, webhooks, gateway, impact, methods, GitHub, completeness, change impact consumers, provider checklist)
+- `context_builder` — search + deps + proto in one call
 - `diff_provider_config` — compares two providers' feature flags from seeds.cql (handles multi-PMT)
 - `health_check`, `visualize_graph` — diagnostics
 
