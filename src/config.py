@@ -92,6 +92,42 @@ PHRASE_GLOSSARY: list[tuple[frozenset[str], str]] = [
     (frozenset(entry["tokens"]), entry["expansion"]) for entry in _raw_phrases if isinstance(entry, dict)
 ]
 
+# --- Conventions (org-specific repo naming & infrastructure) ---
+_conventions: dict = _load_yaml("conventions.yaml") or {}
+
+# Provider repo prefixes — repos matching {prefix}{provider_name}
+PROVIDER_PREFIXES: list[str] = _conventions.get("provider_prefixes", [])
+
+# Provider type → repo template (e.g. {"apm": "grpc-apm-{provider}"})
+PROVIDER_TYPE_MAP: dict[str, str] = _conventions.get("provider_type_map", {})
+
+# Standard provider service methods
+PROVIDER_METHODS: set[str] = set(_conventions.get("provider_methods", []))
+
+# Proto/type definition repos (priority for context_builder)
+PROTO_REPOS: list[str] = _conventions.get("proto_repos", [])
+
+# Payment gateway repo
+GATEWAY_REPO: str = _conventions.get("gateway_repo", "")
+
+# Webhook infrastructure repos
+WEBHOOK_REPOS: dict[str, str] = _conventions.get("webhook_repos", {})
+
+# Feature flags repo
+FEATURE_REPO: str = _conventions.get("feature_repo", "")
+
+# Credential management repo
+CREDENTIALS_REPO: str = _conventions.get("credentials_repo", "")
+
+# Impact hint patterns for PR checklists
+IMPACT_HINTS: list[dict] = _conventions.get("impact_hints", [])
+
+# Infrastructure repos for provider integrations
+INFRA_REPOS: list[dict] = _conventions.get("infra_repos", [])
+
+# Infra repo suffixes to exclude from provider detection
+INFRA_SUFFIXES: set[str] = set(_conventions.get("infra_suffixes", []))
+
 # --- Graph constants ---
 # Meaningful edge types for flow tracing (ordered by signal strength).
 # These are generic — not org-specific.

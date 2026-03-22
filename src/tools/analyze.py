@@ -13,7 +13,14 @@ import sqlite3
 import subprocess
 from pathlib import Path
 
-from src.config import ORG
+from src.config import (
+    GATEWAY_REPO,
+    INFRA_REPOS,
+    ORG,
+    PROTO_REPOS,
+    PROVIDER_PREFIXES,
+    WEBHOOK_REPOS,
+)
 from src.container import get_db, require_db
 from src.formatting import strip_repo_tag
 
@@ -164,6 +171,12 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
 
     # Section 8: completeness report
     output += _section_completeness(conn, findings, task_methods, method_status, pr_data, branch_data)
+
+    # Section 9: change impact (method consumers via graph)
+    output += _section_change_impact(conn, provider, findings)
+
+    # Section 10: provider checklist (infrastructure repos)
+    output += _section_provider_checklist(conn, provider, findings)
 
     return output
 
@@ -471,14 +484,17 @@ def _section_file_patterns(
 
 def _detect_provider(conn: sqlite3.Connection, words: set[str]) -> str:
     """Auto-detect provider name from task description words."""
-    provider_repos = conn.execute(
-        "SELECT name FROM repos WHERE name LIKE 'grpc-apm-%' OR name LIKE 'grpc-providers-%'"
-    ).fetchall()
+    if not PROVIDER_PREFIXES:
+        return ""
+    conditions = " OR ".join(f"name LIKE '{p}%'" for p in PROVIDER_PREFIXES)
+    provider_repos = conn.execute(f"SELECT name FROM repos WHERE {conditions}").fetchall()
     provider_names: set[str] = set()
     for r in provider_repos:
-        parts = r["name"].split("-")
-        if len(parts) >= 3:
-            provider_names.add(parts[-1])
+        name = r["name"]
+        for prefix in PROVIDER_PREFIXES:
+            if name.startswith(prefix):
+                provider_names.add(name[len(prefix) :])
+                break
     for p in provider_names:
         if p in words:
             return p
@@ -509,7 +525,7 @@ def _section_provider(conn: sqlite3.Connection, provider: str, words: set[str], 
         return ""
 
     output = f"## 1. Provider: {provider}\n\n"
-    for prefix in ["grpc-apm-", "grpc-providers-"]:
+    for prefix in PROVIDER_PREFIXES:
         repo_name = f"{prefix}{provider}"
         repo = conn.execute("SELECT * FROM repos WHERE name = ?", (repo_name,)).fetchone()
         if not repo:
@@ -539,22 +555,25 @@ def _section_provider(conn: sqlite3.Connection, provider: str, words: set[str], 
 
 def _section_proto(conn: sqlite3.Connection, words: set[str], findings: list[tuple[str, str]]) -> str:
     """Section 2: Check proto contract for available RPC methods."""
-    output = "## 2. Proto Contract (providers-proto)\n\n"
-    proto_service = conn.execute(
-        "SELECT content FROM chunks WHERE repo_name = 'providers-proto' AND chunk_type = 'proto_service'"
-    ).fetchall()
-    if proto_service:
-        proto_methods: set[str] = set()
-        for row in proto_service:
-            for match in re.finditer(r"rpc\s+(\w+)", row["content"]):
-                proto_methods.add(match.group(1))
-        output += f"Available RPC methods: {', '.join(sorted(proto_methods))}\n\n"
-        for word in words:
-            matching = [m for m in proto_methods if word in m.lower()]
-            if matching:
-                output += f"  `{word}` matches proto method: **{', '.join(matching)}**\n"
-        output += "\n"
-    findings.append(("proto", "providers-proto"))
+    proto_repo = PROTO_REPOS[0] if PROTO_REPOS else ""
+    output = f"## 2. Proto Contract ({proto_repo or 'N/A'})\n\n"
+    if proto_repo:
+        proto_service = conn.execute(
+            "SELECT content FROM chunks WHERE repo_name = ? AND chunk_type = 'proto_service'",
+            (proto_repo,),
+        ).fetchall()
+        if proto_service:
+            proto_methods: set[str] = set()
+            for row in proto_service:
+                for match in re.finditer(r"rpc\s+(\w+)", row["content"]):
+                    proto_methods.add(match.group(1))
+            output += f"Available RPC methods: {', '.join(sorted(proto_methods))}\n\n"
+            for word in words:
+                matching = [m for m in proto_methods if word in m.lower()]
+                if matching:
+                    output += f"  `{word}` matches proto method: **{', '.join(matching)}**\n"
+            output += "\n"
+        findings.append(("proto", proto_repo))
     return output
 
 
@@ -588,17 +607,20 @@ def _section_webhooks(conn: sqlite3.Connection, provider: str, findings: list[tu
 def _section_gateway(conn: sqlite3.Connection, words: set[str], findings: list[tuple[str, str]]) -> str:
     """Section 4: Check payment gateway methods."""
     output = "## 4. Payment Gateway\n\n"
+    if not GATEWAY_REPO:
+        return output
     gateway_methods = conn.execute(
-        "SELECT DISTINCT file_path FROM chunks WHERE repo_name = 'grpc-payment-gateway' AND file_type = 'grpc_method'"
+        "SELECT DISTINCT file_path FROM chunks WHERE repo_name = ? AND file_type = 'grpc_method'",
+        (GATEWAY_REPO,),
     ).fetchall()
     if gateway_methods:
         method_names = [Path(m["file_path"]).stem for m in gateway_methods]
-        output += f"**grpc-payment-gateway** methods: {', '.join(method_names)}\n"
+        output += f"**{GATEWAY_REPO}** methods: {', '.join(method_names)}\n"
         matching_methods = [m for m in method_names if m.lower() in words]
         if matching_methods:
             output += f"  Task-relevant methods: **{', '.join(matching_methods)}**\n"
         output += "\n"
-        findings.append(("gateway", "grpc-payment-gateway"))
+        findings.append(("gateway", GATEWAY_REPO))
     return output
 
 
@@ -608,7 +630,7 @@ def _section_impact(conn: sqlite3.Connection, provider: str) -> str:
     if not provider:
         return output
 
-    for prefix in ["grpc-apm-", "grpc-providers-"]:
+    for prefix in PROVIDER_PREFIXES:
         repo_name = f"{prefix}{provider}"
         deps = conn.execute(
             "SELECT target, edge_type FROM graph_edges WHERE source = ? AND target NOT LIKE 'pkg:%'", (repo_name,)
@@ -618,6 +640,111 @@ def _section_impact(conn: sqlite3.Connection, provider: str) -> str:
             for d in deps:
                 output += f"  - {d['target']} ({d['edge_type']})\n"
             output += "\n"
+    return output
+
+
+def _section_change_impact(conn: sqlite3.Connection, provider: str, findings: list[tuple[str, str]]) -> str:
+    """Section 9: Method-level change impact — who calls provider methods via gRPC."""
+    if not provider:
+        return ""
+
+    output = "## 9. Change Impact (Method Consumers)\n\n"
+    provider_repos = [rname for ftype, rname in findings if ftype == "provider"]
+
+    for repo in provider_repos:
+        # Find all method_call edges targeting this repo
+        consumers = conn.execute(
+            """SELECT source, detail FROM graph_edges
+               WHERE target = ? AND edge_type = 'grpc_method_call'
+               ORDER BY source""",
+            (repo,),
+        ).fetchall()
+
+        if consumers:
+            output += f"**{repo}** is called by:\n"
+            by_caller: dict[str, list[str]] = {}
+            for c in consumers:
+                caller = c["source"]
+                method = c["detail"] or "unknown"
+                by_caller.setdefault(caller, []).append(method)
+            for caller, methods in sorted(by_caller.items()):
+                output += f"  - **{caller}**: {', '.join(methods)}\n"
+            output += "\n"
+
+        # Indirect via gateway (runtime_routing)
+        if GATEWAY_REPO:
+            gateway_routes = conn.execute(
+                """SELECT detail FROM graph_edges
+                   WHERE source = ? AND target = ? AND edge_type = 'runtime_routing'""",
+                (GATEWAY_REPO, repo),
+            ).fetchall()
+            if gateway_routes:
+                # Find who calls gateway for these methods
+                gw_callers = conn.execute(
+                    """SELECT DISTINCT source, detail FROM graph_edges
+                       WHERE target = ? AND edge_type = 'grpc_method_call'""",
+                    (GATEWAY_REPO,),
+                ).fetchall()
+                if gw_callers:
+                    output += f"**{repo}** via gateway ({GATEWAY_REPO}):\n"
+                    for gc in gw_callers[:10]:
+                        output += f"  - {gc['source']}: {gc['detail']}\n"
+                    output += "\n"
+
+    # Webhook chain for provider
+    if WEBHOOK_REPOS:
+        dispatch_repo = WEBHOOK_REPOS.get("dispatch", "")
+        handler_repo = WEBHOOK_REPOS.get("handler", "")
+        if dispatch_repo and handler_repo:
+            wh_edges = conn.execute(
+                """SELECT source, target, edge_type FROM graph_edges
+                   WHERE detail = ? AND edge_type IN ('webhook_dispatch', 'webhook_handler')
+                   ORDER BY edge_type""",
+                (provider,),
+            ).fetchall()
+            if wh_edges:
+                output += f"**Webhook chain** for `{provider}`:\n"
+                for e in wh_edges:
+                    arrow = "->" if e["edge_type"] == "webhook_dispatch" else "<-"
+                    output += f"  {e['source']} {arrow} {e['target']}\n"
+                output += "\n"
+
+    return output
+
+
+def _section_provider_checklist(conn: sqlite3.Connection, provider: str, findings: list[tuple[str, str]]) -> str:
+    """Section 10: Infrastructure checklist for provider integrations."""
+    if not provider or not INFRA_REPOS:
+        return ""
+
+    output = "## 10. Provider Integration Checklist\n\n"
+    finding_repos = {rname for _, rname in findings}
+
+    for item in INFRA_REPOS:
+        repo = item.get("repo", "")
+        desc = item.get("description", "")
+        if not repo:
+            continue
+
+        in_findings = repo in finding_repos
+        has_repo = conn.execute("SELECT 1 FROM repos WHERE name = ?", (repo,)).fetchone()
+        if not has_repo:
+            continue
+
+        # Check if there's a provider-specific file in this repo
+        provider_match = conn.execute(
+            "SELECT COUNT(*) as cnt FROM chunks WHERE repo_name = ? AND content LIKE ?",
+            (repo, f"%{provider}%"),
+        ).fetchone()["cnt"]
+
+        status = "FOUND" if in_findings or provider_match > 0 else "CHECK"
+        marker = "[x]" if status == "FOUND" else "[ ]"
+        output += f"- {marker} **{repo}** — {desc}"
+        if provider_match > 0 and not in_findings:
+            output += f" ({provider_match} references found)"
+        output += "\n"
+
+    output += "\n"
     return output
 
 
@@ -738,10 +865,15 @@ def _section_completeness(
                     reason = f"`{method}` already implemented"
         elif ftype == "proto":
             for method in task_methods:
-                proto_check = conn.execute(
-                    "SELECT content FROM chunks WHERE repo_name = 'providers-proto' AND chunk_type = 'proto_service' AND content LIKE ?",
-                    (f"%{method}%",),
-                ).fetchone()
+                _proto_repo = PROTO_REPOS[0] if PROTO_REPOS else ""
+                proto_check = (
+                    conn.execute(
+                        "SELECT content FROM chunks WHERE repo_name = ? AND chunk_type = 'proto_service' AND content LIKE ?",
+                        (_proto_repo, f"%{method}%"),
+                    ).fetchone()
+                    if _proto_repo
+                    else None
+                )
                 if proto_check:
                     needs_change = False
                     status = "OK"

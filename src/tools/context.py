@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.cache import cache_get, cache_key, cache_set
+from src.config import PROTO_REPOS
 from src.container import get_db, require_db
 from src.formatting import strip_repo_tag
 from src.graph.queries import get_incoming_edges, get_outgoing_edges
@@ -181,7 +182,7 @@ def _build_proto_section(
             return ""
 
         # Separate into relevant (from search-hit repos or proto/libs repos) vs noise
-        priority_prefixes = {"providers-proto", "libs-types", "grpc-core-schemas"}
+        priority_prefixes = set(PROTO_REPOS)
         if relevant_repos:
             priority_prefixes.update(relevant_repos)
 

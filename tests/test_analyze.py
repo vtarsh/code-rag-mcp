@@ -9,7 +9,7 @@ def _mock_conn():
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     conn.execute("CREATE TABLE repos (name TEXT, type TEXT)")
-    conn.execute("CREATE TABLE graph_edges (source TEXT, target TEXT, edge_type TEXT)")
+    conn.execute("CREATE TABLE graph_edges (source TEXT, target TEXT, edge_type TEXT, detail TEXT)")
     # FTS5 table for chunks
     conn.execute("CREATE VIRTUAL TABLE chunks USING fts5(repo_name, file_path, file_type, chunk_type, content)")
     return conn

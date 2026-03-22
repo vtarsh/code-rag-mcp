@@ -5,7 +5,7 @@ All graph-based analysis tools registered with FastMCP.
 
 from __future__ import annotations
 
-from src.config import KNOWN_FLOWS
+from src.config import IMPACT_HINTS, KNOWN_FLOWS
 from src.container import get_db, require_db
 from src.graph.queries import (
     bfs_chain,
@@ -117,12 +117,11 @@ def trace_impact_tool(repo_name: str, depth: int = 2) -> str:
                 for rname, _ in repos_list:
                     affected_names.add(rname)
 
-            if any("grpc-apm-" in r or "grpc-providers-" in r for r in affected_names):
-                lines.append("- [ ] Provider services may need proto client update\n")
-            if any("workflow-" in r for r in affected_names):
-                lines.append("- [ ] Temporal workflows affected — check signal/activity compatibility\n")
-            if any("web-" in r or "backoffice" in r for r in affected_names):
-                lines.append("- [ ] Frontend apps affected — check for breaking API changes\n")
+            for hint_rule in IMPACT_HINTS:
+                pfx = hint_rule.get("prefix", "")
+                msg = hint_rule.get("hint", "")
+                if pfx and msg and any(pfx in r for r in affected_names):
+                    lines.append(f"- [ ] {msg}\n")
             if total_affected > 10:
                 lines.append("- [ ] Consider phased rollout — many services affected\n")
 
