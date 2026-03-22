@@ -4,6 +4,12 @@ Generic RAG system for indexing any GitHub org's codebase.
 Git: vtarsh/code-rag-mcp (personal account).
 Python 3.12, FastMCP, SQLite FTS5, LanceDB, CrossEncoder reranker.
 
+**Key docs** (read for full context):
+- `ARCHITECTURE.md` — system design, analyze_task package, 10 mechanisms, conventions.yaml
+- `TESTING.md` — recall methodology, how to measure/improve, validation without MCP
+- `profiles/pay-com/RECALL-TRACKER.md` — current scores, improvement log
+- `profiles/pay-com/NEXT-SESSION-PROMPT.md` — context for new sessions
+
 ## Commands
 
 ```bash
@@ -71,7 +77,7 @@ src/
 │   ├── fts.py         # SQLite FTS5 search
 │   ├── vector.py      # LanceDB vector search (model-aware query prefix)
 │   └── service.py     # Tool implementations
-├── graph/             # Dependency graph (26 edge types)
+├── graph/             # Dependency graph (29 edge types)
 │   ├── queries.py     # BFS, shortest path, hub penalty
 │   └── service.py     # Tool implementations
 └── tools/             # Composite tools
@@ -148,6 +154,7 @@ analyze_task recall: CORE 84%, PI 79%, BO 67%, HS 100% (total 80.8% on 105 tasks
 - `build_graph.py` also runs `build_env_index.py` (step 19) — env var table + map-type var chunks
 - `analyze/` is a package (8 modules) — add new domains via classifier.py + new analyzer file
 - Glossaries loaded from profile YAML at import time — restart daemon after editing
+- Daemon restart: `kill -9 $(lsof -ti:8742); sleep 2; CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=pay-com python3 daemon.py &disown`
 - Graph viz virtual nodes (pkg:, proto:, route:) are filtered in visualize_graph.py and queries.py
 - FTS5 virtual tables cannot have columns added — use separate tables (chunk_meta, env_vars)
 - Tests mock DB layer — no integration tests with real SQLite yet
