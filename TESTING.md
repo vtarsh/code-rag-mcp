@@ -164,24 +164,31 @@ Each query has expected repos/content — score = weighted recall of expected it
 
 The most thorough validation uses **parallel background agents** that work independently:
 
-### Phase 1: Background Agents Search via MCP (3-5 agents in parallel)
+### Phase 1: Background Agents (parallel, isolated, no hints)
 
-Each agent gets ONLY the task summary (e.g., "implement sale for Nuvei"). **No hints** about what repos are expected, no ground truth. Each agent independently calls `analyze_task` MCP tool and returns what it found. Agents don't know what the "correct" answer is.
+Two types of agents run in parallel. Each gets ONLY the task summary. No ground truth, no expected repos.
 
-Different agents can also approach from different angles:
-- One calls `analyze_task` and extracts found repos
-- Another searches codebase via `grep`, traces graph edges manually
-- Another looks at task_history for similar past tasks
+**MCP agents** — call `analyze_task` MCP tool, return what the tool found.
+
+**Manual agents** — search independently WITHOUT MCP:
+- `grep -r "functionName" extracted/` to find usage across repos
+- Direct SQL on graph: `SELECT source FROM graph_edges WHERE target = 'repo-x'`
+- `gh pr list --repo org/repo --search "keyword"`
+- `git clone` + local code analysis if needed
+- task_history queries for similar past tasks
 
 ### Phase 2: Synthesis by Main Session
 
-The main session collects results from ALL background agents and compares them with ground truth (task_history.repos_changed):
-- What did each agent find?
-- What's in the ground truth?
-- What was missed?
-- What was found that's NOT in ground truth (false positives)?
+The main session collects results from ALL agents and compares:
+- What did MCP agents find? (= what our tool produces)
+- What did manual agents find? (= what a thorough developer would find)
+- What's in the ground truth? (= what actually changed)
 
-Gaps = improvement opportunities. Main session decides what generic mechanism to add.
+**MCP found but manual didn't** → tool works well here.
+**Manual found but MCP didn't** → gap, needs new mechanism.
+**Neither found** → very hard to predict, likely edge case.
+
+Main session decides what generic mechanism to add based on gaps.
 
 ### Why Isolated Agents Matter
 
