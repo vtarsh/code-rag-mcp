@@ -93,10 +93,17 @@ TASK_TYPES = {
             ("grpc-webhooks-paycom", "Webhook notification processing", 3),
             ("grpc-providers-storage", "Provider file/data storage", 3),
             ("e2e-tests", "End-to-end test coverage", 2),
+            ("express-api-mpi", "MPI API — 3DS authentication (if provider supports 3DS)", 2),
+            ("grpc-payment-risk", "Risk service — risk check config for provider", 2),
+            ("workflow-tasks", "Task management workflows", 2),
+            ("grpc-core-tasks", "Core task service (approval flows, signals)", 2),
+            ("workflow-collaboration-processing", "Collaboration/chargeback workflows", 2),
+            ("update-packages-script", "Package update automation", 3),
         ],
         "provider_specific": [
             ("grpc-apm-{provider}", "APM adapter — clone from boilerplate-node-providers-grpc-service"),
             ("grpc-providers-{provider}", "Card provider — clone from boilerplate-node-providers-grpc-service"),
+            ("grpc-mpi-{provider}", "3DS/MPI adapter (if provider supports 3DS)"),
         ],
     },
     "webhook-fix": {
