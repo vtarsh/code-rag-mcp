@@ -90,7 +90,7 @@ def _section_domain_repos(ctx: AnalysisContext, classification: TaskClassificati
 
 
 def _section_cascade(ctx: AnalysisContext, classification: TaskClassification) -> str:
-    """Cascade prediction — BFS from seed repos to find affected downstream repos."""
+    """Cascade prediction — BFS upstream (who depends on seeds) + downstream (what seeds depend on)."""
     seed_repos = [
         repo
         for repo in classification.seed_repos
@@ -101,35 +101,66 @@ def _section_cascade(ctx: AnalysisContext, classification: TaskClassification) -
         return ""
 
     output = "## Cascade Impact\n\n"
-    output += "_Repos that depend on seed repos (BFS depth 2):_\n\n"
-
     all_affected: dict[str, tuple[str, str]] = {}  # repo → (via_seed, edge_type)
+    seed_set = set(seed_repos)
 
+    # Upstream: repos that depend ON seeds (existing BFS)
     for seed in seed_repos:
         levels = bfs_dependents(ctx.conn, seed, max_depth=2)
         for _level, deps in levels.items():
             for dep_name, edge_type in deps:
-                if dep_name not in all_affected and dep_name not in seed_repos:
+                if dep_name not in all_affected and dep_name not in seed_set:
                     all_affected[dep_name] = (seed, edge_type)
 
-    if not all_affected:
-        return output + "No cascade dependencies found.\n\n"
+    # Downstream: repos that seeds DEPEND ON (shared infrastructure)
+    # Walk outgoing edges from seeds, find high-in-degree targets (hub repos)
+    downstream_hubs: dict[str, tuple[str, str, int]] = {}  # repo → (via_seed, edge_type, in_degree)
+    for seed in seed_repos:
+        outgoing = ctx.conn.execute(
+            """SELECT DISTINCT target, edge_type FROM graph_edges
+               WHERE source = ? AND target NOT LIKE 'pkg:%' AND target NOT LIKE 'proto:%'
+               AND target NOT LIKE 'route:%'""",
+            (seed,),
+        ).fetchall()
+        for row in outgoing:
+            target = row["target"]
+            if target in seed_set or target in all_affected:
+                continue
+            # Check in-degree (how many repos depend on this target)
+            in_degree = ctx.conn.execute(
+                "SELECT COUNT(DISTINCT source) as n FROM graph_edges WHERE target = ? AND source NOT LIKE 'pkg:%'",
+                (target,),
+            ).fetchone()["n"]
+            # Hub threshold: at least 5 dependents (commonly shared infrastructure)
+            if in_degree >= 5 and target not in downstream_hubs:
+                downstream_hubs[target] = (seed, row["edge_type"], in_degree)
 
-    # Group by edge type for readability
-    by_edge: dict[str, list[tuple[str, str]]] = {}
-    for repo, (seed, etype) in all_affected.items():
-        by_edge.setdefault(etype, []).append((repo, seed))
+    if all_affected:
+        output += "_Upstream (repos that depend on seeds):_\n\n"
+        by_edge: dict[str, list[tuple[str, str]]] = {}
+        for repo, (seed, etype) in all_affected.items():
+            by_edge.setdefault(etype, []).append((repo, seed))
+        for etype, repos in sorted(by_edge.items(), key=lambda x: len(x[1]), reverse=True):
+            output += f"**{etype}** ({len(repos)} repos):\n"
+            for repo, seed in sorted(repos)[:15]:
+                ctx.findings.append(("cascade", repo))
+                output += f"  - **{repo}** (via {seed})\n"
+            if len(repos) > 15:
+                output += f"  - ... and {len(repos) - 15} more\n"
+            output += "\n"
 
-    for etype, repos in sorted(by_edge.items(), key=lambda x: len(x[1]), reverse=True):
-        output += f"**{etype}** ({len(repos)} repos):\n"
-        for repo, seed in sorted(repos)[:15]:
-            ctx.findings.append(("cascade", repo))
-            output += f"  - **{repo}** (via {seed})\n"
-        if len(repos) > 15:
-            output += f"  - ... and {len(repos) - 15} more\n"
+    if downstream_hubs:
+        output += "_Downstream (shared infrastructure seeds depend on):_\n\n"
+        for repo, (seed, etype, in_deg) in sorted(downstream_hubs.items(), key=lambda x: x[1][2], reverse=True)[:10]:
+            ctx.findings.append(("downstream", repo))
+            output += f"  - **{repo}** ({in_deg} dependents, via {seed}/{etype})\n"
         output += "\n"
 
-    output += f"_Total: {len(all_affected)} repos potentially affected._\n\n"
+    total = len(all_affected) + len(downstream_hubs)
+    if total:
+        output += f"_Total: {total} repos in cascade._\n\n"
+    else:
+        output += "No cascade dependencies found.\n\n"
     return output
 
 
