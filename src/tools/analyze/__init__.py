@@ -41,7 +41,6 @@ __all__ = [
     "subprocess",
 ]
 from .pi_analyzer import (
-    detect_provider,
     section_change_impact,
     section_impact,
     section_provider,
@@ -79,11 +78,14 @@ def analyze_task_tool(description: str, provider: str = "") -> str:
 
 def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str) -> str:
     """Orchestrate task analysis. Dispatches to shared + domain-specific sections."""
+    from .classifier import classify_task
+    from .core_analyzer import run_core_analysis
+
     words = set(re.findall(r"[a-zA-Z]{3,}", description.lower()))
 
-    # Auto-detect provider from task description
-    if not provider:
-        provider = detect_provider(conn, words)
+    # Classify task into domain
+    classification = classify_task(conn, description, provider, words)
+    provider = classification.provider
 
     ctx = AnalysisContext(
         conn=conn,
@@ -92,7 +94,11 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
         provider=provider,
     )
 
-    output = f"# Task Analysis\n\n**Task**: {description}\n\n"
+    output = f"# Task Analysis\n\n**Task**: {description}\n"
+    output += f"**Domain**: {classification.domain}"
+    if classification.confidence > 0:
+        output += f" ({classification.confidence:.0%} confidence)"
+    output += "\n\n"
 
     # Shared sections (all task types)
     output += section_gotchas(ctx)
@@ -106,6 +112,9 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
     output += section_webhooks(ctx)
     output += section_gateway(ctx)
     output += section_impact(ctx)
+
+    # CORE/BO/HS-specific sections (when not PI)
+    output += run_core_analysis(ctx, classification)
 
     # Shared analysis sections
     method_output, task_methods, method_status = section_methods(ctx)

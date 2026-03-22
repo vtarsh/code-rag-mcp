@@ -35,3 +35,6 @@ infra_repos: []
 
 # Infra repo suffixes to exclude from provider detection
 infra_suffixes: []
+
+# Domain classification patterns for non-PI tasks
+domain_patterns: {}
