@@ -359,8 +359,14 @@ def _section_keyword_scan(ctx: AnalysisContext, classification: TaskClassificati
         except Exception:
             continue
 
-    # Phase 2: Single keywords (lower precision, need 2+ matches)
+    # Phase 2: Single keywords — also check repo name matches (high signal)
+    all_repo_names = [r["name"] for r in ctx.conn.execute("SELECT name FROM repos").fetchall()]
     for keyword in scan_words[:8]:
+        # Repo name matching: if keyword appears in repo name, it's highly relevant
+        for rname in all_repo_names:
+            if keyword in rname and rname not in already_found:
+                new_finds.setdefault(rname, []).append(f"{keyword}(name)")
+
         try:
             rows = ctx.conn.execute(
                 "SELECT DISTINCT repo_name FROM chunks WHERE chunks MATCH ? LIMIT 20",
@@ -379,10 +385,12 @@ def _section_keyword_scan(ctx: AnalysisContext, classification: TaskClassificati
     # Sort by number of keyword matches (more matches = more relevant)
     sorted_finds = sorted(new_finds.items(), key=lambda x: len(x[1]), reverse=True)
 
-    # Repos matching compound terms count as strong (1 compound = 2 keywords)
+    # Repos matching compound terms or repo-name matches count as strong
     all_compounds = set(compound_terms + camel_terms)
     strong_finds = [
-        (repo, kws) for repo, kws in sorted_finds if len(kws) >= 2 or any(kw in all_compounds for kw in kws)
+        (repo, kws)
+        for repo, kws in sorted_finds
+        if len(kws) >= 2 or any(kw in all_compounds for kw in kws) or any("(name)" in kw for kw in kws)
     ]
 
     if not strong_finds:
