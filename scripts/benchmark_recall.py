@@ -87,7 +87,7 @@ def run_benchmark(
         params = ()
 
     rows = conn.execute(
-        f"SELECT ticket_id, summary, repos_changed, files_changed FROM task_history WHERE {condition} ORDER BY ticket_id",
+        f"SELECT ticket_id, summary, repos_changed, files_changed, description FROM task_history WHERE {condition} ORDER BY ticket_id",
         params,
     ).fetchall()
 
@@ -111,7 +111,12 @@ def run_benchmark(
 
         db = get_db()
         try:
-            result = _analyze_task_impl(db, r["summary"] + " " + tid, "", rerank=rerank)
+            desc = r["summary"] + " " + tid
+            # Include first 300 chars of description for richer context
+            task_desc = r["description"] or ""
+            if task_desc:
+                desc += " " + task_desc[:300]
+            result = _analyze_task_impl(db, desc, "", rerank=rerank)
         finally:
             db.close()
 
