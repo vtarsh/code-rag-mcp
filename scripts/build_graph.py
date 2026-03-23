@@ -1970,14 +1970,7 @@ def main():
                 "INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?,?,?,?)", rt_edges
             )
             conn.commit()
-        # Also add api_gateway edge: express-api-v1 → gateway
-        if "express-api-v1" in known and GATEWAY_REPO in known:
-            conn.execute(
-                "INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?,?,?,?)",
-                ("express-api-v1", GATEWAY_REPO, "api_gateway", "API routes payment requests to gateway"),
-            )
-            conn.commit()
-        print(f"  Runtime routing: {len(rt_edges)} provider routes + 1 api_gateway")
+        print(f"  Runtime routing: {len(rt_edges)} provider routes")
 
     print("\n22. Building package-to-repo map...")
     build_package_repo_map(conn)

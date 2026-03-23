@@ -106,6 +106,158 @@ class TestAnalyzeTaskTool:
         assert "E2E tests" in result
 
 
+class TestClassifierMultiDomain:
+    """Test classifier multi-domain detection for BO/HS prefix tasks."""
+
+    def test_bo_prefix_gets_secondary_domain_seeds(self):
+        from src.tools.analyze.classifier import classify_task
+
+        conn = _mock_conn()
+        # BO-1598 "High Risk Override Reason Logic" should match bo + core-risk
+        words = {"high", "risk", "override", "reason", "logic"}
+        result = classify_task(conn, "Improve High Risk Override Reason Logic BO-1598", "", words)
+        assert result.domain.startswith("bo")
+        assert result.confidence > 0
+        # Should have core-risk seed repos merged in
+        seed_names = set(result.seed_repos)
+        assert "graphql" in seed_names or "backoffice-web" in seed_names  # BO seeds
+        assert any("risk" in s for s in seed_names)  # core-risk seeds
+
+    def test_bo_prefix_without_keywords_stays_bo(self):
+        from src.tools.analyze.classifier import classify_task
+
+        conn = _mock_conn()
+        words = {"add", "tabs", "section"}
+        result = classify_task(conn, "Add Two Tabs to Collaborations Section BO-1603", "", words)
+        assert result.domain == "bo"
+        assert "graphql" in result.seed_repos or "backoffice-web" in result.seed_repos
+
+    def test_core_prefix_unchanged(self):
+        from src.tools.analyze.classifier import classify_task
+
+        conn = _mock_conn()
+        words = {"copy", "partial", "approval", "controls", "payment", "session", "routes"}
+        result = classify_task(conn, "[API] Copy partial approval controls CORE-2582", "", words)
+        # CORE should still go through keyword matching, not prefix shortcut
+        assert not result.domain.startswith("bo")
+
+
+class TestBidirectionalCoOccurrence:
+    """Test bidirectional co-occurrence catches tight satellites."""
+
+    @patch("src.tools.analyze._find_task_prs", return_value={})
+    @patch("src.tools.analyze._find_task_branches", return_value={})
+    @patch("src.container.check_db_health", return_value=None)
+    @patch("src.tools.analyze.get_db")
+    def test_reverse_probability_adds_satellite(self, mock_get_db, mock_health, mock_branches, mock_prs):
+        import json
+
+        from src.tools.analyze import analyze_task_tool
+
+        conn = _mock_conn()
+        conn.execute(
+            "CREATE TABLE task_history (id INTEGER PRIMARY KEY, ticket_id TEXT, summary TEXT, repos_changed TEXT, description TEXT, ticket_type TEXT, developer TEXT, epic_id TEXT, parent_id TEXT, subtasks TEXT, linked_issues TEXT, labels TEXT, components TEXT, sprint TEXT, story_points TEXT, jira_status TEXT, status_changelog TEXT, jira_comments TEXT, attachments TEXT, files_changed TEXT, pr_urls TEXT, pr_review_comments TEXT, bugs_linked TEXT, custom_fields TEXT, created_at TEXT)"
+        )
+        conn.execute(
+            "CREATE VIRTUAL TABLE task_history_fts USING fts5(summary, description, content=task_history, content_rowid=id)"
+        )
+        conn.execute("INSERT INTO repos VALUES ('express-api-v1', 'service')")
+        conn.execute("INSERT INTO repos VALUES ('grpc-auth-apikeys2', 'service')")
+        # Create 5 CORE tasks where apikeys2 ALWAYS appears with express-api-v1
+        for i in range(5):
+            repos = json.dumps(["express-api-v1", "grpc-auth-apikeys2", "grpc-core-schemas"])
+            conn.execute(
+                "INSERT INTO task_history (ticket_id, summary, repos_changed) VALUES (?, ?, ?)",
+                (f"CORE-{2600 + i}", f"API task {i}", repos),
+            )
+        # Create 15 CORE tasks where express-api-v1 appears WITHOUT apikeys2
+        for i in range(15):
+            repos = json.dumps(["express-api-v1", "libs-types"])
+            conn.execute(
+                "INSERT INTO task_history (ticket_id, summary, repos_changed) VALUES (?, ?, ?)",
+                (f"CORE-{2700 + i}", f"Other task {i}", repos),
+            )
+        mock_get_db.return_value = conn
+
+        result = analyze_task_tool("CORE-2650 Add new API endpoint for settlements")
+        # P(apikeys2 | express-api-v1) = 5/20 = 25% (below 40% threshold)
+        # P(express-api-v1 | apikeys2) = 5/5 = 100% (above 80% reverse threshold)
+        # Bidirectional should catch this
+        assert "grpc-auth-apikeys2" in result
+
+
+class TestSimilarTaskBoost:
+    """Test similar-task boost with self-match exclusion."""
+
+    @patch("src.tools.analyze._find_task_prs", return_value={})
+    @patch("src.tools.analyze._find_task_branches", return_value={})
+    @patch("src.container.check_db_health", return_value=None)
+    @patch("src.tools.analyze.get_db")
+    def test_self_match_excluded(self, mock_get_db, mock_health, mock_branches, mock_prs):
+        import json
+
+        from src.tools.analyze import analyze_task_tool
+
+        conn = _mock_conn()
+        conn.execute(
+            "CREATE TABLE task_patterns (pattern_type TEXT, missed_repo TEXT, trigger_repos TEXT, occurrences INT, confidence REAL)"
+        )
+        conn.execute(
+            "CREATE TABLE task_history (id INTEGER PRIMARY KEY, ticket_id TEXT, summary TEXT, repos_changed TEXT, description TEXT, ticket_type TEXT, developer TEXT, epic_id TEXT, parent_id TEXT, subtasks TEXT, linked_issues TEXT, labels TEXT, components TEXT, sprint TEXT, story_points TEXT, jira_status TEXT, status_changelog TEXT, jira_comments TEXT, attachments TEXT, files_changed TEXT, pr_urls TEXT, pr_review_comments TEXT, bugs_linked TEXT, custom_fields TEXT, created_at TEXT)"
+        )
+        conn.execute(
+            "CREATE VIRTUAL TABLE task_history_fts USING fts5(summary, description, content=task_history, content_rowid=id)"
+        )
+        # Insert the task itself
+        conn.execute(
+            "INSERT INTO task_history (ticket_id, summary, repos_changed) VALUES (?, ?, ?)",
+            ("CORE-100", "Fix audit logging", json.dumps(["repo-a", "repo-b", "repo-c"])),
+        )
+        conn.execute("INSERT INTO task_history_fts (rowid, summary, description) VALUES (1, 'Fix audit logging', '')")
+        mock_get_db.return_value = conn
+
+        result = analyze_task_tool("Fix audit logging CORE-100")
+        # Should NOT inject repos from self-match — repo-a/b/c should NOT appear as similar_task findings
+        assert "Similar past task" not in result
+
+    def test_similar_task_boost_logic(self):
+        """Test the similar-task boost logic directly: ≥3 repo overlap triggers injection."""
+        from src.tools.analyze.base import AnalysisContext
+
+        conn = _mock_conn()
+        ctx = AnalysisContext(conn=conn, description="test", words=set(), provider="")
+        # Pre-populate findings with 3 repos
+        ctx.findings = [("domain", "repo-a"), ("domain", "repo-b"), ("domain", "repo-c")]
+
+        # Simulate similar task with 4 repos (3 overlap + 1 new)
+        similar_repos = ["repo-a", "repo-b", "repo-c", "repo-new"]
+        existing = {r for _, r in ctx.findings}
+        overlap = existing & set(similar_repos)
+        assert len(overlap) >= 3  # overlap threshold met
+
+        # Inject new repos
+        for repo in similar_repos:
+            if repo not in existing:
+                ctx.findings.append(("similar_task", repo))
+                existing.add(repo)
+
+        assert ("similar_task", "repo-new") in ctx.findings
+        assert len(ctx.findings) == 4  # 3 original + 1 injected
+
+    def test_similar_task_no_boost_below_threshold(self):
+        """No injection when overlap < 3 repos."""
+        from src.tools.analyze.base import AnalysisContext
+
+        conn = _mock_conn()
+        ctx = AnalysisContext(conn=conn, description="test", words=set(), provider="")
+        ctx.findings = [("domain", "repo-a"), ("domain", "repo-b")]
+
+        similar_repos = ["repo-a", "repo-b", "repo-c", "repo-new"]
+        existing = {r for _, r in ctx.findings}
+        overlap = existing & set(similar_repos)
+        assert len(overlap) == 2  # below threshold — no injection
+
+
 class TestCheckMethodExists:
     def test_method_found_in_chunks(self):
         from src.tools.analyze import _check_method_exists

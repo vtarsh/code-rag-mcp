@@ -103,8 +103,9 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
     except Exception:
         return ""
 
-    # Similar tasks from FTS
+    # Similar tasks from FTS (exclude self-match to prevent data leakage)
     similar_tasks: list[dict] = []
+    current_task_id = extract_task_id(ctx.description)
     try:
         if "task_history_fts" in tables:
             search_terms = []
@@ -120,10 +121,13 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
                        FROM task_history_fts fts
                        JOIN task_history t ON t.id = fts.rowid
                        WHERE task_history_fts MATCH ?
-                       ORDER BY rank LIMIT 3""",
+                       ORDER BY rank LIMIT 6""",
                     (fts_query,),
                 ).fetchall()
                 for r in rows:
+                    # Skip self-match (same ticket ID)
+                    if current_task_id and r[0].lower() == current_task_id:
+                        continue
                     similar_tasks.append(
                         {
                             "ticket": r[0],
@@ -132,17 +136,28 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
                             "files": json.loads(r[3]) if r[3] else [],
                         }
                     )
+                similar_tasks = similar_tasks[:3]
     except Exception:
         pass
 
     if similar_tasks:
         output_parts.append("## Historical Task Patterns\n")
         output_parts.append("_Based on similar past tasks, these repos/files were involved:_\n")
+        existing_finding_repos = {r for _, r in ctx.findings}
         for t in similar_tasks:
-            repos_str = ", ".join(t["repos"][:8])
+            repos_str = ", ".join(f"**{r}**" for r in t["repos"][:8])
             if len(t["repos"]) > 8:
                 repos_str += f" (+{len(t['repos']) - 8} more)"
             output_parts.append(f"**{t['ticket']}** — {t['summary']}\n  Repos: {repos_str}\n")
+
+            # Similar-task boost: if past task shares ≥3 repos with current findings,
+            # inject its other repos as findings (high confidence of same scope)
+            overlap = existing_finding_repos & set(t["repos"])
+            if len(overlap) >= 3:
+                for repo in t["repos"]:
+                    if repo not in existing_finding_repos:
+                        ctx.findings.append(("similar_task", repo))
+                        existing_finding_repos.add(repo)
 
     # Upstream caller patterns
     upstream_patterns = [p for p in patterns if p[0] == "upstream_caller" and p[3] >= 5]
@@ -466,6 +481,8 @@ def section_completeness(
             "webhook": "Webhook activity",
             "gateway": "Gateway routing",
             "pattern": "⚡ Pattern-based (historically missed)",
+            "similar_task": "📋 Similar past task",
+            "bulk_migration": "🔄 Bulk migration",
             "domain": "Domain service",
             "cascade": "Cascade dependency",
             "keyword": "Keyword match",

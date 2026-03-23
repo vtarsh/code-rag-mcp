@@ -5,7 +5,7 @@ Git: vtarsh/code-rag-mcp (personal account).
 Python 3.12, FastMCP, SQLite FTS5, LanceDB, CrossEncoder reranker.
 
 **Key docs** (read for full context):
-- `ARCHITECTURE.md` — system design, analyze_task package, 10 mechanisms, conventions.yaml
+- `ARCHITECTURE.md` — system design, analyze_task package, 13 mechanisms, conventions.yaml
 - `TESTING.md` — recall methodology, how to measure/improve, validation without MCP
 - `profiles/pay-com/RECALL-TRACKER.md` — current scores, improvement log
 - `profiles/pay-com/NEXT-SESSION-PROMPT.md` — context for new sessions
@@ -14,7 +14,7 @@ Python 3.12, FastMCP, SQLite FTS5, LanceDB, CrossEncoder reranker.
 
 ```bash
 # Tests
-cd ~/.code-rag && python -m pytest tests/ -q
+cd ~/.pay-knowledge && python -m pytest tests/ -q
 
 # Benchmarks (run after search pipeline changes)
 python scripts/benchmark_queries.py && python scripts/benchmark_realworld.py
@@ -110,6 +110,7 @@ All sessions share one daemon process. Proxy auto-starts daemon if not running.
 - Local only — zero external services
 - All tool functions return `str` (error strings on failure, formatted results on success)
 - Org-specific data MUST live in profiles/ — never hardcode org names in src/
+- Run benchmark_recall.py before and after analyze_task changes
 
 ## Code Facts (added 2026-03-21)
 
@@ -130,8 +131,8 @@ All sessions share one daemon process. Proxy auto-starts daemon if not running.
   - Shared: gotchas, task patterns, file patterns, proto, gateway, methods, GitHub, completeness, CI risk
   - PI: provider repos, webhooks, impact, change impact, provider checklist
   - CORE/BO/HS: domain classifier, cascade (up+downstream), co-occurrence, fan-out, keyword scan
-  - Recall: CORE 83%, PI 78%, BO 67%, HS 100% (80.4% total on 105 tasks)
-  - 10 mechanisms: classifier, cascade, downstream, co-occurrence, universal, fan-out, bulk, keyword, function, domain
+  - Recall: CORE 87.2%, PI 83.6%, BO 74.1%, HS 100% (85.2% total on 105 tasks)
+  - 13 mechanisms: classifier, cascade, downstream, co-occurrence, universal, fan-out, bulk, keyword, function, domain, classifier-multi-domain, bidirectional-co-occurrence, similar-task-boost
 - `context_builder` — search + deps + proto in one call
 - `diff_provider_config` — compares two providers' feature flags from seeds.cql (handles multi-PMT)
 - `health_check`, `visualize_graph` — diagnostics
@@ -145,8 +146,7 @@ CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=my-org python3 scripts/benchmark_r
 CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=my-org python3 scripts/benchmark_flows.py
 ```
 
-Current scores: conceptual 0.85, realworld 0.83, flows 0.875
-analyze_task recall: CORE 84%, PI 79%, BO 67%, HS 100% (total 80.8% on 105 tasks)
+Current scores: conceptual 0.850, realworld 4/6 passing, flows 0.875
 
 ## Gotchas
 
@@ -158,7 +158,7 @@ analyze_task recall: CORE 84%, PI 79%, BO 67%, HS 100% (total 80.8% on 105 tasks
 - Graph viz virtual nodes (pkg:, proto:, route:) are filtered in visualize_graph.py and queries.py
 - FTS5 virtual tables cannot have columns added — use separate tables (chunk_meta, env_vars)
 - Tests mock DB layer — no integration tests with real SQLite yet
-- Pre-commit runs ruff + ruff-format + pytest — fix lint before committing
+- Pre-commit runs ruff + ruff-format + pytest (133 tests) — fix lint before committing
 - Daemon uses ~400 MB real memory (VSZ shows ~2.5 GB but that's virtual/mmap — not real usage)
 - Embedding model selected via profile config `embedding_model` key or `CODE_RAG_MODEL` env var
 - After adding tasks/references, run incremental vectors: `build_vectors.py --repos=task-slug,ref-slug`

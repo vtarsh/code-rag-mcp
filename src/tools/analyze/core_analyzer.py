@@ -20,6 +20,7 @@ def run_core_analysis(ctx: AnalysisContext, classification: TaskClassification) 
     output = ""
     output += _section_domain_repos(ctx, classification)
     output += _section_cascade(ctx, classification)
+    output += _section_bulk_migration(ctx)
     output += _section_provider_fanout(ctx)
     output += _section_function_search(ctx)
     output += _section_keyword_scan(ctx, classification)
@@ -260,14 +261,19 @@ def _section_co_occurrence(ctx: AnalysisContext) -> str:
         output_parts.append("\n")
 
     # Signal 2: Co-occurrence with findings (≥40% conditional probability, ≥3 tasks)
+    # Also bidirectional: if P(found|other) ≥ 0.80 AND count ≥ 4, add other.
+    # This catches tight satellites (e.g., apikeys2 always with express-api-v1).
     cooccur_boosted: dict[str, tuple[str, float]] = {}
     if finding_repos:
         for (f_repo, other), count in cooccur_count.items():
             if count < 3 or other in finding_repos or other in boosted:
                 continue
-            prob = count / repo_count[f_repo]
-            if prob >= 0.4 and other not in cooccur_boosted:
-                cooccur_boosted[other] = (f_repo, prob)
+            prob_forward = count / repo_count[f_repo]
+            prob_reverse = count / repo_count[other] if repo_count[other] > 0 else 0
+            if prob_forward >= 0.4 and other not in cooccur_boosted:
+                cooccur_boosted[other] = (f_repo, prob_forward)
+            elif prob_reverse >= 0.80 and count >= 4 and other not in cooccur_boosted:
+                cooccur_boosted[other] = (f_repo, prob_reverse)
 
     if cooccur_boosted:
         if not output_parts:
@@ -284,9 +290,53 @@ def _section_co_occurrence(ctx: AnalysisContext) -> str:
     return "".join(output_parts)
 
 
+def _section_bulk_migration(ctx: AnalysisContext) -> str:
+    """Detect bulk migration/upgrade tasks and enumerate all service repos.
+
+    When task description matches bulk keywords (e.g., 'migrate', 'audit', 'upgrade')
+    and implies cross-service scope, enumerate all repos matching service patterns.
+    Configured via conventions.yaml: bulk_keywords + service_repo_patterns.
+    """
+    from src.config import BULK_KEYWORDS, SERVICE_REPO_PATTERNS
+
+    if not BULK_KEYWORDS or not SERVICE_REPO_PATTERNS:
+        return ""
+
+    desc_lower = ctx.description.lower()
+    matched_keywords = [kw for kw in BULK_KEYWORDS if kw.lower() in desc_lower]
+    if not matched_keywords:
+        return ""
+
+    # Enumerate all repos matching service patterns
+    all_repos = [r["name"] for r in ctx.conn.execute("SELECT name FROM repos").fetchall()]
+    already = {rname for _, rname in ctx.findings}
+    new_repos: list[str] = []
+
+    for repo in all_repos:
+        if repo in already:
+            continue
+        for pattern in SERVICE_REPO_PATTERNS:
+            if re.match(pattern, repo):
+                new_repos.append(repo)
+                break
+
+    if not new_repos:
+        return ""
+
+    output = "## Bulk Migration Detection\n\n"
+    output += f"_Matched keywords: {', '.join(matched_keywords)}_\n"
+    output += f"_Enumerating {len(new_repos)} service repos matching configured patterns:_\n\n"
+
+    for repo in sorted(new_repos):
+        ctx.findings.append(("bulk_migration", repo))
+        output += f"  - **{repo}**\n"
+    output += "\n"
+    return output
+
+
 def _section_provider_fanout(ctx: AnalysisContext) -> str:
     """When cascade touches proto/types repos, enumerate all providers via runtime_routing."""
-    from src.config import GATEWAY_REPO
+    from src.config import GATEWAY_REPO, PROTO_TRIGGER_REPOS
 
     if not GATEWAY_REPO:
         return ""
@@ -294,8 +344,7 @@ def _section_provider_fanout(ctx: AnalysisContext) -> str:
     finding_repos = {rname for _, rname in ctx.findings}
 
     # Check if any finding is a proto/types repo that providers depend on
-    proto_like = {"providers-proto", "libs-types", "node-libs-providers-common"}
-    trigger_repos = finding_repos & proto_like
+    trigger_repos = finding_repos & PROTO_TRIGGER_REPOS
 
     if not trigger_repos:
         return ""

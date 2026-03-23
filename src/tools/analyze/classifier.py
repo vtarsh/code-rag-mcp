@@ -54,16 +54,14 @@ def classify_task(
         "HS": "hs",
     }
 
-    # If prefix is BO or HS, use that directly (low ambiguity)
-    if task_prefix in prefix_bias:
-        domain = prefix_bias[task_prefix]
-        pattern = DOMAIN_PATTERNS.get(domain, {})
-        return TaskClassification(
-            domain=domain,
-            provider="",
-            confidence=0.7,
-            seed_repos=pattern.get("seed_repos", []),
-        )
+    # For BO/HS prefix: use as primary domain but still run keyword matching
+    # to find secondary domains whose seed repos should also be included.
+    # Example: BO-1598 "High Risk Override Reason Logic" → BO + core-risk seeds.
+    prefix_domain = prefix_bias.get(task_prefix)
+    prefix_seeds: list[str] = []
+    if prefix_domain:
+        pattern = DOMAIN_PATTERNS.get(prefix_domain, {})
+        prefix_seeds = list(pattern.get("seed_repos", []))
 
     # 3. Keyword matching against domain patterns
     if not DOMAIN_PATTERNS:
@@ -101,33 +99,60 @@ def classify_task(
         if score > 0:
             scores.append((domain_name, score, matched, seed_repos))
 
-    if not scores:
+    # If prefix_domain set (BO/HS) but no keyword matches, return with prefix domain
+    if prefix_domain and not scores:
+        return TaskClassification(
+            domain=prefix_domain,
+            provider="",
+            confidence=0.7,
+            seed_repos=prefix_seeds,
+        )
+
+    if not scores and not prefix_domain:
         return TaskClassification(domain="unknown", provider="", confidence=0.0)
 
     # Sort by score, take best
     scores.sort(key=lambda x: x[1], reverse=True)
-    best_domain, best_score, best_matched, best_seeds = scores[0]
 
-    # Multi-domain: if other domains score ≥50% of best, union their seed_repos
-    all_keywords = list(best_matched)
-    all_seeds = list(best_seeds)
-    secondary_domains: list[str] = []
-    for domain_name, score, matched, seeds in scores[1:]:
-        if score >= best_score * 0.5:
-            secondary_domains.append(domain_name)
+    if prefix_domain:
+        # BO/HS prefix: use prefix as primary, merge keyword-matched domains as secondary
+        best_domain = prefix_domain
+        all_keywords: list[str] = []
+        all_seeds = list(prefix_seeds)
+        secondary_domains: list[str] = []
+        for domain_name, _score, matched, seeds in scores:
+            if domain_name != prefix_domain:
+                secondary_domains.append(domain_name)
             for s in seeds:
                 if s not in all_seeds:
                     all_seeds.append(s)
             for kw in matched:
                 if kw not in all_keywords:
                     all_keywords.append(kw)
+        confidence = 0.7
+    else:
+        best_domain, best_score, best_matched, best_seeds = scores[0]
 
-    # Confidence: normalize score (cap at 1.0)
-    confidence = min(best_score / 4.0, 1.0)
+        # Multi-domain: if other domains score ≥50% of best, union their seed_repos
+        all_keywords = list(best_matched)
+        all_seeds = list(best_seeds)
+        secondary_domains = []
+        for domain_name, score, matched, seeds in scores[1:]:
+            if score >= best_score * 0.5:
+                secondary_domains.append(domain_name)
+                for s in seeds:
+                    if s not in all_seeds:
+                        all_seeds.append(s)
+                for kw in matched:
+                    if kw not in all_keywords:
+                        all_keywords.append(kw)
 
-    # If CORE prefix, boost CORE domains
-    if task_prefix == "CORE" and best_domain.startswith("core-"):
-        confidence = min(confidence + 0.2, 1.0)
+        # Confidence: normalize score (cap at 1.0)
+        confidence = min(best_score / 4.0, 1.0)
+
+        # If CORE prefix, boost CORE domains
+        if task_prefix == "CORE" and best_domain.startswith("core-"):
+            confidence = min(confidence + 0.2, 1.0)
 
     domain_label = best_domain
     if secondary_domains:

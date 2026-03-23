@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 
 from src.cache import get_runtime_stats
-from src.config import BASE_DIR, DB_PATH, LANCE_PATH, NPM_SCOPE
+from src.config import BASE_DIR, DB_PATH, LANCE_PATH, NPM_SCOPE, REPO_NAME_PREFIXES
 from src.container import get_db, is_model_loaded, is_reranker_loaded, require_db
 
 
@@ -39,7 +39,9 @@ def repo_overview_tool(repo_name: str) -> str:
             (repo_name,),
         ).fetchall()
 
-        short_name = repo_name.replace("grpc-", "").replace("apm-", "").replace("core-", "")
+        short_name = repo_name
+        for prefix in REPO_NAME_PREFIXES:
+            short_name = short_name.replace(prefix, "")
         dependents = conn.execute(
             "SELECT name FROM repos WHERE org_deps LIKE ? AND name != ?", (f"%{short_name}%", repo_name)
         ).fetchall()

@@ -128,6 +128,16 @@ INFRA_REPOS: list[dict] = _conventions.get("infra_repos", [])
 # Infra repo suffixes to exclude from provider detection
 INFRA_SUFFIXES: set[str] = set(_conventions.get("infra_suffixes", []))
 
+# Repos that trigger provider fan-out (proto/types/common libs)
+PROTO_TRIGGER_REPOS: set[str] = set(_conventions.get("proto_trigger_repos", []))
+
+# Prefixes to strip from repo names for display
+REPO_NAME_PREFIXES: list[str] = _conventions.get("repo_name_prefixes", [])
+
+# Bulk migration detection
+BULK_KEYWORDS: list[str] = _conventions.get("bulk_keywords", [])
+SERVICE_REPO_PATTERNS: list[str] = _conventions.get("service_repo_patterns", [])
+
 # Domain classification patterns for non-PI tasks
 DOMAIN_PATTERNS: dict[str, dict] = _conventions.get("domain_patterns", {})
 
@@ -146,7 +156,6 @@ FLOW_EDGE_TYPES: set[str] = {
     "domain_reference",
     "flow_step",
     "flow_redirect",
-    "redirect",
     "url_reference",
     "grpc_method_call",
     "merchant_has",
