@@ -210,3 +210,13 @@ If the user repeats the same instruction, preference, or correction within a ses
 - **Templates created**: PI generic 8-repo integration template, 3 sale completion patterns, 4 complexity tiers.
 - **Next priorities**: real-task validation (PI-60), hub penalty for cascade, PR URL signal, developer prior.
 - **Ground truth**: hosted-fields in CORE-1615 and github-workflows-node-grpc in CORE-2351 are false ground truth (unrelated work bundled under same ticket)
+
+### 2026-03-24: Overnight Tier 1 deep analysis — 26 tasks (11 CORE + 15 BO)
+- **CORE**: 9/11 at 100% recall. 2 misses: CORE-2551 (grpc-risk-logs pkg bump), CORE-2203 (kafka-cdc-sink co_change).
+- **BO**: 11/15 at 100% recall. 4 misses from 3 root causes.
+- **#1 systemic issue: pkg: virtual node dead-end in build_graph.py**. graphql has 77 npm_dep edges to `pkg:@pay-com/*` but only 3 grpc_client_usage edges. The pkg: nodes are dead ends — never resolved to actual repos. Causes BO-934 (2 misses), BO-1479, BO-954 misses. Fix: resolve `pkg:@pay-com/core-X` → `grpc-core-X` in build_graph.py.
+- **Missing graphql edges**: graphql → grpc-core-configurations, grpc-core-notes, grpc-core-tasks, grpc-core-finance, grpc-risk-alerts — all missing. All caused by pkg: dead-end.
+- **Package-bump-only repos** are ground truth noise: grpc-core-reconciliation (16/16 tasks), grpc-core-paymentlinks (16/17), grpc-risk-logs, node-libs-tracing. Should filter from ground truth.
+- **BO patterns confirmed**: standard BO stack (backoffice-web + graphql + grpc-graphql-authorization + libs-types + node-libs-common) covers 90%+ of BO tasks. Access-control, CRUD page, and data migration are sub-patterns.
+- **Precision crisis uniform**: 1-7% across all 26 tasks. Hub cascade through libs-types (238+ deps) dominates. Hub penalty is the #2 priority fix.
+- **Rule**: Overnight autonomous batching works well — 26 tasks in ~4 hours with 3 parallel agents per batch. Pattern mining every 10 tasks catches actionable patterns. Cron every 30 min ensures continuity.
