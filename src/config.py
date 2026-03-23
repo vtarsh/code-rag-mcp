@@ -138,6 +138,9 @@ REPO_NAME_PREFIXES: list[str] = _conventions.get("repo_name_prefixes", [])
 BULK_KEYWORDS: list[str] = _conventions.get("bulk_keywords", [])
 SERVICE_REPO_PATTERNS: list[str] = _conventions.get("service_repo_patterns", [])
 
+# High-confidence co-change rules (trigger_repo → [companion_repos])
+CO_CHANGE_RULES: dict[str, list[str]] = _conventions.get("co_change_rules", {})
+
 # Domain classification patterns for non-PI tasks
 DOMAIN_PATTERNS: dict[str, dict] = _conventions.get("domain_patterns", {})
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from src.config import DOMAIN_PATTERNS
+from src.config import CO_CHANGE_RULES, DOMAIN_PATTERNS
 from src.graph.queries import bfs_dependents
 
 from .base import _KEYWORD_STOP_WORDS, AnalysisContext
@@ -37,6 +37,40 @@ def run_core_analysis(ctx: AnalysisContext, classification: TaskClassification) 
 def run_co_occurrence(ctx: AnalysisContext) -> str:
     """Run co-occurrence boost for ANY domain (PI, CORE, BO, HS). Called from orchestrator."""
     return _section_co_occurrence(ctx)
+
+
+def run_co_change_rules(ctx: AnalysisContext) -> str:
+    """Apply high-confidence co-change rules from conventions.yaml.
+
+    After co-occurrence runs, check if any finding repo is a trigger in
+    CO_CHANGE_RULES. If so, auto-add the companion repos to findings.
+    """
+    if not CO_CHANGE_RULES:
+        return ""
+
+    finding_repos = {rname for _, rname in ctx.findings}
+    added: list[tuple[str, str]] = []  # (companion, trigger)
+
+    for trigger, companions in CO_CHANGE_RULES.items():
+        if trigger in finding_repos:
+            for companion in companions:
+                if companion not in finding_repos:
+                    # Verify companion exists in our index
+                    exists = ctx.conn.execute("SELECT 1 FROM repos WHERE name = ?", (companion,)).fetchone()
+                    if exists:
+                        ctx.findings.append(("co_change_rule", companion))
+                        finding_repos.add(companion)
+                        added.append((companion, trigger))
+
+    if not added:
+        return ""
+
+    output = "## Co-change Rules\n\n"
+    output += "_High-confidence co-change pairs (no static dependency, derived from task history):_\n\n"
+    for companion, trigger in added:
+        output += f"  - **{companion}** — always changes with **{trigger}**\n"
+    output += "\n"
+    return output
 
 
 def _section_domain_repos(ctx: AnalysisContext, classification: TaskClassification) -> str:
