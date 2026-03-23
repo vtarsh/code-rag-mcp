@@ -88,3 +88,11 @@ If the user repeats the same instruction, preference, or correction within a ses
 - **Top fix**: npm_dep chain traversal would fix 43% of all misses (3/7)
 - **#2 fix**: reverse cascade from webhook_handler edges (fixes PI-37 crb miss)
 - grpc-apm-okto appears as phantom in 5+ tasks — systematic Jira artifact, not real involvement
+
+### 2026-03-23: CORE big tasks expose cascade explosion problem
+- CORE-2610 (23 repos), CORE-2581 (26), CORE-2595 (32) — tool returns 200-400+ repos each
+- Recall is 100% but precision is 5-6% — useless in practice
+- Independent grep achieves 48-68% precision vs tool's 5-14%
+- **Rule**: Need a PRECISION metric alongside recall. Returning entire org is not helpful.
+- **Rule**: For bulk migration tasks, "list all repos depending on package X" is the right approach, not domain cascade.
+- 51% of expected repos in these 3 tasks are phantoms (version bumps only)

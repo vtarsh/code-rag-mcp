@@ -62,7 +62,7 @@ from .shared_sections import (
 )
 
 
-def _extract_repo_refs(ctx: AnalysisContext) -> None:
+def _extract_repo_refs(ctx: AnalysisContext) -> str:
     """Extract repo names from GitHub URLs and description text matches.
 
     Finds patterns like github.com/org/repo-name in URLs and also checks
@@ -87,8 +87,14 @@ def _extract_repo_refs(ctx: AnalysisContext) -> None:
         if len(repo) >= 15 and repo in desc_lower:
             matched.add(repo)
 
+    if not matched:
+        return ""
+
+    output = ""
     for repo in matched:
         ctx.findings.append(("repo_ref", repo))
+        output += f"**{repo}** referenced in description.\n"
+    return output
 
 
 def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
@@ -210,13 +216,16 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
     )
 
     # Extract repo names from GitHub URLs and description text
-    _extract_repo_refs(ctx)
+    repo_refs_output = _extract_repo_refs(ctx)
 
     output = f"# Task Analysis\n\n**Task**: {description}\n"
     output += f"**Domain**: {classification.domain}"
     if classification.confidence > 0:
         output += f" ({classification.confidence:.0%} confidence)"
     output += "\n\n"
+
+    if repo_refs_output:
+        output += repo_refs_output + "\n"
 
     # Shared sections (all task types)
     output += section_gotchas(ctx)
