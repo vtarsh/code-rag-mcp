@@ -154,4 +154,13 @@ If the user repeats the same instruction, preference, or correction within a ses
 - Generic PI integration template created with repo dependency map, complexity tiers, and RAG discovery patterns.
 - **Rule**: When provider supports status endpoint, use Pattern A. Long-polling (Pattern B via loggers) is fallback only.
 - Flow docs saved to profiles/pay-com/docs/flows/ — these get indexed as chunks with 1.3x reference boost.
+
+### 2026-03-23: All Tier 1 deep analysis complete (PI 17/17 + CORE 23/23)
+- **95.1% recall** (phantom-filtered), **1.1% precision** (cascade noise)
+- **PI**: 97.0% recall, 6% precision. Near ceiling. Main gap: phantom ground truth.
+- **CORE**: 92.4% recall, 1.2% precision. Main gaps: library propagation (npm_dep depth=2), package bump inflation, provider name pollution (fixed).
+- **Key systemic issues identified**: hub cascade returns 86% of org, benchmark measures full output not just checklist, ground truth contaminated by commit substring search + package bumps.
+- **Key fixes implemented this session**: completeness bold (+11.6%), detect_provider bulk (3+), provider name disambiguation, activateWorkflow edge, npm_dep scan, reverse cascade, repo_ref extraction, co_change rules.
+- **Templates created**: PI generic 8-repo integration template, 3 sale completion patterns, 4 complexity tiers.
+- **Next priorities**: real-task validation (PI-60), hub penalty for cascade, PR URL signal, developer prior.
 - **Ground truth**: hosted-fields in CORE-1615 and github-workflows-node-grpc in CORE-2351 are false ground truth (unrelated work bundled under same ticket)
