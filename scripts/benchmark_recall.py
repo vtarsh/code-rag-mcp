@@ -79,8 +79,9 @@ def run_benchmark(
         params,
     ).fetchall()
 
+    # [hits, actual, found_total] per group
     group_stats: dict[str, list[int]] = {}
-    total_hits, total_actual = 0, 0
+    total_hits, total_actual, total_found = 0, 0, 0
     phantom_count = 0
 
     for r in rows:
@@ -105,28 +106,49 @@ def run_benchmark(
         found = extract_found_repos(result)
         hits = actual & found
         recall = len(hits) / len(actual) * 100
+        precision = len(hits) / len(found) * 100 if found else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
         missed = sorted(actual - found)
 
         prefix = tid.split("-")[0]
-        group_stats.setdefault(prefix, [0, 0])
+        group_stats.setdefault(prefix, [0, 0, 0])
         group_stats[prefix][0] += len(hits)
         group_stats[prefix][1] += len(actual)
+        group_stats[prefix][2] += len(found)
         total_hits += len(hits)
         total_actual += len(actual)
+        total_found += len(found)
 
-        if single_task or recall < 50:
+        if single_task:
+            print(
+                f"{tid:12s} recall={recall:5.1f}% prec={precision:5.1f}% F1={f1:5.1f}%"
+                f" ({len(hits)}/{len(actual)} expected, {len(found)} predicted)"
+            )
+            if missed:
+                print(f"{'':12s} missed={missed[:5]}")
+        elif recall < 50:
             print(f"{tid:12s} {recall:5.0f}% ({len(hits):2d}/{len(actual):2d}) missed={missed[:5]}")
         elif recall < 100:
             print(f"{tid:12s} {recall:5.0f}% ({len(hits):2d}/{len(actual):2d})")
 
-    print("\n" + "=" * 50)
+    print("\n" + "=" * 70)
     if filter_phantoms:
         print(f"[phantom filter ON: {phantom_count} phantom repos excluded]")
-    for g, (h, a) in sorted(group_stats.items()):
-        print(f"{g:6s} {h / a * 100:.1f}% ({h}/{a})")
+    for g, (h, a, f) in sorted(group_stats.items()):
+        g_recall = h / a * 100
+        g_precision = h / f * 100 if f else 0.0
+        g_f1 = 2 * g_precision * g_recall / (g_precision + g_recall) if (g_precision + g_recall) else 0.0
+        print(
+            f"{g:6s} {g_recall:5.1f}% recall, {g_precision:5.1f}% precision, F1={g_f1:5.1f}% ({h}/{a} found, {h}/{f} predicted)"
+        )
     if total_actual:
-        print(f"{'TOTAL':6s} {total_hits / total_actual * 100:.1f}% ({total_hits}/{total_actual})")
-    print("=" * 50)
+        t_recall = total_hits / total_actual * 100
+        t_precision = total_hits / total_found * 100 if total_found else 0.0
+        t_f1 = 2 * t_precision * t_recall / (t_precision + t_recall) if (t_precision + t_recall) else 0.0
+        print(
+            f"{'TOTAL':6s} {t_recall:5.1f}% recall, {t_precision:5.1f}% precision, F1={t_f1:5.1f}% ({total_hits}/{total_actual} found, {total_hits}/{total_found} predicted)"
+        )
+    print("=" * 70)
 
 
 def main() -> None:
