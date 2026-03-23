@@ -36,10 +36,12 @@
 - Batches 1-3: 9 CORE DONE (8x 100%, 1x 88.9%)
 - Batch 4: CORE-2582 100%, CORE-2203 85.7%, BO-953 100% — DONE
 - Batch 5: BO-1485 88.9%, BO-1332 100% + pattern mining — DONE
-- Batch 6: BO-1479, BO-708, BO-1344 — launching
-- Tasks completed: 14/26
-- Pattern mining: round 1 done (6 co-change rules added, +0.1% recall)
-- Commits: 0 (will commit after batch 6)
+- Batch 6: BO-1479 80%, BO-708 100%, BO-1344 100% — DONE
+- Batch 7: BO-1283 100%, BO-1280 100%, BO-934 66.7% — DONE
+- Batch 8: BO-1345, BO-1160, BO-1580 — launching
+- Tasks completed: 20/26
+- Pattern mining: round 1 done, round 2 due at 24 tasks
+- Commits: 1 (f533e29)
 
 ## Baseline
 - TOTAL: 96.8% recall, 1.0% precision (1011/1044 found)
@@ -50,6 +52,15 @@
 - Result: 96.8% → 96.9% (+1 CORE, +1 BO repo recovered)
 - Identified 7 actionable items (see pattern mining agent output)
 - Top remaining: pkg-bump filtering, hub penalty, graphql edge gaps
+
+## Key Finding: pkg: Virtual Node Dead-End (batches 6-7)
+- `build_graph.py` creates `pkg:@pay-com/X` virtual nodes but NEVER resolves them to actual repos
+- graphql→pkg:@pay-com/risk-alerts is a dead end — no edge to grpc-risk-alerts
+- Same for graphql→pkg:@pay-com/core-tasks, pkg:@pay-com/core-configurations, etc.
+- Affects: BO-934 (2 misses), BO-1479 (1 miss), and likely many more BO tasks
+- **#1 priority fix**: resolve pkg:@pay-com/X → grpc-X or X repo in build_graph.py
+- Also: graphql has only 3 grpc_client_usage edges but should have 15+
+- grpc-auth-permissions missed in 2 tasks (BO-1332, BO-1479) — new service companion pattern
 
 ## Key Patterns (batches 1-3)
 1. **Package-bump-only repos** are the ONLY source of tool misses (grpc-risk-logs, grpc-core-reconciliation, grpc-core-paymentlinks)
