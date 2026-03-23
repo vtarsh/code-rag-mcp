@@ -130,4 +130,13 @@ If the user repeats the same instruction, preference, or correction within a ses
 - **CORE-2607 (AVS providers, 10 repos)**: 100% recall. Same "apply change to N providers" pattern as PI-13 CVV. Provider Fan-out catches all but ~200 repo output = 5% precision.
 - **Recurring theme**: kafka-cdc-sink missed in EVERY cross-cutting CORE task. Must add CDC mapper edge type.
 - **Missing repos in index**: express-webhooks-skrill and workflow-featurespace-events should be added to extraction pipeline.
-- **Bold formatting bug**: cascade-found repos not always bolded → benchmark extraction misses them.
+- **Bold formatting bug**: cascade-found repos not always bolded → benchmark extraction misses them. ✅ FIXED (completeness table bold)
+
+### 2026-03-23: CORE Tier 1 batch 2 — precision crisis discovered
+- **libs-types has 423 BFS dependents** — any task matching "core" keyword cascades to 86% of all repos
+- Recall of 90%+ is TRIVIALLY achieved by returning everything. Not meaningful without precision.
+- CORE-2586 (26 repos) is really a 2-file fix + 24 package.json bumps
+- **Provider name pollution**: CORE tasks mentioning provider names (e.g., "stripe 3DS") get misclassified as PI
+- **Missing domain**: "subscription" has no domain pattern despite clear repo cluster
+- **Rule**: Must add precision metric. Must add hub penalty to cascade. Must disambiguate provider names in CORE context.
+- **Ground truth**: hosted-fields in CORE-1615 and github-workflows-node-grpc in CORE-2351 are false ground truth (unrelated work bundled under same ticket)
