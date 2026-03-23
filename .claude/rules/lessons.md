@@ -124,6 +124,10 @@ If the user repeats the same instruction, preference, or correction within a ses
 - User caught me reporting wrong context % multiple times.
 - **Rule**: Don't report context percentages unless checked via /context command. Just say "continuing" or "plenty of room" without numbers.
 
+### 2026-03-23: Watchdog cron was useless
+- The "every 20 min watchdog" just printed status to chat without triggering any actions. Wasted context.
+- **Rule**: Don't create watchdog crons that only report. Either make them ACT (restart agents, launch next batch, trigger mining) or don't create them at all. A cron that only prints "all clear" is noise.
+
 ### 2026-03-23: CORE Tier 1 findings (3 tasks: disputes, 3DS, AVS)
 - **CORE-2329 (disputes, 18 repos)**: 2 repos not indexed at all (express-webhooks-skrill, workflow-featurespace-events). 2 repos found by cascade but not bolded → extraction bug. kafka-cdc-sink confirmed as CDC mapper pattern.
 - **CORE-2451 (3DS standalone, 16 repos)**: 88% recall. Misses are kafka-cdc-sink (CDC) + cloudflare-workers-tokenize2 (deployment routing). New architecture: 3DS decoupled from gateway, standalone API resource.

@@ -4,7 +4,8 @@ Takes the broad candidate list from analyze_task and uses Gemini 3.1 Pro
 to filter down to the most relevant repos with reasoning.
 
 Architecture: tool generates 200+ candidates → Gemini filters to top 10-15.
-Calibration showed: rich context (65% recall, 98% precision, F1=76%).
+Calibration: recall-tuned prompt (62% recall, 63% precision, F1=56% macro on 5 tasks).
+Previous conservative prompt: (52% recall, 70% precision, F1=55% macro).
 """
 
 from __future__ import annotations
@@ -59,17 +60,59 @@ Payment platform with repo patterns:
 - node-libs-common — shared enums
 - e2e-tests — integration tests
 
-## Integration Complexity
-- Adding method to existing provider: 2-3 repos
-- New redirect APM: 8 repos
-- Full new provider: 10-12 repos
-- Cross-cutting schema change: 5-15 repos (mostly package bumps)
+## Dependency Chains (IMPORTANT — think through these)
+Changes rarely happen in isolation. Think about DOWNSTREAM and UPSTREAM repos:
+- New API feature → express-api-v1 + grpc-payment-gateway + libs-types + grpc-core-schemas + node-libs-common
+- New provider method → grpc-apm-*/grpc-providers-* + grpc-providers-features + grpc-providers-credentials + grpc-payment-gateway
+- Webhook integration → express-webhooks + workflow-provider-webhooks (ALWAYS together)
+- Any new proto/schema → libs-types + grpc-core-schemas
+- Any new enum/status → node-libs-common
+- Provider with transactions → grpc-core-transactions
+- Auth/API changes → express-api-authentication + grpc-auth-apikeys2
+- Risk/fraud features → grpc-payment-risk
+- MPI/3DS features → express-api-mpi + grpc-mpi-*
+
+## Expected Repo Counts by Task Type
+- Adding method to existing provider: 2-4 repos
+- New redirect APM integration: 8-12 repos
+- Full new provider: 10-14 repos
+- Cross-cutting schema change: 5-15 repos
+- New standalone service/API feature: 8-16 repos
+- Multi-provider rollout (same change to N providers): N + 1-3 shared repos
+- Webhook/collaboration integration: 4-7 repos
 
 ## Instructions
-From the candidate list below, select ONLY repos that likely need ACTUAL code changes.
-Be precise — fewer correct predictions are better than many guesses.
+From the candidate list below, select ALL repos that likely need code changes.
+Include ALL repos that are likely involved. It's better to include a repo that might not need changes than to miss one that does. Missing a repo causes downstream integration failures that are much more costly than reviewing an extra repo.
+
+When in doubt, INCLUDE the repo with medium or low confidence rather than excluding it.
+
+Think about the FULL chain: if a new API endpoint is needed, that means API repo + gateway + schemas + types + tests. If webhooks are involved, that means webhook ingress + workflow processing. If providers are involved, include credentials and features repos.
+
 Return ONLY valid JSON (no markdown wrappers):
 {"repos": [{"repo": "name", "confidence": "high|medium|low", "reason": "brief"}]}"""
+
+
+def _estimate_scope(description: str) -> str:
+    """Estimate expected repo count from task description."""
+    desc_lower = description.lower()
+    if any(kw in desc_lower for kw in ["migrate", "audit", "all services", "tech debt", "bump version"]):
+        return "This is a bulk/migration task. Expect 10-30 repos."
+    if any(kw in desc_lower for kw in ["integration"]) and any(kw in desc_lower for kw in ["provider", "apm"]):
+        return "This is a new provider integration. Expect 8-12 repos."
+    if any(kw in desc_lower for kw in ["respect", "honor", "enforce"]) and any(
+        kw in desc_lower for kw in ["all", "every", "providers"]
+    ):
+        return "This is a cross-provider enforcement change. Expect 5-12 repos."
+    if any(kw in desc_lower for kw in ["standalone", "3ds", "cross-cutting"]):
+        return "This is a cross-cutting platform change. Expect 8-16 repos."
+    if any(kw in desc_lower for kw in ["add field", "extend", "add column", "new field"]):
+        return "This is a field/schema extension. Expect 5-10 repos."
+    if any(kw in desc_lower for kw in ["verification", "add method", "payout", "refund"]):
+        return "This is adding a method to an existing provider. Expect 2-5 repos."
+    if any(kw in desc_lower for kw in ["fix", "bug", "error", "wrong", "broken"]):
+        return "This is a bug fix. Expect 1-3 repos."
+    return "Expect 3-8 repos based on typical task scope."
 
 
 def _load_template() -> str:
@@ -172,8 +215,13 @@ def rerank_repos(
     graph_ctx = _get_graph_context(conn, candidate_repos)
     similar = _get_similar_tasks(conn, description)
 
+    scope_hint = _estimate_scope(description)
+
     user_prompt = f"""## Task
 {description}
+
+## Scope Estimate
+{scope_hint}
 
 ## Candidate repos ({len(candidate_repos)} from automated analysis)
 {json.dumps(candidate_repos[:50])}
@@ -182,7 +230,7 @@ def rerank_repos(
 {graph_ctx}
 {similar}
 
-Select the repos most likely to need ACTUAL code changes. Be precise."""
+Select ALL repos that likely need code changes. Err on the side of inclusion."""
 
     try:
         response = client.models.generate_content(
