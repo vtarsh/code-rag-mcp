@@ -117,7 +117,7 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
             if search_terms:
                 fts_query = " OR ".join(search_terms[:5])
                 rows = ctx.conn.execute(
-                    """SELECT t.ticket_id, t.summary, t.repos_changed, t.files_changed
+                    """SELECT t.ticket_id, t.summary, t.repos_changed, t.files_changed, t.pr_urls
                        FROM task_history_fts fts
                        JOIN task_history t ON t.id = fts.rowid
                        WHERE task_history_fts MATCH ?
@@ -128,12 +128,24 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
                     # Skip self-match (same ticket ID)
                     if current_task_id and r[0].lower() == current_task_id:
                         continue
+                    # Extract repo names from PR URLs
+                    pr_repos: list[str] = []
+                    if r[4]:
+                        try:
+                            pr_urls = json.loads(r[4])
+                            for url in pr_urls:
+                                m = re.search(r"github\.com/[^/]+/([^/]+)/pull", url)
+                                if m:
+                                    pr_repos.append(m.group(1))
+                        except (json.JSONDecodeError, TypeError):
+                            pass
                     similar_tasks.append(
                         {
                             "ticket": r[0],
                             "summary": r[1],
                             "repos": json.loads(r[2]) if r[2] else [],
                             "files": json.loads(r[3]) if r[3] else [],
+                            "pr_repos": list(dict.fromkeys(pr_repos)),  # dedupe, preserve order
                         }
                     )
                 similar_tasks = similar_tasks[:3]
@@ -149,6 +161,16 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
             if len(t["repos"]) > 8:
                 repos_str += f" (+{len(t['repos']) - 8} more)"
             output_parts.append(f"**{t['ticket']}** — {t['summary']}\n  Repos: {repos_str}\n")
+
+            # PR URL signal: repos extracted from PR URLs of similar past tasks
+            pr_repos = t.get("pr_repos", [])
+            if pr_repos:
+                pr_repos_str = ", ".join(f"**{r}**" for r in pr_repos[:8])
+                output_parts.append(f"  PR repos: {pr_repos_str}\n")
+                for repo in pr_repos:
+                    if repo not in existing_finding_repos:
+                        ctx.findings.append(("pr_url_signal", repo))
+                        existing_finding_repos.add(repo)
 
             # Similar-task boost: if past task shares ≥3 repos with current findings,
             # inject its other repos as findings (high confidence of same scope)
@@ -487,6 +509,7 @@ def section_completeness(
             "repo_ref": "🔗 Repo name in description",
             "domain_template": "📋 Domain template",
             "co_change_rule": "Co-change rule (always changes together)",
+            "pr_url_signal": "🔗 PR URL from similar task",
             "domain": "Domain service",
             "cascade": "Cascade dependency",
             "reverse_cascade": "Reverse cascade (called by found repo)",
