@@ -185,6 +185,13 @@ If the user repeats the same instruction, preference, or correction within a ses
 - **Key insight**: re-ranker bottleneck is UPSTREAM candidates, not Gemini. Missing repos never enter candidate list. Improve analyze_task mechanisms first, re-ranker polishes.
 - **Rule**: Re-ranker is a polish step, not a fix for missing mechanisms. Always improve base recall first.
 
+### 2026-03-23: BO-1598 Tier 1 — shared-state data-flow dependency
+- workflow-risk-calc writes amlRiskCategory → grpc-onboarding-approvals + workflow-onboarding-application-approvals read it
+- No code-level dependency — both talk to same MerchantApplicationObject proto through different gRPC paths
+- **New dependency type needed**: "shared_entity_field" — detect when 2 repos import same proto message AND one writes / other reads a field
+- Quick fix: co-change rule added for risk-calc → onboarding repos
+- **Rule**: Data-flow dependencies through shared entities are invisible to static graph analysis. Need proto field-usage graph.
+
 ### 2026-03-23: All Tier 1 deep analysis complete (PI 17/17 + CORE 23/23)
 - **95.1% recall** (phantom-filtered), **1.1% precision** (cascade noise)
 - **PI**: 97.0% recall, 6% precision. Near ceiling. Main gap: phantom ground truth.
