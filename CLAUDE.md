@@ -5,7 +5,8 @@ Git: vtarsh/code-rag-mcp (personal account).
 Python 3.12, FastMCP, SQLite FTS5, LanceDB, CrossEncoder reranker.
 
 **Key docs** (read for full context):
-- `ARCHITECTURE.md` — system design, analyze_task package, 13 mechanisms, conventions.yaml
+- `ARCHITECTURE.md` — system design, analyze_task package, 20 mechanisms, conventions.yaml
+- `.claude/rules/` — workflow, testing, conventions, lessons, deep-analysis-tiers, deep-analysis-agent, data-collection
 - `TESTING.md` — recall methodology, how to measure/improve, validation without MCP
 - `profiles/pay-com/RECALL-TRACKER.md` — current scores, improvement log
 - `profiles/pay-com/NEXT-SESSION-PROMPT.md` — context for new sessions
@@ -131,8 +132,9 @@ All sessions share one daemon process. Proxy auto-starts daemon if not running.
   - Shared: gotchas, task patterns, file patterns, proto, gateway, methods, GitHub, completeness, CI risk
   - PI: provider repos, webhooks, impact, change impact, provider checklist
   - CORE/BO/HS: domain classifier, cascade (up+downstream), co-occurrence, fan-out, keyword scan
-  - Recall: CORE 87.2%, PI 83.6%, BO 74.1%, HS 100% (85.2% total on 105 tasks)
-  - 13 mechanisms: classifier, cascade, downstream, co-occurrence, universal, fan-out, bulk, keyword, function, domain, classifier-multi-domain, bidirectional-co-occurrence, similar-task-boost
+  - Recall (phantom-filtered): CORE 94.3%, PI 97.6%, BO 98.0%, HS 92.9% (96.4% total on 361 tasks)
+  - 20 mechanisms + hub penalty + domain templates + Gemini re-ranker (optional --rerank flag)
+  - Re-ranker: Gemini 3.1 Pro filters candidates (100% precision on simple tasks, --rerank flag)
 - `context_builder` — search + deps + proto in one call
 - `diff_provider_config` — compares two providers' feature flags from seeds.cql (handles multi-PMT)
 - `health_check`, `visualize_graph` — diagnostics
