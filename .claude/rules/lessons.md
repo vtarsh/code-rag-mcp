@@ -178,6 +178,13 @@ If the user repeats the same instruction, preference, or correction within a ses
 4. **Developer context**: Mikolaj 73% BO, Santiago 83% BO+risk. Not for auto-predict but context enrichment.
 5. **Domain templates**: BO = {backoffice-web, graphql} 93% probability. PI base set. CORE base set. Add to conventions.yaml.
 
+### 2026-03-23: Re-ranker final calibration — 5 approaches compared
+- V2 (dependency chains + scope hints) wins: 62%R / 63%P / F1=56% at ~8K tokens
+- Two-phase: highest recall (79%) but 40% precision and 6x token cost — not worth it
+- Scope-aware: close second (60%R / 60%P)
+- **Key insight**: re-ranker bottleneck is UPSTREAM candidates, not Gemini. Missing repos never enter candidate list. Improve analyze_task mechanisms first, re-ranker polishes.
+- **Rule**: Re-ranker is a polish step, not a fix for missing mechanisms. Always improve base recall first.
+
 ### 2026-03-23: All Tier 1 deep analysis complete (PI 17/17 + CORE 23/23)
 - **95.1% recall** (phantom-filtered), **1.1% precision** (cascade noise)
 - **PI**: 97.0% recall, 6% precision. Near ceiling. Main gap: phantom ground truth.
