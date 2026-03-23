@@ -485,6 +485,7 @@ def section_completeness(
             "bulk_migration": "🔄 Bulk migration",
             "npm_dep_scan": "📦 npm dependency",
             "repo_ref": "🔗 Repo name in description",
+            "domain_template": "📋 Domain template",
             "co_change_rule": "Co-change rule (always changes together)",
             "domain": "Domain service",
             "cascade": "Cascade dependency",

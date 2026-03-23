@@ -58,11 +58,31 @@ def bfs_dependents(
     conn: sqlite3.Connection,
     start: str,
     max_depth: int = 2,
+    max_in_degree: int = 0,
 ) -> dict[int, list[tuple[str, str]]]:
     """BFS to find all repos that transitively depend on start.
 
+    Args:
+        max_in_degree: Hub penalty threshold. If > 0, nodes whose in-degree
+            (number of distinct dependents) exceeds this value are still added
+            to the results but NOT expanded further. This prevents ultra-high-
+            degree hubs (e.g., libs-types with 400+ dependents) from flooding
+            the BFS with the entire org.
+
     Returns {level: [(repo_name, via_edge_type)]}.
     """
+    # Pre-compute hub nodes when hub penalty is active
+    hub_nodes: set[str] = set()
+    if max_in_degree > 0:
+        hub_rows = conn.execute(
+            """SELECT target, COUNT(DISTINCT source) as cnt FROM graph_edges
+               WHERE source NOT LIKE 'pkg:%' AND source NOT LIKE 'proto:%'
+               AND source NOT LIKE 'route:%'
+               GROUP BY target HAVING cnt > ?""",
+            (max_in_degree,),
+        ).fetchall()
+        hub_nodes = {r["target"] for r in hub_rows}
+
     visited: set[str] = set()
     levels: dict[int, list[tuple[str, str]]] = {}
     queue: deque[tuple[str, int, str]] = deque([(start, 0, "root")])
@@ -74,6 +94,10 @@ def bfs_dependents(
         visited.add(current)
         if current != start:
             levels.setdefault(level, []).append((current, via_type))
+
+        # Hub penalty: add hub to results but don't expand its dependents
+        if current in hub_nodes and current != start:
+            continue
 
         if level < max_depth:
             dependents = conn.execute(

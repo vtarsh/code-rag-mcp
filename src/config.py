@@ -141,6 +141,9 @@ SERVICE_REPO_PATTERNS: list[str] = _conventions.get("service_repo_patterns", [])
 # High-confidence co-change rules (trigger_repo → [companion_repos])
 CO_CHANGE_RULES: dict[str, list[str]] = _conventions.get("co_change_rules", {})
 
+# Domain templates — base repos per domain (auto-suggest)
+DOMAIN_TEMPLATES: dict[str, dict] = _conventions.get("domain_templates", {})
+
 # Domain classification patterns for non-PI tasks
 DOMAIN_PATTERNS: dict[str, dict] = _conventions.get("domain_patterns", {})
 

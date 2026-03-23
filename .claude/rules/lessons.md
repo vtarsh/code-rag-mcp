@@ -167,6 +167,13 @@ If the user repeats the same instruction, preference, or correction within a ses
 - **Winner: rich context** — architecture templates + graph data are essential. Gemini without context is useless (22% recall).
 - **Next step**: implement re-ranker that passes tool's candidate list + architecture context to Gemini, gets filtered top 10-15 repos back.
 
+### 2026-03-23: Pattern mining round 2 — 5 novel patterns from 974 tasks
+1. **Mandatory companions** (100% conditional pairs): reconciliation↔paymentlinks, transactions→libs-types, webhooks→workflow-webhooks, auth→graphql+backoffice. Implement as deterministic expansion rules.
+2. **Complexity predictor**: grpc-core-disputes avg 19 repos/task, backoffice-web avg 2.5. Use to auto-expand BFS depth.
+3. **Never-alone repos**: 42 repos never changed solo (schemas, credentials, features). If found alone → completeness warning.
+4. **Developer context**: Mikolaj 73% BO, Santiago 83% BO+risk. Not for auto-predict but context enrichment.
+5. **Domain templates**: BO = {backoffice-web, graphql} 93% probability. PI base set. CORE base set. Add to conventions.yaml.
+
 ### 2026-03-23: All Tier 1 deep analysis complete (PI 17/17 + CORE 23/23)
 - **95.1% recall** (phantom-filtered), **1.1% precision** (cascade noise)
 - **PI**: 97.0% recall, 6% precision. Near ceiling. Main gap: phantom ground truth.

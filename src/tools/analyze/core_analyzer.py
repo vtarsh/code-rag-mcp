@@ -153,8 +153,10 @@ def _section_cascade(ctx: AnalysisContext, classification: TaskClassification) -
     seed_set = set(seed_repos)
 
     # Upstream: repos that depend ON seeds (existing BFS)
+    # Hub penalty: don't expand nodes with >50 dependents (e.g., libs-types)
+    # They are still added to findings but their 400+ dependents don't flood output
     for seed in seed_repos:
-        levels = bfs_dependents(ctx.conn, seed, max_depth=2)
+        levels = bfs_dependents(ctx.conn, seed, max_depth=2, max_in_degree=50)
         for _level, deps in levels.items():
             for dep_name, edge_type in deps:
                 if dep_name not in all_affected and dep_name not in seed_set:

@@ -62,6 +62,37 @@ from .shared_sections import (
 )
 
 
+def _inject_domain_template(ctx: AnalysisContext, classification: object) -> str:
+    """Auto-add base repos from domain templates when domain is classified."""
+    from src.config import DOMAIN_TEMPLATES
+
+    if not DOMAIN_TEMPLATES:
+        return ""
+
+    primary = classification.domain.split("+")[0]
+    template = DOMAIN_TEMPLATES.get(primary, {})
+    base_repos = template.get("base_repos", [])
+    if not base_repos:
+        return ""
+
+    existing = {rname for _, rname in ctx.findings}
+    new_repos = []
+    for repo in base_repos:
+        if repo not in existing:
+            exists = ctx.conn.execute("SELECT 1 FROM repos WHERE name = ?", (repo,)).fetchone()
+            if exists:
+                ctx.findings.append(("domain_template", repo))
+                new_repos.append(repo)
+
+    if not new_repos:
+        return ""
+
+    prob = template.get("probability", 0)
+    output = f"**Domain template** ({primary}, {prob:.0%} historical): "
+    output += ", ".join(f"**{r}**" for r in new_repos) + "\n\n"
+    return output
+
+
 def _extract_repo_refs(ctx: AnalysisContext) -> str:
     """Extract repo names from GitHub URLs and description text matches.
 
@@ -226,6 +257,9 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
 
     if repo_refs_output:
         output += repo_refs_output + "\n"
+
+    # Domain template injection — auto-add base repos for the classified domain
+    output += _inject_domain_template(ctx, classification)
 
     # Shared sections (all task types)
     output += section_gotchas(ctx)

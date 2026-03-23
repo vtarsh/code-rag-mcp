@@ -16,6 +16,23 @@
 6. **Benchmark** — run `benchmark_recall.py` before AND after changes. Never regress.
 7. **Repeat** — next batch of tasks or next improvement area.
 
+## Continuous Improvement Cycle (automatic, don't wait for user)
+
+After EVERY code change or mechanism improvement:
+1. **Benchmark** — run recall + precision before and after
+2. **Pattern mine** — launch background agent to search for new patterns in task_history
+3. **Implement** — if pattern found, implement and benchmark again
+4. **Update .claude** — update lessons.md, testing.md baselines, NEXT-SESSION-PROMPT
+
+This cycle runs automatically — don't wait for user to say "search for patterns".
+Trigger points:
+- After any recall/precision benchmark shows improvement
+- After adding new tasks to task_history
+- After modifying cascade/co-occurrence/classifier logic
+- After every 5th Tier 1 deep analysis
+
+When running overnight/background: set a recurring cron every 60 min that checks if improvements were made and triggers pattern mining if so.
+
 ## Improvement Targets (priority order)
 
 1. **Generic mechanisms** (src/) — patterns that work for any org.
