@@ -25,7 +25,11 @@ python scripts/benchmark_recall.py     # analyze_task recall regression
 - Conceptual: 0.85
 - Real-world: 0.83
 - Flows: 0.875
-- analyze_task recall: 89.5% total (CORE 86%, PI 83%, BO 95%, HS 100%) — on 361 tasks
+- analyze_task recall: 96.4% total (phantom-filtered) on 361 tasks
+  - PI: 97.6%, CORE: 94.3%, BO: 98.0%, HS: 92.9%
+  - 20 mechanisms + hub penalty + domain templates + Gemini re-ranker
+  - Re-ranker (--rerank): 81% recall, 34% precision, F1=48% on PI
+- Unit tests: 133
 
 ## Recall Methodology
 
