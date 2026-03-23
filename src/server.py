@@ -177,7 +177,7 @@ def diff_provider_config(provider_a: str, provider_b: str) -> str:
 
 @mcp.tool()
 @tracked
-def analyze_task(description: str, provider: str = "") -> str:
+def analyze_task(description: str, provider: str = "", rerank: bool = False) -> str:
     """Analyze a development task and find ALL relevant repos, files, and dependencies.
 
     Takes a task description (e.g., "add caching to user-service") and automatically:
@@ -190,8 +190,9 @@ def analyze_task(description: str, provider: str = "") -> str:
     Args:
         description: Task description (e.g., "implement rate limiting for api-gateway")
         provider: Optional provider/service name to focus on
+        rerank: Set rerank=true to filter predictions via Gemini 3.1 Pro (requires GEMINI_API_KEY)
     """
-    return analyze_task_tool(description, provider)
+    return analyze_task_tool(description, provider, rerank)
 
 
 @mcp.tool()

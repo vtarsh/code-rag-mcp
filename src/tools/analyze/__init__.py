@@ -61,6 +61,45 @@ from .shared_sections import (
     section_task_patterns,
 )
 
+_BOLD_REPO_RE = re.compile(r"\*\*([a-z][a-z0-9-]+)\*\*")
+_RERANK_EXCLUDE_PREFIXES = ("todo", "ok", "done", "in-progress", "check", "found")
+
+
+def _section_rerank(ctx: AnalysisContext, description: str, output: str) -> str:
+    """Run Gemini re-ranker on all bold repo names found in output."""
+    import sys
+
+    try:
+        from src.tools.reranker import rerank_repos
+    except ImportError:
+        print("[reranker] reranker module not available, skipping", file=sys.stderr)
+        return ""
+
+    # Extract candidate repos from existing output
+    candidates = sorted(
+        {m.group(1) for m in _BOLD_REPO_RE.finditer(output) if not m.group(1).startswith(_RERANK_EXCLUDE_PREFIXES)}
+    )
+    if not candidates:
+        return ""
+
+    try:
+        ranked = rerank_repos(ctx.conn, description, candidates)
+    except Exception as e:
+        print(f"[reranker] Error during re-ranking: {e}", file=sys.stderr)
+        return ""
+
+    if not ranked:
+        return ""
+
+    section = "\n## Re-ranked Predictions (Gemini)\n\n"
+    for entry in ranked:
+        repo = entry.get("repo", "")
+        conf = entry.get("confidence", "?")
+        reason = entry.get("reason", "")
+        section += f"- **{repo}** [{conf}] — {reason}\n"
+    section += "\n"
+    return section
+
 
 def _inject_domain_template(ctx: AnalysisContext, classification: object) -> str:
     """Auto-add base repos from domain templates when domain is classified."""
@@ -214,21 +253,22 @@ def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
 
 
 @require_db
-def analyze_task_tool(description: str, provider: str = "") -> str:
+def analyze_task_tool(description: str, provider: str = "", rerank: bool = False) -> str:
     """Analyze a development task and find ALL relevant repos, files, and dependencies.
 
     Args:
         description: Task description (e.g., "implement DirectDebitMandate verification for Trustly")
         provider: Optional provider name to focus on (e.g., "trustly", "paypal")
+        rerank: Set to true to filter predictions via Gemini 3.1 Pro (requires GEMINI_API_KEY)
     """
     conn = get_db()
     try:
-        return _analyze_task_impl(conn, description, provider)
+        return _analyze_task_impl(conn, description, provider, rerank=rerank)
     finally:
         conn.close()
 
 
-def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str) -> str:
+def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str, *, rerank: bool = False) -> str:
     """Orchestrate task analysis. Dispatches to shared + domain-specific sections."""
     from .classifier import classify_task
     from .core_analyzer import run_co_change_rules, run_co_occurrence, run_core_analysis
@@ -302,5 +342,9 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
 
     # CI risk (all task types)
     output += section_ci_risk(ctx)
+
+    # Optional Gemini re-ranking
+    if rerank:
+        output += _section_rerank(ctx, description, output)
 
     return output
