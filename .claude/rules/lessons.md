@@ -138,5 +138,13 @@ If the user repeats the same instruction, preference, or correction within a ses
 - CORE-2586 (26 repos) is really a 2-file fix + 24 package.json bumps
 - **Provider name pollution**: CORE tasks mentioning provider names (e.g., "stripe 3DS") get misclassified as PI
 - **Missing domain**: "subscription" has no domain pattern despite clear repo cluster
-- **Rule**: Must add precision metric. Must add hub penalty to cascade. Must disambiguate provider names in CORE context.
+- **Rule**: Precision metric added but measures full output (including cascade dump). Real precision = checklist repos only, not cascade noise. True validation = user working real tasks and comparing. Don't optimize precision in isolation — wait for real-task feedback.
+- **Rule**: Hub penalty is a code quality fix (less noise in output), not a recall/precision metric fix. Do it when output quality matters for user experience, not for benchmark numbers.
+
+### 2026-03-23: Untapped signals for search quality improvement
+- **PR URLs**: 331 tasks have GitHub PR URLs with repo names embedded — just parse them. PR count per repo = confidence weight.
+- **Developer specialization**: some devs 73% concentrated in top-3 repos. P(repo|developer) as Bayesian prior.
+- **File-level method patterns**: methods/authorization.js in files_changed → predict specific provider repos.
+- **Short description compensator**: <50 chars → increase weight of historical/statistical signals.
+- **Package.json-only repos**: 70-90% of CORE "scope" is package bumps. Filter from ground truth for honest metrics.
 - **Ground truth**: hosted-fields in CORE-1615 and github-workflows-node-grpc in CORE-2351 are false ground truth (unrelated work bundled under same ticket)
