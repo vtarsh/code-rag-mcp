@@ -105,3 +105,11 @@ If the user repeats the same instruction, preference, or correction within a ses
 - grpc-core-paymentlinks/reconciliation: 16/17 tasks have ONLY package.json bumps — auto-bump repos
 - CORE-2102 (0% recall) = banking subdomain with isolated graph, vague description
 - **Actionable**: vault domain cluster, kafka-cdc mapper detection, package-only filtering
+
+### 2026-03-23: Tier 1 deep analysis — quality vs quantity lesson
+- Tier 1 (PI-40, PI-5, PI-21) found things Tier 3-4 missed:
+  - PI-5: node-libs-common was NOT a real miss (not in repos_changed). Our earlier classification was wrong.
+  - PI-21: exact root cause found — `activateWorkflow()` not captured by graph builder (build_graph.py:1140-1270)
+  - PI-40: full payment flow diagram with every hop traced through actual code
+- **Rule**: Tier 3-4 is good for pattern discovery (find 80% of issues). Tier 1 is needed for accuracy (verify the 20% that Tier 3-4 gets wrong).
+- **Rule**: Never trust repos_changed blindly. Cross-validate with files_changed and pr_urls.
