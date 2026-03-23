@@ -151,11 +151,26 @@ def _extract_repo_refs(ctx: AnalysisContext) -> str:
         if repo_lower in all_repos:
             matched.add(repo_lower)
 
-    # Check repo names with 3+ segments (e.g., workflow-worldpay-adjustments)
-    # that might appear verbatim or nearly verbatim in description
+    # Check repo names that appear verbatim in description
     for repo in all_repos:
         if len(repo) >= 15 and repo in desc_lower:
             matched.add(repo)
+
+    # Fuzzy: check if description contains repo name minus trailing 's' or with '.' instead of '-'
+    # Catches: "workflow-worldpay-adjustment" → "workflow-worldpay-adjustments"
+    #          "update-packages.sh" → "update-packages-script"
+    for repo in all_repos:
+        if len(repo) < 12:
+            continue
+        # Strip trailing 's' from repo name for singular match
+        repo_singular = repo.rstrip("s") if repo.endswith("s") else repo
+        if len(repo_singular) >= 12 and repo_singular in desc_lower:
+            matched.add(repo)
+        # Check script/file references: "repo-name.sh" or "repo-name.js"
+        for ext in (".sh", ".js", ".py", ".ts"):
+            file_ref = repo.replace("-script", "") + ext
+            if len(file_ref) >= 10 and file_ref in desc_lower:
+                matched.add(repo)
 
     if not matched:
         return ""

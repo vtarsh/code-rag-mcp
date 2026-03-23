@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 
 from src.config import DOMAIN_PATTERNS
 
-from .pi_analyzer import count_matching_providers, detect_provider
+from .pi_analyzer import _AMBIGUOUS_PROVIDER_NAMES, count_matching_providers, detect_provider
 
 
 @dataclass(frozen=True)
@@ -49,10 +49,28 @@ def classify_task(
         if count_matching_providers(conn, words) >= 3:
             return TaskClassification(domain="pi", provider="", confidence=1.0)
         provider = detect_provider(conn, words)
-        # Suppress provider detection for non-PI prefix tasks (CORE/BO/HS)
-        # Provider name in CORE task = context, not PI classification
+        # Suppress provider detection for non-PI tasks when:
+        # 1. Provider name is ambiguous (checkout, ach, iris, etc.) — always suppress
+        # 2. Provider name is real BUT description has strong CORE domain keywords
+        #    (risk, settlement, audit, migration) — suppress to avoid PI misclassification
         if provider and is_non_pi_prefix:
-            provider = ""
+            if provider in _AMBIGUOUS_PROVIDER_NAMES:
+                provider = ""
+            else:
+                # Check if description has strong non-PI domain signals
+                _core_signals = {
+                    "risk",
+                    "settlement",
+                    "audit",
+                    "migration",
+                    "migrate",
+                    "workflow",
+                    "schema",
+                    "field",
+                    "column",
+                }
+                if len(words & _core_signals) >= 2:
+                    provider = ""
     if provider:
         return TaskClassification(domain="pi", provider=provider, confidence=1.0)
 
