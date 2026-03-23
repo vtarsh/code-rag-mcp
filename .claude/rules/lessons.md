@@ -147,4 +147,11 @@ If the user repeats the same instruction, preference, or correction within a ses
 - **File-level method patterns**: methods/authorization.js in files_changed → predict specific provider repos.
 - **Short description compensator**: <50 chars → increase weight of historical/statistical signals.
 - **Package.json-only repos**: 70-90% of CORE "scope" is package bumps. Filter from ground truth for honest metrics.
+
+### 2026-03-23: PI-60 live development — sale completion patterns
+- User provided live flow diagram for PI-60 (Payper). Key insight: Payper has status endpoint → no long-polling needed.
+- **3 sale completion patterns** documented: (A) Status polling via GET endpoint, (B) Webhook data from loggers, (C) Direct API response.
+- Generic PI integration template created with repo dependency map, complexity tiers, and RAG discovery patterns.
+- **Rule**: When provider supports status endpoint, use Pattern A. Long-polling (Pattern B via loggers) is fallback only.
+- Flow docs saved to profiles/pay-com/docs/flows/ — these get indexed as chunks with 1.3x reference boost.
 - **Ground truth**: hosted-fields in CORE-1615 and github-workflows-node-grpc in CORE-2351 are false ground truth (unrelated work bundled under same ticket)
