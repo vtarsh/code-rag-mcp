@@ -190,11 +190,13 @@ def _section_cascade(ctx: AnalysisContext, classification: TaskClassification) -
             by_edge.setdefault(etype, []).append((repo, seed))
         for etype, repos in sorted(by_edge.items(), key=lambda x: len(x[1]), reverse=True):
             output += f"**{etype}** ({len(repos)} repos):\n"
-            for repo, seed in sorted(repos)[:15]:
+            for i, (repo, seed) in enumerate(sorted(repos)):
                 ctx.findings.append(("cascade", repo))
-                output += f"  - **{repo}** (via {seed})\n"
+                if i < 15:
+                    output += f"  - **{repo}** (via {seed})\n"
             if len(repos) > 15:
-                output += f"  - ... and {len(repos) - 15} more\n"
+                overflow = [f"**{r}**" for r, _ in sorted(repos)[15:]]
+                output += f"  - ... and {len(overflow)} more: {', '.join(overflow[:20])}\n"
             output += "\n"
 
     if downstream_hubs:
