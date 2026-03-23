@@ -113,3 +113,9 @@ If the user repeats the same instruction, preference, or correction within a ses
   - PI-40: full payment flow diagram with every hop traced through actual code
 - **Rule**: Tier 3-4 is good for pattern discovery (find 80% of issues). Tier 1 is needed for accuracy (verify the 20% that Tier 3-4 gets wrong).
 - **Rule**: Never trust repos_changed blindly. Cross-validate with files_changed and pr_urls.
+
+### 2026-03-23: Tier 1 batch 3 findings
+- PI-1 (rapyd, 14 repos): grpc-providers-paysafe = unrelated work bundled under same ticket (same dev, different provider). Ground truth is wrong.
+- PI-13 (CVV audit, 12 repos): **BUG FOUND** — detect_provider greedily picks first provider when description mentions 13, preventing bulk detection. Fix: check _is_bulk_provider_task BEFORE detect_provider.
+- PI-13 also needs: "apply change to N specific providers" pattern — extract provider list from description, not enumerate ALL.
+- activateWorkflow fix implemented in build_graph.py — new `temporal_activate` edge type.
