@@ -1146,6 +1146,7 @@ def parse_temporal_edges(conn: sqlite3.Connection):
       - require('@scope/temporal-tools/workflows/...') — cross-repo workflow import
       - defineSignal('signalName') — signal definitions (stored as node metadata)
       - taskQueue: 'queueName' — links workflow to a task queue
+      - activateWorkflow({ workflowName: 'name' }) — starts workflow via grpc-core-workflows
     """
     edges = []
     repo_names = set(r[0] for r in conn.execute("SELECT name FROM repos").fetchall())
@@ -1153,7 +1154,7 @@ def parse_temporal_edges(conn: sqlite3.Connection):
     # Get all workflow-related chunks
     rows = conn.execute(
         "SELECT repo_name, file_path, content FROM chunks WHERE file_type = 'workflow' OR "
-        "(file_type IN ('grpc_method', 'library', 'code_file', 'code_function') AND (content LIKE '%executeChild%' OR content LIKE '%startChild%'))"
+        "(file_type IN ('grpc_method', 'library', 'code_file', 'code_function') AND (content LIKE '%executeChild%' OR content LIKE '%startChild%' OR content LIKE '%activateWorkflow%'))"
     ).fetchall()
 
     # Also get chunks that import from temporal-tools workflows
@@ -1176,6 +1177,11 @@ def parse_temporal_edges(conn: sqlite3.Connection):
     # Cross-repo workflow imports: require('{NPM_SCOPE}/temporal-tools/workflows/some-workflow/workflow')
     workflow_import_pattern = re.compile(
         rf"""require\s*\(\s*['"]({re.escape(NPM_SCOPE)}/temporal-tools/workflows/)([\w-]+)""",
+    )
+    # activateWorkflow({ workflowName: 'someWorkflow' }) — starts a workflow via grpc-core-workflows
+    activate_workflow_pattern = re.compile(
+        r"""activateWorkflow\s*\(\s*\{[^}]*workflowName:\s*['"](\w+)['"]""",
+        re.DOTALL,
     )
 
     # Build a mapping: taskQueue name → repo name (heuristic: repo name often matches queue)
@@ -1299,6 +1305,22 @@ def parse_temporal_edges(conn: sqlite3.Connection):
                 target = f"pkg:{match.group(1)}"
             if target != source:
                 edges.append((source, target, "activity_import", pkg_name))
+
+        # 7. activateWorkflow({ workflowName: 'X' }) — resolve to target workflow repo
+        for match in activate_workflow_pattern.finditer(content):
+            wf_name = match.group(1)  # camelCase, e.g. 'collaborationMaster'
+            target = workflow_name_to_repo.get(wf_name)
+            if not target:
+                # Convert camelCase to kebab-case and try workflow-{kebab} variants
+                kebab = re.sub(r"([a-z])([A-Z])", r"\1-\2", wf_name).lower()
+                for candidate in [f"workflow-{kebab}", f"workflow-{kebab}-processing"]:
+                    if candidate in repo_names:
+                        target = candidate
+                        break
+            if target and target != source:
+                edges.append((source, target, "temporal_activate", wf_name))
+            elif not target:
+                edges.append((source, f"workflow:{wf_name}", "temporal_activate", wf_name))
 
     # Deduplicate edges
     unique_edges = list(set(edges))
