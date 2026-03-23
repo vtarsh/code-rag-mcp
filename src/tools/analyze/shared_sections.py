@@ -486,6 +486,7 @@ def section_completeness(
             "npm_dep_scan": "📦 npm dependency",
             "domain": "Domain service",
             "cascade": "Cascade dependency",
+            "reverse_cascade": "Reverse cascade (called by found repo)",
             "keyword": "Keyword match",
         }.get(ftype, ftype)
         checklist.append((rname, label, status, reason, needs_change))

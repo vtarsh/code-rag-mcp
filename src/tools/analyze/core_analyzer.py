@@ -192,7 +192,38 @@ def _section_cascade(ctx: AnalysisContext, classification: TaskClassification) -
             output += f"  - **{repo}** ({in_deg} dependents, via {seed}/{etype})\n"
         output += "\n"
 
-    total = len(all_affected) + len(downstream_hubs)
+    # Reverse cascade: for each finding repo, walk OUTGOING edges of types that
+    # indicate the repo CALLS/HANDLES another repo (e.g., webhook_handler points
+    # FROM workflow-provider-webhooks TO grpc-providers-crb). This discovers
+    # targets that the forward BFS misses because it only walks incoming edges.
+    reverse_edge_types = ("webhook_handler", "grpc_call", "grpc_method_call", "callback_handler")
+    finding_repos = {rname for _, rname in ctx.findings} | seed_set | set(all_affected) | set(downstream_hubs)
+    reverse_found: dict[str, tuple[str, str]] = {}  # repo → (via_source, edge_type)
+
+    for repo in list(finding_repos):
+        try:
+            rows = ctx.conn.execute(
+                f"""SELECT DISTINCT target, edge_type FROM graph_edges
+                    WHERE source = ? AND edge_type IN ({",".join("?" for _ in reverse_edge_types)})
+                    AND target NOT LIKE 'pkg:%' AND target NOT LIKE 'proto:%'
+                    AND target NOT LIKE 'route:%'""",
+                (repo, *reverse_edge_types),
+            ).fetchall()
+            for row in rows:
+                target = row["target"]
+                if target not in finding_repos and target not in reverse_found:
+                    reverse_found[target] = (repo, row["edge_type"])
+        except Exception:
+            continue
+
+    if reverse_found:
+        output += "_Reverse cascade (targets called/handled by found repos):_\n\n"
+        for repo, (via, etype) in sorted(reverse_found.items()):
+            ctx.findings.append(("reverse_cascade", repo))
+            output += f"  - **{repo}** (via {via}/{etype})\n"
+        output += "\n"
+
+    total = len(all_affected) + len(downstream_hubs) + len(reverse_found)
     if total:
         output += f"_Total: {total} repos in cascade._\n\n"
     else:
