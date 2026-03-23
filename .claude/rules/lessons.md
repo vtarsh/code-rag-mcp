@@ -119,3 +119,15 @@ If the user repeats the same instruction, preference, or correction within a ses
 - PI-13 (CVV audit, 12 repos): **BUG FOUND** — detect_provider greedily picks first provider when description mentions 13, preventing bulk detection. Fix: check _is_bulk_provider_task BEFORE detect_provider.
 - PI-13 also needs: "apply change to N specific providers" pattern — extract provider list from description, not enumerate ALL.
 - activateWorkflow fix implemented in build_graph.py — new `temporal_activate` edge type.
+
+### 2026-03-23: Don't guess context usage percentages
+- User caught me reporting wrong context % multiple times.
+- **Rule**: Don't report context percentages unless checked via /context command. Just say "continuing" or "plenty of room" without numbers.
+
+### 2026-03-23: CORE Tier 1 findings (3 tasks: disputes, 3DS, AVS)
+- **CORE-2329 (disputes, 18 repos)**: 2 repos not indexed at all (express-webhooks-skrill, workflow-featurespace-events). 2 repos found by cascade but not bolded → extraction bug. kafka-cdc-sink confirmed as CDC mapper pattern.
+- **CORE-2451 (3DS standalone, 16 repos)**: 88% recall. Misses are kafka-cdc-sink (CDC) + cloudflare-workers-tokenize2 (deployment routing). New architecture: 3DS decoupled from gateway, standalone API resource.
+- **CORE-2607 (AVS providers, 10 repos)**: 100% recall. Same "apply change to N providers" pattern as PI-13 CVV. Provider Fan-out catches all but ~200 repo output = 5% precision.
+- **Recurring theme**: kafka-cdc-sink missed in EVERY cross-cutting CORE task. Must add CDC mapper edge type.
+- **Missing repos in index**: express-webhooks-skrill and workflow-featurespace-events should be added to extraction pipeline.
+- **Bold formatting bug**: cascade-found repos not always bolded → benchmark extraction misses them.
