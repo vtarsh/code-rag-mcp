@@ -155,6 +155,15 @@ If the user repeats the same instruction, preference, or correction within a ses
 - **Rule**: When provider supports status endpoint, use Pattern A. Long-polling (Pattern B via loggers) is fallback only.
 - Flow docs saved to profiles/pay-com/docs/flows/ — these get indexed as chunks with 1.3x reference boost.
 
+### 2026-03-23: LLM reasoning layer design — Gemini + telegram-claude-bot patterns
+- Gemini Pro 2.5 available via free API ($300/90 days) from telegram-claude-bot/.env
+- telegram-claude-bot architecture analysis: conditional prompt assembly, JSON-only prompts with markdown-strip parsing, ordered fallback chain (MainRouter.call()), JSONL tracing per action.
+- **Plan**: Add Gemini reasoning step to analyze_task pipeline. Input: task description + architecture templates + graph context. Output: JSON with predicted repos + confidence + reasoning. Fallback: current Python-only mechanisms.
+- **Key insight**: Don't replace existing mechanisms — ADD reasoning layer as RE-RANKER on top.
+- **Gemini 3.1 Pro calibration**: Standard prompt 66%R/59%P, Reasoning 51%R/65%P, Rich context 67%R/100%P.
+- **Winning architecture**: Tool generates broad candidates (95%R/1%P) → Gemini re-ranks to top 10-15 (preserves recall, boosts precision to 50-80%). Like CrossEncoder reranker but for repo predictions.
+- **Cost**: ~1500 tokens/task = ~$0.01/task. 361 tasks = ~$3.60 total. Well within $300 budget.
+
 ### 2026-03-23: All Tier 1 deep analysis complete (PI 17/17 + CORE 23/23)
 - **95.1% recall** (phantom-filtered), **1.1% precision** (cascade noise)
 - **PI**: 97.0% recall, 6% precision. Near ceiling. Main gap: phantom ground truth.
