@@ -14,7 +14,14 @@ from .classifier import TaskClassification
 def run_core_analysis(ctx: AnalysisContext, classification: TaskClassification) -> str:
     """Run CORE-specific analysis sections. Returns combined markdown."""
     primary = classification.domain.split("+")[0]
-    if not primary.startswith("core-") and primary not in ("bo", "hs", "unknown"):
+    # Also run for PI tasks with secondary core-* domain but no provider detected
+    # (e.g., "pi+core-dispute" for chargebacks911 integration)
+    has_secondary_core = any(d.startswith("core-") for d in classification.domain.split("+")[1:])
+    if (
+        not primary.startswith("core-")
+        and primary not in ("bo", "hs", "unknown")
+        and not (has_secondary_core and not ctx.provider)
+    ):
         return ""
 
     output = ""

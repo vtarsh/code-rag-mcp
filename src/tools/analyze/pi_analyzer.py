@@ -99,6 +99,29 @@ def section_provider(ctx: AnalysisContext) -> str:
                         output += f"  Found `{keyword}`: {snip[:150]}\n"
                     output += "\n"
 
+    # Cross-provider content search: find other provider repos that reference
+    # this provider name in their code (e.g., neteller references in grpc-providers-paysafe)
+    if ctx.provider:
+        already = {rname for _, rname in ctx.findings}
+        try:
+            cross_hits = ctx.conn.execute(
+                "SELECT DISTINCT repo_name FROM chunks WHERE chunks MATCH ? AND repo_name NOT IN ({}) LIMIT 20".format(
+                    ",".join("?" for _ in already)
+                ),
+                (f'"{ctx.provider}"', *already),
+            ).fetchall()
+            cross_provider = [
+                r["repo_name"] for r in cross_hits if any(r["repo_name"].startswith(p) for p in PROVIDER_PREFIXES)
+            ]
+            if cross_provider:
+                output += f"### Cross-provider references to `{ctx.provider}`\n\n"
+                for repo in cross_provider:
+                    ctx.findings.append(("provider", repo))
+                    output += f"  - **{repo}** (mentions `{ctx.provider}` in code)\n"
+                output += "\n"
+        except Exception:
+            pass
+
     return output
 
 
