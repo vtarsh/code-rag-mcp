@@ -62,6 +62,35 @@ from .shared_sections import (
 )
 
 
+def _extract_repo_refs(ctx: AnalysisContext) -> None:
+    """Extract repo names from GitHub URLs and description text matches.
+
+    Finds patterns like github.com/org/repo-name in URLs and also checks
+    if multi-word description fragments match known repo names.
+    """
+    # 1. GitHub URL extraction: github.com/{org}/{repo}
+    url_repos = re.findall(r"github\.com/[^/\s]+/([a-z][a-z0-9-]+)", ctx.description, re.IGNORECASE)
+
+    # 2. Repo-name fragment matching: check if description contains known repo names
+    all_repos = {r["name"] for r in ctx.conn.execute("SELECT name FROM repos").fetchall()}
+    desc_lower = ctx.description.lower()
+
+    matched: set[str] = set()
+    for repo in url_repos:
+        repo_lower = repo.lower()
+        if repo_lower in all_repos:
+            matched.add(repo_lower)
+
+    # Check repo names with 3+ segments (e.g., workflow-worldpay-adjustments)
+    # that might appear verbatim or nearly verbatim in description
+    for repo in all_repos:
+        if len(repo) >= 15 and repo in desc_lower:
+            matched.add(repo)
+
+    for repo in matched:
+        ctx.findings.append(("repo_ref", repo))
+
+
 def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
     """Scan npm_dep edges from found repos for task keyword matches.
 
@@ -179,6 +208,9 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
         words=words,
         provider=provider,
     )
+
+    # Extract repo names from GitHub URLs and description text
+    _extract_repo_refs(ctx)
 
     output = f"# Task Analysis\n\n**Task**: {description}\n"
     output += f"**Domain**: {classification.domain}"

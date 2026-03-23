@@ -484,6 +484,7 @@ def section_completeness(
             "similar_task": "📋 Similar past task",
             "bulk_migration": "🔄 Bulk migration",
             "npm_dep_scan": "📦 npm dependency",
+            "repo_ref": "🔗 Repo name in description",
             "domain": "Domain service",
             "cascade": "Cascade dependency",
             "reverse_cascade": "Reverse cascade (called by found repo)",
