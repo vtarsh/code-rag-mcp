@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 
 from src.config import DOMAIN_PATTERNS
 
-from .pi_analyzer import detect_provider
+from .pi_analyzer import count_matching_providers, detect_provider
 
 
 @dataclass(frozen=True)
@@ -37,8 +37,12 @@ def classify_task(
     4. Score each domain, return highest
     """
     # 1. Provider detection → PI
+    # If 3+ provider names mentioned, treat as bulk PI (no specific provider)
+    # so section_bulk_providers can fire instead of single-provider analysis.
     provider = explicit_provider
     if not provider:
+        if count_matching_providers(conn, words) >= 3:
+            return TaskClassification(domain="pi", provider="", confidence=1.0)
         provider = detect_provider(conn, words)
     if provider:
         return TaskClassification(domain="pi", provider=provider, confidence=1.0)

@@ -12,10 +12,10 @@ from src.formatting import strip_repo_tag
 from .base import _KEYWORD_STOP_WORDS, AnalysisContext
 
 
-def detect_provider(conn: sqlite3.Connection, words: set[str]) -> str:
-    """Auto-detect provider name from task description words."""
+def _get_provider_names(conn: sqlite3.Connection) -> set[str]:
+    """Return set of known provider names from repos table."""
     if not PROVIDER_PREFIXES:
-        return ""
+        return set()
     placeholders = " OR ".join("name LIKE ?" for _ in PROVIDER_PREFIXES)
     params = [f"{p}%" for p in PROVIDER_PREFIXES]
     provider_repos = conn.execute(f"SELECT name FROM repos WHERE {placeholders}", params).fetchall()
@@ -26,6 +26,18 @@ def detect_provider(conn: sqlite3.Connection, words: set[str]) -> str:
             if name.startswith(prefix):
                 provider_names.add(name[len(prefix) :])
                 break
+    return provider_names
+
+
+def count_matching_providers(conn: sqlite3.Connection, words: set[str]) -> int:
+    """Count how many known provider names appear in the task words."""
+    provider_names = _get_provider_names(conn)
+    return sum(1 for p in provider_names if p in words)
+
+
+def detect_provider(conn: sqlite3.Connection, words: set[str]) -> str:
+    """Auto-detect provider name from task description words."""
+    provider_names = _get_provider_names(conn)
     for p in provider_names:
         if p in words:
             return p
