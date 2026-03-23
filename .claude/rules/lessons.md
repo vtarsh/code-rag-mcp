@@ -184,6 +184,8 @@ If the user repeats the same instruction, preference, or correction within a ses
 - Scope-aware: close second (60%R / 60%P)
 - **Key insight**: re-ranker bottleneck is UPSTREAM candidates, not Gemini. Missing repos never enter candidate list. Improve analyze_task mechanisms first, re-ranker polishes.
 - **Rule**: Re-ranker is a polish step, not a fix for missing mechanisms. Always improve base recall first.
+- **Full PI re-ranker benchmark**: 81.2% recall, 33.6% precision, F1=47.5% (vs 95.8%R/6.5%P/F1=12.2% without). 5x precision, recall drops 14%. Avg 10 repos/task instead of 61.
+- **Best UX**: Show re-ranked list first (concise), full list as expandable backup.
 
 ### 2026-03-23: BO-1598 Tier 1 — shared-state data-flow dependency
 - workflow-risk-calc writes amlRiskCategory → grpc-onboarding-approvals + workflow-onboarding-application-approvals read it
