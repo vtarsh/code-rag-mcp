@@ -126,7 +126,11 @@ def _section_domain_repos(ctx: AnalysisContext, classification: TaskClassificati
 
     if pattern_matched:
         output += "**Pattern-matched repos** (content matches task keywords):\n"
-        for repo in sorted(set(pattern_matched))[:10]:
+        # Rank by keyword match count (most matches = most relevant), not alphabetically
+        from collections import Counter
+
+        repo_counts = Counter(pattern_matched)
+        for repo, _count in repo_counts.most_common(15):
             ctx.findings.append(("keyword", repo))
             output += f"  - **{repo}**\n"
         output += "\n"

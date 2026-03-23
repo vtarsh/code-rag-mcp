@@ -155,6 +155,11 @@ def _extract_repo_refs(ctx: AnalysisContext) -> str:
     for repo in all_repos:
         if len(repo) >= 15 and repo in desc_lower:
             matched.add(repo)
+        # Space-to-hyphen: "core configurations" → "grpc-core-configurations"
+        elif len(repo) >= 15:
+            spaced = repo.replace("-", " ")
+            if spaced in desc_lower:
+                matched.add(repo)
 
     # Fuzzy: check if description contains repo name minus trailing 's' or with '.' instead of '-'
     # Catches: "workflow-worldpay-adjustment" → "workflow-worldpay-adjustments"
