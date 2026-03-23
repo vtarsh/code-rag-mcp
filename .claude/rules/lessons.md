@@ -96,3 +96,12 @@ If the user repeats the same instruction, preference, or correction within a ses
 - **Rule**: Need a PRECISION metric alongside recall. Returning entire org is not helpful.
 - **Rule**: For bulk migration tasks, "list all repos depending on package X" is the right approach, not domain cascade.
 - 51% of expected repos in these 3 tasks are phantoms (version bumps only)
+
+### 2026-03-23: CORE deep analysis complete — 95/95 tasks
+- Tool phantom-filtered recall: 88.4% (372/421)
+- Top miss patterns: co_change_only (17), graph_gap (10), description_missing (5), weak_fts (5)
+- kafka-cdc-sink missed 5x — always changes with libs-types but no static dependency
+- Workflow repos have 0 inbound edges — cascade can never find them from service repos
+- grpc-core-paymentlinks/reconciliation: 16/17 tasks have ONLY package.json bumps — auto-bump repos
+- CORE-2102 (0% recall) = banking subdomain with isolated graph, vague description
+- **Actionable**: vault domain cluster, kafka-cdc mapper detection, package-only filtering
