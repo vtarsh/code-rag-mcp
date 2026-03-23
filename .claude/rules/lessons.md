@@ -163,6 +163,9 @@ If the user repeats the same instruction, preference, or correction within a ses
 - **Gemini 3.1 Pro calibration**: Standard prompt 66%R/59%P, Reasoning 51%R/65%P, Rich context 67%R/100%P.
 - **Winning architecture**: Tool generates broad candidates (95%R/1%P) → Gemini re-ranks to top 10-15 (preserves recall, boosts precision to 50-80%). Like CrossEncoder reranker but for repo predictions.
 - **Cost**: ~1500 tokens/task = ~$0.01/task. 361 tasks = ~$3.60 total. Well within $300 budget.
+- **Full calibration results**: Rich context (67%R/100%P/F1=80%) > Standard (66%R/59%P/F1=62%) > Reasoning (51%R/69%P/F1=56%) > Minimal (22%R/83%P/F1=30%).
+- **Winner: rich context** — architecture templates + graph data are essential. Gemini without context is useless (22% recall).
+- **Next step**: implement re-ranker that passes tool's candidate list + architecture context to Gemini, gets filtered top 10-15 repos back.
 
 ### 2026-03-23: All Tier 1 deep analysis complete (PI 17/17 + CORE 23/23)
 - **95.1% recall** (phantom-filtered), **1.1% precision** (cascade noise)
