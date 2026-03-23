@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 
 from src.config import DOMAIN_PATTERNS
 
-from .pi_analyzer import count_matching_providers, detect_provider
+from .pi_analyzer import _AMBIGUOUS_PROVIDER_NAMES, count_matching_providers, detect_provider
 
 
 @dataclass(frozen=True)
@@ -39,11 +39,19 @@ def classify_task(
     # 1. Provider detection → PI
     # If 3+ provider names mentioned, treat as bulk PI (no specific provider)
     # so section_bulk_providers can fire instead of single-provider analysis.
+    # 1. Provider detection → PI
+    # Skip ambiguous provider names for CORE/BO/HS tasks (e.g., "checkout" as a field name)
+    prefix_hint = re.search(r"(PI|CORE|BO|HS)-?\d+", description, re.IGNORECASE)
+    is_non_pi_prefix = prefix_hint and prefix_hint.group(1).upper() != "PI"
+
     provider = explicit_provider
     if not provider:
         if count_matching_providers(conn, words) >= 3:
             return TaskClassification(domain="pi", provider="", confidence=1.0)
         provider = detect_provider(conn, words)
+        # Suppress ambiguous provider names when task has non-PI prefix
+        if provider and is_non_pi_prefix and provider in _AMBIGUOUS_PROVIDER_NAMES:
+            provider = ""
     if provider:
         return TaskClassification(domain="pi", provider=provider, confidence=1.0)
 

@@ -6,14 +6,17 @@ import re
 import sqlite3
 from pathlib import Path
 
-from src.config import GATEWAY_REPO, INFRA_REPOS, PROVIDER_PREFIXES, WEBHOOK_REPOS
+from src.config import GATEWAY_REPO, INFRA_REPOS, INFRA_SUFFIXES, PROVIDER_PREFIXES, WEBHOOK_REPOS
 from src.formatting import strip_repo_tag
 
 from .base import _KEYWORD_STOP_WORDS, AnalysisContext
 
+# Short/ambiguous words that match provider names but are common in non-provider contexts
+_AMBIGUOUS_PROVIDER_NAMES = frozenset({"ach", "iris", "volt", "checkout", "plaid"})
+
 
 def _get_provider_names(conn: sqlite3.Connection) -> set[str]:
-    """Return set of known provider names from repos table."""
+    """Return set of known provider names from repos table, excluding infra suffixes."""
     if not PROVIDER_PREFIXES:
         return set()
     placeholders = " OR ".join("name LIKE ?" for _ in PROVIDER_PREFIXES)
@@ -24,7 +27,10 @@ def _get_provider_names(conn: sqlite3.Connection) -> set[str]:
         name = r["name"]
         for prefix in PROVIDER_PREFIXES:
             if name.startswith(prefix):
-                provider_names.add(name[len(prefix) :])
+                suffix = name[len(prefix) :]
+                # Skip infra repos (credentials, features, etc.)
+                if suffix not in INFRA_SUFFIXES:
+                    provider_names.add(suffix)
                 break
     return provider_names
 
