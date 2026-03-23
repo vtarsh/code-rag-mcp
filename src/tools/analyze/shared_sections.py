@@ -513,7 +513,7 @@ def section_completeness(
     output += "| Repo | Area | Status | Detail |\n|------|------|--------|--------|\n"
     for rname, label, status, reason, _ in checklist:
         icon = {"DONE": "[x]", "OK": "[x]", "IN PROGRESS": "[-]", "TODO": "[ ]"}.get(status, "[ ]")
-        output += f"| {icon} {rname} | {label} | **{status}** | {reason} |\n"
+        output += f"| {icon} **{rname}** | {label} | **{status}** | {reason} |\n"
     output += "\n"
     return output
 
