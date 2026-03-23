@@ -62,6 +62,91 @@ from .shared_sections import (
 )
 
 
+def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
+    """Scan npm_dep edges from found repos for task keyword matches.
+
+    Catches shared libraries like node-libs-common that have provider-specific
+    code but aren't found via cascade (too many dependents = deprioritized).
+    """
+    finding_repos = {rname for _, rname in ctx.findings}
+    if not finding_repos:
+        return ""
+
+    # Collect npm_dep targets from found repos
+    dep_repos: dict[str, str] = {}  # dep_repo → via_repo
+    for repo in finding_repos:
+        try:
+            rows = ctx.conn.execute(
+                """SELECT DISTINCT target FROM graph_edges
+                   WHERE source = ? AND edge_type = 'npm_dep'
+                   AND target NOT LIKE 'pkg:%'""",
+                (repo,),
+            ).fetchall()
+            for row in rows:
+                target = row["target"]
+                if target not in finding_repos and target not in dep_repos:
+                    dep_repos[target] = repo
+        except Exception:
+            continue
+
+    if not dep_repos:
+        return ""
+
+    # Check which dep repos have task keywords in their content
+    keywords = [
+        w
+        for w in ctx.words
+        if len(w) >= 4
+        and w
+        not in {
+            "should",
+            "which",
+            "where",
+            "their",
+            "about",
+            "these",
+            "those",
+            "would",
+            "could",
+            "check",
+            "start",
+            "needs",
+        }
+    ]
+    if ctx.provider:
+        keywords = [ctx.provider] + keywords[:4]
+    else:
+        keywords = keywords[:5]
+
+    if not keywords:
+        return ""
+
+    new_finds: list[tuple[str, str, str]] = []  # (repo, via, keyword)
+    for dep_repo, via_repo in dep_repos.items():
+        for kw in keywords:
+            try:
+                hit = ctx.conn.execute(
+                    "SELECT 1 FROM chunks WHERE repo_name = ? AND chunks MATCH ? LIMIT 1",
+                    (dep_repo, f'"{kw}"'),
+                ).fetchone()
+                if hit:
+                    new_finds.append((dep_repo, via_repo, kw))
+                    break
+            except Exception:
+                continue
+
+    if not new_finds:
+        return ""
+
+    output = "## npm Dependency Scan\n\n"
+    output += "_Shared libraries with task keyword matches (via npm_dep edges):_\n\n"
+    for repo, via, kw in new_finds:
+        ctx.findings.append(("npm_dep_scan", repo))
+        output += f"  - **{repo}** — `{kw}` found (dep of {via})\n"
+    output += "\n"
+    return output
+
+
 @require_db
 def analyze_task_tool(description: str, provider: str = "") -> str:
     """Analyze a development task and find ALL relevant repos, files, and dependencies.
@@ -117,6 +202,9 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
 
     # CORE/BO/HS-specific sections (when not PI)
     output += run_core_analysis(ctx, classification)
+
+    # npm_dep scan: check npm dependencies of found repos for task keyword matches
+    output += _section_npm_dep_scan(ctx)
 
     # Co-occurrence boost (all domains — data-driven from task_history)
     output += run_co_occurrence(ctx)

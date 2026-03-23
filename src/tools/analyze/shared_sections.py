@@ -483,6 +483,7 @@ def section_completeness(
             "pattern": "⚡ Pattern-based (historically missed)",
             "similar_task": "📋 Similar past task",
             "bulk_migration": "🔄 Bulk migration",
+            "npm_dep_scan": "📦 npm dependency",
             "domain": "Domain service",
             "cascade": "Cascade dependency",
             "keyword": "Keyword match",

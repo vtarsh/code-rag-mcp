@@ -40,7 +40,26 @@ def extract_found_repos(result: str) -> set[str]:
     return {m.group(1) for m in _BOLD_REPO_RE.finditer(result) if not m.group(1).startswith(_EXCLUDE_PREFIXES)}
 
 
-def run_benchmark(groups: list[str] | None = None, single_task: str | None = None) -> None:
+def _repos_with_files(files_changed: str | None, repos: set[str]) -> set[str]:
+    """Filter repos to only those that have actual file changes."""
+    if not files_changed:
+        return repos  # no files data — keep all repos (don't penalize)
+    files = json.loads(files_changed)
+    if not files:
+        return repos
+    repos_with = set()
+    for f in files:
+        if "/" in f:
+            repos_with.add(f.split("/")[0])
+    # Only filter if we found at least 1 repo in files — otherwise data might be missing
+    return (repos & repos_with) if repos_with else repos
+
+
+def run_benchmark(
+    groups: list[str] | None = None,
+    single_task: str | None = None,
+    filter_phantoms: bool = False,
+) -> None:
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
 
@@ -56,18 +75,26 @@ def run_benchmark(groups: list[str] | None = None, single_task: str | None = Non
         params = ()
 
     rows = conn.execute(
-        f"SELECT ticket_id, summary, repos_changed FROM task_history WHERE {condition} ORDER BY ticket_id",
+        f"SELECT ticket_id, summary, repos_changed, files_changed FROM task_history WHERE {condition} ORDER BY ticket_id",
         params,
     ).fetchall()
 
     group_stats: dict[str, list[int]] = {}
     total_hits, total_actual = 0, 0
+    phantom_count = 0
 
     for r in rows:
         tid = r["ticket_id"]
         actual = set(json.loads(r["repos_changed"]) if r["repos_changed"] else [])
         if not actual:
             continue
+
+        if filter_phantoms:
+            filtered = _repos_with_files(r["files_changed"], actual)
+            phantom_count += len(actual) - len(filtered)
+            actual = filtered
+            if not actual:
+                continue
 
         db = get_db()
         try:
@@ -93,6 +120,8 @@ def run_benchmark(groups: list[str] | None = None, single_task: str | None = Non
             print(f"{tid:12s} {recall:5.0f}% ({len(hits):2d}/{len(actual):2d})")
 
     print("\n" + "=" * 50)
+    if filter_phantoms:
+        print(f"[phantom filter ON: {phantom_count} phantom repos excluded]")
     for g, (h, a) in sorted(group_stats.items()):
         print(f"{g:6s} {h / a * 100:.1f}% ({h}/{a})")
     if total_actual:
@@ -104,10 +133,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Benchmark analyze_task recall")
     parser.add_argument("--group", help="Comma-separated groups: CORE,PI,BO,HS")
     parser.add_argument("--task", help="Single task ID for verbose output")
+    parser.add_argument(
+        "--filter-phantoms", action="store_true", help="Exclude repos with zero files_changed from ground truth"
+    )
     args = parser.parse_args()
 
     groups = [g.strip().upper() for g in args.group.split(",")] if args.group else None
-    run_benchmark(groups=groups, single_task=args.task)
+    run_benchmark(groups=groups, single_task=args.task, filter_phantoms=args.filter_phantoms)
 
 
 if __name__ == "__main__":

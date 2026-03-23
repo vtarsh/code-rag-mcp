@@ -59,3 +59,32 @@ If the user repeats the same instruction, preference, or correction within a ses
 - **vault keywords** added to core-payment domain: vault, tokenize, "card vault" + grpc-vault-* repo patterns.
 - "collaboration" keyword initially added to dispute domain but removed — too broad, matched "Collaborations Section" in BO tasks.
 - **TOTAL recall: 86.5% → 89.5%** on 361 benchmarkable tasks (974 total in DB).
+
+### 2026-03-23: Overnight crons didn't chain — wasted 2 hours idle
+- After 04:23 implementation cron completed, session sat idle until 06:37 morning summary.
+- Should have: (a) added more crons dynamically after each step completes, or (b) planned a "continue work" recurring cron every 30-60 min that picks up the next roadmap item.
+- **Rule**: When setting up overnight work, add a recurring "continue" cron (every 30-60 min) that checks what's done, picks up next item from a TODO list, and keeps working. One-shot crons are too rigid — if one finishes early, time is wasted.
+
+### 2026-03-23: Ground truth quality — repos_changed ≠ repos_needed
+- benchmark_recall.py measures recall against `repos_changed` from Jira (repos with PRs matching ticket ID). This is "what devs touched", not "what SHOULD be touched".
+- 26% of PI repos_changed are phantoms (zero files changed). Ground truth is noisy.
+- **Two metrics needed**: (1) Recall vs Jira — automated, fast, noisy. (2) Recall vs reality — deep validation via grep/code analysis, slow, accurate.
+- **Rule**: Always report WHICH ground truth is being used. Don't claim "90% recall" without specifying "vs Jira repos_changed". Clean ground truth (filter phantoms) should be the primary metric.
+- **TODO**: Add phantom filtering to benchmark_recall.py as an option (--filter-phantoms). ✅ DONE
+
+### 2026-03-23: Phase 1 deep analysis — 5 PI tasks
+- 35% of expected repos are phantoms (0 files_changed). Phantom filtering is essential for honest metrics.
+- Independent grep beats tool on 2 tasks: PI-2 (node-libs-common) and PI-21 (workflow-collaboration-processing).
+- **node-libs-common miss**: has BLIK in payment-method-types.ts + npm_dep edge from grpc-apm-ppro. Tool should scan npm_dep chain for task keywords.
+- **workflow-collaboration-processing miss**: has 12+ chargebacks911 files but ZERO inbound graph edges. Invisible to cascade. Grep finds it trivially.
+- **Rule**: Deep analysis agents find real issues that benchmark_recall.py alone doesn't surface. The combination of independent grep + tool comparison is the most valuable diagnostic.
+- **Actionable**: (1) scan npm_dep chain for keywords, (2) add Temporal workflow dispatch edges to graph.
+
+### 2026-03-23: PI deep analysis complete — 40/40 tasks
+- **166 real repos, tool 95.8%, independent 98.8%** (phantom-filtered)
+- 30% of PI ground truth is phantoms (repos with 0 files_changed)
+- PI-3 has broken ground truth (both repos unrelated to task description)
+- **7 tool misses**: npm_dep ×3, graph_gap ×1, cross-provider ×1, short abbreviation ×1, isolated repo ×1
+- **Top fix**: npm_dep chain traversal would fix 43% of all misses (3/7)
+- **#2 fix**: reverse cascade from webhook_handler edges (fixes PI-37 crb miss)
+- grpc-apm-okto appears as phantom in 5+ tasks — systematic Jira artifact, not real involvement
