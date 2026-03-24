@@ -46,6 +46,18 @@ Key items to verify:
 - Card fields masked in logs
 - AVS securityOptions handling
 
+### Step 2c: Check PR Review Patterns (common reviewer flags)
+Read `profiles/pay-com/docs/references/pr-review-learnings.md` — patterns from vboychyk reviews.
+Key checks:
+- Are ALL payload fields conditional? (no `undefined` sent to provider)
+- Is status mapping context-aware? (action + status, not just status)
+- Are refunds assumed synchronous? (most are async — need webhook)
+- Is there unnecessary boilerplate? (e2e for APMs, webhook saving when not needed)
+- Are existing provider patterns referenced? (volt, paysafe as models)
+- Are env vars free of default values?
+- Is `processorTransactionId` included in every response?
+- Are user inputs sanitized via helpers? (phone +prefix, address trim)
+
 ### Step 3: Trace Downstream Impact
 1. Find all repos touched by the task
 2. For each repo, trace downstream dependencies via graph
