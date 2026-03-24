@@ -1,3 +1,11 @@
+---
+paths:
+  - "**/grpc-apm-*/**"
+  - "**/grpc-providers-*/**"
+  - "**/workflow-provider-*/**"
+  - "**/src/**"
+---
+
 # Impact Audit Rules
 
 ## Severity Criteria

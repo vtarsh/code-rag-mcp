@@ -1,3 +1,11 @@
+---
+paths:
+  - "**/grpc-apm-*/**"
+  - "**/grpc-providers-*/**"
+  - "**/workflow-provider-*/**"
+  - "**/providers/**"
+---
+
 # Provider Code Rules
 
 Rules for writing provider integration code. Derived from 25 PR review comments.

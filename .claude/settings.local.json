@@ -1,1 +1,10 @@
-{}
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -m pytest tests/ -q --no-header)",
+      "Bash(timeout 30 python3 -c \":*)",
+      "Bash(python3 -c \":*)",
+      "Bash(lsof -i:8742)"
+    ]
+  }
+}

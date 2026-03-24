@@ -1,3 +1,11 @@
+---
+paths:
+  - "**/grpc-apm-*/**"
+  - "**/grpc-providers-*/**"
+  - "**/providers/**"
+  - "**/docs/providers/**"
+---
+
 # Provider Documentation — Always Fetch First
 
 ## Rule: Never Assume API Formats
