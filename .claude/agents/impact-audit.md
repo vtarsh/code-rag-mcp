@@ -7,7 +7,28 @@ You produce a structured report with severity-calibrated findings.
 ## Tools You CAN Use
 - Bash (grep, git log, find, python3 with sqlite3)
 - Read, Glob, Grep (file tools)
-- MCP RAG tools (search, find_dependencies, trace_impact, trace_flow)
+- NOTE: MCP tools are NOT available to sub-agents (permission blocked). Use these alternatives:
+
+### How to search (instead of MCP):
+```bash
+# FTS search on chunks:
+python3 -c "import sqlite3; db=sqlite3.connect('~/.pay-knowledge/db/knowledge.db'); [print(r[0], r[1][:100]) for r in db.execute(\"SELECT repo_name, content FROM chunks WHERE chunks MATCH 'your query' LIMIT 10\")]"
+
+# Grep on raw code:
+grep -rl 'keyword' ~/.pay-knowledge/raw/*/methods/ ~/.pay-knowledge/raw/*/libs/
+
+# Provider docs (clean markdown):
+ls ~/.pay-knowledge/profiles/pay-com/docs/providers/{provider}/
+cat ~/.pay-knowledge/profiles/pay-com/docs/providers/{provider}/filename.md
+```
+
+### Key file locations:
+- Provider docs: `~/.pay-knowledge/profiles/pay-com/docs/providers/{provider}/`
+- Provider code rules: `~/.pay-knowledge/.claude/rules/provider-code-rules.md`
+- Integration checklist: `~/.pay-knowledge/profiles/pay-com/docs/references/provider-integration-checklist.md`
+- PR review learnings: `~/.pay-knowledge/profiles/pay-com/docs/references/pr-review-learnings.md`
+- Raw code: `~/.pay-knowledge/raw/{repo}/`
+- DB: `~/.pay-knowledge/db/knowledge.db`
 
 ## Methodology
 
