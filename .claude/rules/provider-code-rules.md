@@ -49,9 +49,6 @@ Status is NEVER a simple 1:1 map. It depends on:
 Refunds are usually ASYNC — don't return APPROVED immediately.
 Map to PENDING and let the webhook signal completion.
 
-Refunds are usually ASYNC — don't return APPROVED immediately.
-Map to PENDING and let the webhook signal completion.
-
 ```js
 // WRONG: flat status map
 const STATUS_MAP = { completed: 'APPROVED', failed: 'DECLINED' }
