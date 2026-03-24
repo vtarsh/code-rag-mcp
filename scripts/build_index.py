@@ -16,6 +16,7 @@ import json
 import os
 import re
 import sqlite3
+import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -706,6 +707,94 @@ def delete_repo_chunks(conn: sqlite3.Connection, repo_name: str) -> int:
     return len(rowids)
 
 
+def delete_repo_data(conn: sqlite3.Connection, repo_name: str) -> int:
+    """Delete all data for a repo: chunks, chunk_meta, code_facts, code_facts_fts, repos row.
+
+    Returns count of deleted chunk rows.
+    """
+    # Delete chunks and track rowids for chunk_meta cleanup
+    rowids = conn.execute("SELECT rowid FROM chunks WHERE repo_name = ?", (repo_name,)).fetchall()
+    for (rowid,) in rowids:
+        conn.execute("DELETE FROM chunks WHERE rowid = ?", (rowid,))
+
+    # Delete chunk_meta for those rowids
+    if rowids:
+        rowid_list = [r[0] for r in rowids]
+        placeholders = ",".join("?" * len(rowid_list))
+        conn.execute(f"DELETE FROM chunk_meta WHERE chunk_rowid IN ({placeholders})", rowid_list)
+
+    # Delete code_facts_fts entries (content table sync — must delete before code_facts)
+    fact_ids = conn.execute("SELECT id FROM code_facts WHERE repo_name = ?", (repo_name,)).fetchall()
+    for (fid,) in fact_ids:
+        conn.execute("DELETE FROM code_facts_fts WHERE rowid = ?", (fid,))
+
+    # Delete code_facts
+    conn.execute("DELETE FROM code_facts WHERE repo_name = ?", (repo_name,))
+
+    # Delete repos row
+    conn.execute("DELETE FROM repos WHERE name = ?", (repo_name,))
+
+    return len(rowids)
+
+
+def load_existing_shas(conn: sqlite3.Connection) -> dict[str, str]:
+    """Load repo name -> SHA mapping from existing database."""
+    try:
+        return {row[0]: row[1] for row in conn.execute("SELECT name, sha FROM repos")}
+    except sqlite3.OperationalError:
+        return {}  # table doesn't exist yet
+
+
+def get_current_sha(repo_path: Path) -> str | None:
+    """Get current HEAD SHA from a git repo directory."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(repo_path),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+    return None
+
+
+def detect_changed_repos(repo_meta: dict, existing_shas: dict[str, str]) -> tuple[set[str], set[str]]:
+    """Compare current HEAD SHAs with indexed SHAs.
+
+    Returns (changed_repos, removed_repos).
+    changed_repos: repos that need re-indexing (new or SHA mismatch).
+    removed_repos: repos in DB but no longer in raw/.
+    """
+    changed = set()
+    current_repos = set()
+
+    for repo_name, meta in repo_meta.items():
+        current_repos.add(repo_name)
+        indexed_sha = existing_shas.get(repo_name)
+
+        # New repo or SHA changed
+        raw_path = RAW_DIR / repo_name
+        if raw_path.is_dir():
+            current_sha = get_current_sha(raw_path)
+            # Fall back to _index.json SHA if git not available
+            if current_sha is None:
+                current_sha = meta.get("sha", "unknown")
+        else:
+            current_sha = meta.get("sha", "unknown")
+
+        if indexed_sha is None or indexed_sha != current_sha:
+            changed.add(repo_name)
+
+    # Repos in DB but no longer in index
+    removed = set(existing_shas.keys()) - current_repos
+
+    return changed, removed
+
+
 def index_repo(conn: sqlite3.Connection, repo_name: str, meta: dict) -> tuple[int, int]:
     """Index a single repo. Returns (files_count, chunks_count)."""
     artifact_types = [
@@ -727,6 +816,17 @@ def index_repo(conn: sqlite3.Connection, repo_name: str, meta: dict) -> tuple[in
 
     repo_dir = EXTRACTED_DIR / repo_name
     if not repo_dir.is_dir():
+        # Still insert repo metadata so incremental mode can track its SHA
+        conn.execute(
+            "INSERT OR REPLACE INTO repos(name, type, sha, org_deps, artifact_counts) VALUES (?, ?, ?, ?, ?)",
+            (
+                repo_name,
+                meta.get("type", "unknown"),
+                meta.get("sha", "unknown"),
+                json.dumps(meta.get("org_deps", [])),
+                json.dumps(meta.get("artifacts", {})),
+            ),
+        )
         return 0, 0
 
     files = 0
@@ -1701,11 +1801,18 @@ def main():
         print("Error: Run extract_artifacts.py first.")
         sys.exit(1)
 
-    # Parse --repos flag for incremental indexing
+    # Parse CLI flags
     only_repos = None
+    incremental = False
     for arg in sys.argv[1:]:
         if arg.startswith("--repos="):
             only_repos = set(arg.split("=", 1)[1].split(","))
+        elif arg == "--incremental":
+            incremental = True
+
+    # --repos implies incremental behavior
+    if only_repos:
+        incremental = True
 
     # Load repo metadata
     repo_meta = json.loads(INDEX_FILE.read_text())
@@ -1713,15 +1820,43 @@ def main():
 
     DB_DIR.mkdir(parents=True, exist_ok=True)
 
-    if only_repos and not DB_PATH.exists():
-        # Incremental mode: update only specified repos
+    if incremental and not DB_PATH.exists():
         print("No existing database found. Running full build instead.")
+        incremental = False
         only_repos = None
+
+    # For --incremental without --repos: auto-detect changed repos by SHA comparison
+    if incremental and only_repos is None:
+        conn_detect = sqlite3.connect(str(DB_PATH))
+        existing_shas = load_existing_shas(conn_detect)
+        conn_detect.close()
+
+        changed, removed = detect_changed_repos(repo_meta, existing_shas)
+
+        if not changed and not removed:
+            print("All repos up to date. Nothing to re-index.")
+            return
+
+        only_repos = changed
+        print(
+            f"SHA comparison: {len(changed)} changed, {len(removed)} removed, {len(repo_meta) - len(changed)} unchanged"
+        )
+
+        # Clean removed repos
+        if removed:
+            conn_clean = sqlite3.connect(str(DB_PATH))
+            conn_clean.execute("BEGIN")
+            for repo_name in sorted(removed):
+                deleted = delete_repo_data(conn_clean, repo_name)
+                if deleted:
+                    print(f"  Removed {deleted} chunks for deleted repo {repo_name}")
+            conn_clean.commit()
+            conn_clean.close()
 
     # Track whether we're using a temp file (full build) for atomic rename later
     tmp_path = None
 
-    if only_repos is None:
+    if not incremental:
         # Full build: write to temp file, then atomic rename on success
         tmp_path = DB_PATH.with_suffix(".db.tmp")
         if tmp_path.exists():
@@ -1742,13 +1877,13 @@ def main():
     total_chunks = 0
     total_files = 0
 
-    if only_repos:
+    if incremental:
         # Wrap incremental delete+insert in a single transaction
         conn.execute("BEGIN")
         try:
-            # Delete old chunks for changed repos
+            # Delete old data for changed repos (chunks, chunk_meta, code_facts)
             for repo_name in sorted(only_repos):
-                deleted = delete_repo_chunks(conn, repo_name)
+                deleted = delete_repo_data(conn, repo_name)
                 if deleted:
                     print(f"  Removed {deleted} old chunks for {repo_name}")
 
@@ -1939,7 +2074,7 @@ def main():
 
     db_size = DB_PATH.stat().st_size / (1024 * 1024)
     print("\n=== Index Summary ===")
-    if only_repos:
+    if incremental:
         print(f"Mode:          incremental ({len(repos_to_index)} repos)")
         print(f"Re-indexed:    {total_chunks} chunks from {total_files} files")
         print(f"Total chunks:  {total_chunks_global}")
