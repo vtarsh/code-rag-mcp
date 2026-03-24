@@ -72,6 +72,8 @@ const { API_URL } = process.env
 
 Only `PROTO_PATH` and `PORT` have defaults. All URLs, keys, and tokens must be explicit — no fallback values.
 
+**Why**: If env var is not set, service should FAIL immediately — not silently work against sandbox in production. The `undefined` URL will cause fetch to crash, which is the correct behavior. Dev/local environments set these via `.env` file or K8s config.
+
 ## 5. Version Alignment
 
 Package version must be providers-proto version minus 1.
