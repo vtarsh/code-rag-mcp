@@ -34,9 +34,8 @@ For docs behind auth (login required, Notion, Confluence, etc.):
 
 1. Ask user to provide access via browser
 2. User connects via browser extension and navigates to docs root page
-3. Launch **background agents** to scrape — one agent per browser tab, STRICTLY:
-   - **ONE tab per agent** — agents MUST NOT share tabs or they overwrite each other
-   - Each agent scrapes ONE page/section completely before moving to next
+3. Launch **one sequential agent** to scrape all pages (Playwright MCP shares single browser — parallel agents conflict):
+   - Navigate to each page, save snapshot as markdown file
    - Large docs = many pages = takes time. This is expected.
 4. For each page, scrape EVERYTHING:
    - Full page content (text, code samples, tables)
