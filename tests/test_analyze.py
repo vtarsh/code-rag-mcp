@@ -222,38 +222,42 @@ class TestSimilarTaskBoost:
 
     def test_similar_task_boost_logic(self):
         """Test the similar-task boost logic directly: ≥3 repo overlap triggers injection."""
-        from src.tools.analyze.base import AnalysisContext
+        from src.tools.analyze.base import AnalysisContext, Finding
 
         conn = _mock_conn()
         ctx = AnalysisContext(conn=conn, description="test", words=set(), provider="")
         # Pre-populate findings with 3 repos
-        ctx.findings = [("domain", "repo-a", "high"), ("domain", "repo-b", "high"), ("domain", "repo-c", "high")]
+        ctx.findings = [
+            Finding("domain", "repo-a", "high"),
+            Finding("domain", "repo-b", "high"),
+            Finding("domain", "repo-c", "high"),
+        ]
 
         # Simulate similar task with 4 repos (3 overlap + 1 new)
         similar_repos = ["repo-a", "repo-b", "repo-c", "repo-new"]
-        existing = {r for _, r, *_ in ctx.findings}
+        existing = {f.repo for f in ctx.findings}
         overlap = existing & set(similar_repos)
         assert len(overlap) >= 3  # overlap threshold met
 
         # Inject new repos
         for repo in similar_repos:
             if repo not in existing:
-                ctx.findings.append(("similar_task", repo, "medium"))
+                ctx.findings.append(Finding("similar_task", repo, "medium"))
                 existing.add(repo)
 
-        assert ("similar_task", "repo-new", "medium") in ctx.findings
+        assert Finding("similar_task", "repo-new", "medium") in ctx.findings
         assert len(ctx.findings) == 4  # 3 original + 1 injected
 
     def test_similar_task_no_boost_below_threshold(self):
         """No injection when overlap < 3 repos."""
-        from src.tools.analyze.base import AnalysisContext
+        from src.tools.analyze.base import AnalysisContext, Finding
 
         conn = _mock_conn()
         ctx = AnalysisContext(conn=conn, description="test", words=set(), provider="")
-        ctx.findings = [("domain", "repo-a", "high"), ("domain", "repo-b", "high")]
+        ctx.findings = [Finding("domain", "repo-a", "high"), Finding("domain", "repo-b", "high")]
 
         similar_repos = ["repo-a", "repo-b", "repo-c", "repo-new"]
-        existing = {r for _, r, *_ in ctx.findings}
+        existing = {f.repo for f in ctx.findings}
         overlap = existing & set(similar_repos)
         assert len(overlap) == 2  # below threshold — no injection
 

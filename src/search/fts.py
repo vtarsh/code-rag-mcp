@@ -67,6 +67,68 @@ def _sanitize_fts_input(query: str) -> str:
     return query.strip()
 
 
+_STOP_WORDS = frozenset(
+    {
+        "add",
+        "get",
+        "set",
+        "use",
+        "new",
+        "the",
+        "for",
+        "and",
+        "with",
+        "from",
+        "how",
+        "does",
+        "what",
+        "this",
+        "that",
+        "into",
+        "make",
+        "call",
+        "need",
+        "want",
+        "help",
+        "show",
+        "find",
+        "look",
+        "check",
+        "support",
+        "change",
+        "update",
+        "create",
+        "delete",
+        "remove",
+        "implement",
+        "about",
+        "where",
+    }
+)
+
+
+def sanitize_fts_with_stop_words(
+    query: str,
+    stop_words: frozenset[str] | None = None,
+) -> str:
+    """Sanitize query for FTS5 with stop-word removal and OR mode.
+
+    Used for proto/context searches where stop words like 'add', 'support'
+    would match too broadly. Falls back to length-only filtering when all
+    meaningful tokens are stop words.
+
+    Args:
+        query: Raw search query
+        stop_words: Custom stop words set (defaults to built-in _STOP_WORDS)
+    """
+    sw = stop_words if stop_words is not None else _STOP_WORDS
+    tokens = query.split()
+    sanitized = [t for t in tokens if len(t) >= 3 and t.lower() not in sw]
+    if not sanitized:
+        sanitized = [t for t in tokens if len(t) >= 3]
+    return " OR ".join(sanitized) if sanitized else ""
+
+
 def sanitize_fts_query(query: str) -> str:
     """Sanitize query for FTS5. Uses OR to find partial matches.
 

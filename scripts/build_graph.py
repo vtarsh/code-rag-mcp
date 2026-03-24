@@ -44,6 +44,7 @@ GATEWAY_REPO: str = _conv.get("gateway_repo", "")
 PROTO_REPOS: list[str] = _conv.get("proto_repos", ["providers-proto"])
 FEATURE_REPO: str = _conv.get("feature_repo", "")
 CREDENTIALS_REPO: str = _conv.get("credentials_repo", "")
+MANUAL_EDGES: dict[str, list[dict]] = _conv.get("manual_edges", {})
 
 
 def init_graph_tables(conn: sqlite3.Connection):
@@ -1779,102 +1780,35 @@ def _resolve_domain_to_repo(domain: str, domain_map: dict[str, str]) -> str | No
     return None
 
 
-def parse_connection_validation_edges(conn: sqlite3.Connection):
-    """Create edges for connection validation: express-api-v1 → grpc-core-connections → grpc-providers-features.
+def _resolve_repo_ref(name: str) -> str:
+    """Resolve {gateway_repo} and {feature_repo} placeholders in manual edge definitions."""
+    if name == "{gateway_repo}":
+        return GATEWAY_REPO or "grpc-payment-gateway"
+    if name == "{feature_repo}":
+        return FEATURE_REPO or "grpc-providers-features"
+    return name
 
-    express-api-v1/src/libs/verify-requested-payment-methods-types.js validates
-    partnerKey + provider against connections and uses defaultProcessorMap from
-    providers-features config. This enables trace_flow from session creation to
-    connection rejection.
+
+def parse_manual_edges(conn: sqlite3.Connection, group: str):
+    """Create graph edges from conventions.yaml manual_edges entries.
+
+    Each group (e.g. 'connection_validation', 'merchant_entity') is a list of
+    {source, target, edge_type, detail} dicts. Repo name placeholders like
+    {gateway_repo} and {feature_repo} are resolved from conventions config.
     """
+    edge_defs = MANUAL_EDGES.get(group, [])
+    if not edge_defs:
+        print(f"  {group} edges: 0 (no config)")
+        return
+
     known_repos = {r[0] for r in conn.execute("SELECT name FROM graph_nodes").fetchall()}
     edges: list[tuple[str, str, str, str]] = []
 
-    _feature = FEATURE_REPO or "grpc-providers-features"
-    _gateway = GATEWAY_REPO or "grpc-payment-gateway"
-
-    if "express-api-v1" in known_repos and "grpc-core-connections" in known_repos:
-        edges.append(
-            (
-                "express-api-v1",
-                "grpc-core-connections",
-                "flow_step",
-                "validates partnerKey + provider via verify-requested-payment-methods-types.js",
-            )
-        )
-
-    if "express-api-v1" in known_repos and _feature in known_repos:
-        edges.append(
-            (
-                "express-api-v1",
-                _feature,
-                "flow_step",
-                "uses defaultProcessorMap from seeds.cql for payment method validation",
-            )
-        )
-
-    if _gateway in known_repos and _feature in known_repos:
-        edges.append((_gateway, _feature, "flow_step", "checks verificationFeatureFlag before verification processing"))
-
-    if edges:
-        conn.executemany(
-            "INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)",
-            edges,
-        )
-
-    print(f"  Connection validation edges: {len(edges)}")
-
-
-def parse_merchant_entity_edges(conn: sqlite3.Connection):
-    """Create merchant_has edges for the merchant entity dependency graph.
-
-    Models the fact that a merchant entity depends on multiple sub-entities
-    across different services. Enables trace_impact from merchant to all
-    related services, and helps with cleanup/debugging.
-    """
-    known_repos = {r[0] for r in conn.execute("SELECT name FROM graph_nodes").fetchall()}
-
-    # Merchant → sub-entity services (from PI-54 cleanup session analysis)
-    merchant_deps = [
-        ("grpc-core-merchants", "auth-apikeys2", "merchant_has", "api_key: create, getByMerchantId, remove"),
-        (
-            "grpc-core-merchants",
-            "grpc-core-connections",
-            "merchant_has",
-            "connection: createConnection, getConnectionsForMerchant, removeMerchantConnection",
-        ),
-        (
-            "grpc-core-merchants",
-            "grpc-core-webhooks",
-            "merchant_has",
-            "webhook: createWebhook, getMerchantWebhooks, deleteWebhook",
-        ),
-        (
-            "grpc-core-merchants",
-            "grpc-providers-credentials",
-            "merchant_has",
-            "credentials: setCredentials, getCredentialsById, remove",
-        ),
-        (
-            "grpc-core-merchants",
-            "grpc-core-settlement-accounts",
-            "merchant_has",
-            "settlement_account: create, getByMerchantId, remove",
-        ),
-        ("grpc-core-merchants", "grpc-core-settings", "merchant_has", "settings: getByMerchantId"),
-        (
-            "grpc-core-merchants",
-            "grpc-providers-features",
-            "merchant_has",
-            "features: getFeatures (per-provider from seeds.cql)",
-        ),
-        ("grpc-core-merchants", "grpc-core-transactions", "merchant_has", "transactions: findByDateRange"),
-    ]
-
-    edges = []
-    for source, target, edge_type, detail in merchant_deps:
+    for entry in edge_defs:
+        source = _resolve_repo_ref(entry["source"])
+        target = _resolve_repo_ref(entry["target"])
         if source in known_repos and target in known_repos:
-            edges.append((source, target, edge_type, detail))
+            edges.append((source, target, entry["edge_type"], entry.get("detail", "")))
 
     if edges:
         conn.executemany(
@@ -1882,7 +1816,7 @@ def parse_merchant_entity_edges(conn: sqlite3.Connection):
             edges,
         )
 
-    print(f"  Merchant entity edges: {len(edges)}")
+    print(f"  {group} edges: {len(edges)}")
 
 
 def build_package_repo_map(conn: sqlite3.Connection):
@@ -1978,10 +1912,10 @@ def main():
         parse_similar_repo_edges(conn)
 
         print("\n19. Parsing connection validation edges...")
-        parse_connection_validation_edges(conn)
+        parse_manual_edges(conn, "connection_validation")
 
         print("\n20. Parsing merchant entity edges...")
-        parse_merchant_entity_edges(conn)
+        parse_manual_edges(conn, "merchant_entity")
 
         print("\n21. Gateway runtime routing edges...")
         if GATEWAY_REPO:

@@ -14,7 +14,7 @@ from src.config import PROTO_REPOS
 from src.container import get_db, require_db
 from src.formatting import strip_repo_tag
 from src.graph.queries import get_incoming_edges, get_outgoing_edges
-from src.search.fts import expand_query
+from src.search.fts import expand_query, sanitize_fts_with_stop_words
 from src.search.hybrid import hybrid_search
 
 
@@ -93,23 +93,30 @@ def _build_context(
     if vec_err:
         output += f"⚠️ Vector search unavailable: {vec_err}\n\n"
 
-    # 2. Dependencies
-    if include_deps and seen_repos:
-        output += _build_deps_section(list(seen_repos.keys()))
+    # Single DB connection for all subsequent sections
+    conn = get_db()
+    try:
+        # 2. Dependencies
+        if include_deps and seen_repos:
+            output += _build_deps_section(list(seen_repos.keys()), conn)
 
-    # 3. Proto
-    if include_proto:
-        output += _build_proto_section(expanded, query, list(seen_repos.keys()))
+        # 3. Proto
+        if include_proto:
+            output += _build_proto_section(expanded, query, list(seen_repos.keys()), conn)
 
-    # 4. Repo summary
-    output += _build_repo_summary(list(seen_repos.keys()))
+        # 4. Repo summary
+        output += _build_repo_summary(list(seen_repos.keys()), conn)
+    finally:
+        conn.close()
 
     return output
 
 
-def _build_deps_section(repo_names: list[str]) -> str:
+def _build_deps_section(repo_names: list[str], conn=None) -> str:
     """Build compact dependency overview for discovered repos."""
-    conn = get_db()
+    own_conn = conn is None
+    if own_conn:
+        conn = get_db()
     try:
         output = f"## Dependencies ({len(repo_names)} repos)\n\n"
 
@@ -153,18 +160,22 @@ def _build_deps_section(repo_names: list[str]) -> str:
 
         return output
     finally:
-        conn.close()
+        if own_conn:
+            conn.close()
 
 
 def _build_proto_section(
     expanded_query: str,
     raw_query: str,
     relevant_repos: list[str] | None = None,
+    conn=None,
 ) -> str:
     """Find relevant proto definitions, prioritizing results from repos in search hits."""
-    conn = get_db()
+    own_conn = conn is None
+    if own_conn:
+        conn = get_db()
     try:
-        fts_q = _sanitize_for_fts(expanded_query)
+        fts_q = sanitize_fts_with_stop_words(expanded_query)
         if not fts_q:
             return ""
 
@@ -212,66 +223,20 @@ def _build_proto_section(
     except Exception:
         return ""
     finally:
-        conn.close()
+        if own_conn:
+            conn.close()
 
 
-_STOP_WORDS = frozenset(
-    {
-        "add",
-        "get",
-        "set",
-        "use",
-        "new",
-        "the",
-        "for",
-        "and",
-        "with",
-        "from",
-        "how",
-        "does",
-        "what",
-        "this",
-        "that",
-        "into",
-        "make",
-        "call",
-        "need",
-        "want",
-        "help",
-        "show",
-        "find",
-        "look",
-        "check",
-        "support",
-        "change",
-        "update",
-        "create",
-        "delete",
-        "remove",
-        "implement",
-        "about",
-        "where",
-    }
-)
+# Backward-compat alias — callers (including tests) that import _sanitize_for_fts
+# from this module will get the canonical implementation from fts.py.
+_sanitize_for_fts = sanitize_fts_with_stop_words
 
 
-def _sanitize_for_fts(query: str) -> str:
-    """Sanitize query for proto FTS search — strip stop words, OR mode.
-
-    Uses OR because proto files rarely contain provider-specific terms,
-    so AND would be too restrictive. Stop-word removal eliminates the
-    noise (e.g. 'add', 'support' matching envoy-proto).
-    """
-    tokens = query.split()
-    sanitized = [t for t in tokens if len(t) >= 3 and t.lower() not in _STOP_WORDS]
-    if not sanitized:
-        sanitized = [t for t in tokens if len(t) >= 3]
-    return " OR ".join(sanitized) if sanitized else ""
-
-
-def _build_repo_summary(repo_names: list[str]) -> str:
+def _build_repo_summary(repo_names: list[str], conn=None) -> str:
     """Build a compact summary of discovered repos."""
-    conn = get_db()
+    own_conn = conn is None
+    if own_conn:
+        conn = get_db()
     try:
         output = "## Repo Summary\n\n"
         output += "| Repo | Type | Methods |\n|------|------|--------|\n"
@@ -292,4 +257,5 @@ def _build_repo_summary(repo_names: list[str]) -> str:
         output += "\n"
         return output
     finally:
-        conn.close()
+        if own_conn:
+            conn.close()

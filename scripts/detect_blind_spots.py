@@ -22,21 +22,20 @@ Usage:
 
 import json
 import os
-import sqlite3
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from scripts.bench_utils import (
+    get_db,
+)
+from scripts.bench_utils import (
+    run_hybrid_search as _run_hybrid_search_base,
+)
+
 _BASE = Path(os.getenv("CODE_RAG_HOME", Path.home() / ".code-rag"))
-DB_PATH = _BASE / "db" / "knowledge.db"
-
-
-def get_db():
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
 
 
 def derive_queries_from_content(repo_name: str, conn) -> list[str]:
@@ -200,15 +199,7 @@ def derive_queries(repo_name: str, repo_type: str, conn=None) -> list[str]:
 
 def run_hybrid_search(query: str, limit: int = 10) -> set[str]:
     """Run hybrid search, return set of repo names found."""
-    try:
-        from src.search.fts import expand_query
-        from src.search.hybrid import hybrid_search
-
-        expanded = expand_query(query)
-        ranked, _err, _total = hybrid_search(expanded, limit=limit)
-        return set(r["repo_name"] for r in ranked)
-    except Exception:
-        return set()
+    return _run_hybrid_search_base(query, limit=limit)["repos"]
 
 
 def find_important_repos(conn, min_dependents: int = 10) -> list[dict]:

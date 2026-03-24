@@ -12,7 +12,6 @@ Usage:
 
 import json
 import os
-import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -21,25 +20,19 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from scripts.bench_utils import (
+    get_db,
+    resolve_profile_dir,
+    run_fts_search,
+    run_hybrid_search,
+)
+
 _BASE = Path(os.getenv("CODE_RAG_HOME", Path.home() / ".code-rag"))
-DB_PATH = _BASE / "db" / "knowledge.db"
-
-
-def _resolve_profile_dir() -> Path:
-    """Resolve the active profile directory (mirrors src/config.py logic)."""
-    if env_profile := os.getenv("ACTIVE_PROFILE"):
-        return _BASE / "profiles" / env_profile
-    marker = _BASE / ".active_profile"
-    if marker.exists():
-        name = marker.read_text().strip()
-        if name and (_BASE / "profiles" / name).is_dir():
-            return _BASE / "profiles" / name
-    return _BASE / "profiles" / "example"
 
 
 def _load_benchmark_queries() -> list[dict]:
     """Load conceptual_queries from the active profile's benchmarks.yaml."""
-    profile_dir = _resolve_profile_dir()
+    profile_dir = resolve_profile_dir()
     bench_path = profile_dir / "benchmarks.yaml"
     if not bench_path.exists():
         print(f"No benchmarks.yaml found in profile: {profile_dir}")
@@ -54,12 +47,6 @@ def _load_benchmark_queries() -> list[dict]:
     return queries
 
 
-def get_db():
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
 # ============================================================
 # Benchmark query definitions — loaded from active profile
 # ============================================================
@@ -70,35 +57,6 @@ BENCHMARK_QUERIES = _load_benchmark_queries()
 # ============================================================
 # Retrieval functions
 # ============================================================
-
-
-def run_fts_search(conn, query, limit=20):
-    """Run FTS5 search, return set of repo names + snippets."""
-    # Sanitize for FTS5
-    tokens = query.split()
-    sanitized = []
-    for t in tokens:
-        if len(t) < 3:
-            continue
-        if "-" in t:
-            sanitized.append(f'"{t}"')
-        else:
-            sanitized.append(t)
-    fts_query = " OR ".join(sanitized) if sanitized else query
-
-    try:
-        rows = conn.execute(
-            """SELECT repo_name, file_path,
-                      snippet(chunks, 0, '>>>', '<<<', '...', 30) as snippet
-               FROM chunks WHERE chunks MATCH ? ORDER BY rank LIMIT ?""",
-            (fts_query, limit),
-        ).fetchall()
-        return {
-            "repos": set(r["repo_name"] for r in rows),
-            "results": [(r["repo_name"], r["file_path"], r["snippet"][:200]) for r in rows],
-        }
-    except sqlite3.OperationalError as e:
-        return {"repos": set(), "results": [], "error": str(e)}
 
 
 def run_vector_search(query, limit=20):
@@ -112,23 +70,6 @@ def run_vector_search(query, limit=20):
         return {
             "repos": set(r["repo_name"] for r in results),
             "results": [(r["repo_name"], r["file_path"], r.get("content_preview", "")[:200]) for r in results],
-        }
-    except Exception as e:
-        return {"repos": set(), "results": [], "error": str(e)}
-
-
-def run_hybrid_search(query, limit=10):
-    """Run full hybrid search (FTS + vector + RRF + reranker)."""
-    try:
-        from src.search.fts import expand_query
-        from src.search.hybrid import hybrid_search
-
-        expanded = expand_query(query)
-        ranked, err, _total = hybrid_search(expanded, limit=limit)
-        return {
-            "repos": set(r["repo_name"] for r in ranked),
-            "results": [(r["repo_name"], r["file_path"], r.get("snippet", "")[:200]) for r in ranked],
-            "error": err,
         }
     except Exception as e:
         return {"repos": set(), "results": [], "error": str(e)}
@@ -176,7 +117,7 @@ def check_keyword_in_results(results_list, keywords):
 def main():
     verbose = "--verbose" in sys.argv
 
-    profile_name = _resolve_profile_dir().name
+    profile_name = resolve_profile_dir().name
     print("=" * 70)
     print(f"Benchmark: {len(BENCHMARK_QUERIES)} Conceptual Queries (profile: {profile_name})")
     print("Testing search quality for real-world questions")

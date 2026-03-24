@@ -25,6 +25,15 @@ _KEYWORD_STOP_WORDS = frozenset(
 
 
 @dataclass
+class Finding:
+    """A single analysis finding — replaces raw (ftype, repo, confidence) tuples."""
+
+    ftype: str
+    repo: str
+    confidence: str = "medium"
+
+
+@dataclass
 class AnalysisContext:
     """Shared state accumulated across analyzer sections."""
 
@@ -32,9 +41,7 @@ class AnalysisContext:
     description: str
     words: set[str]
     provider: str
-    findings: list[tuple[str, str, str]] = field(default_factory=list)
-    # Each finding: (finding_type, repo_name, confidence)
-    # confidence: "high", "medium", "low"
+    findings: list[Finding] = field(default_factory=list)
 
 
 def useful_keywords(words: set[str]) -> list[str]:

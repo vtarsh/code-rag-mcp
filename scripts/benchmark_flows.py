@@ -26,26 +26,21 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from scripts.bench_utils import (
+    resolve_profile_dir,
+)
+from scripts.bench_utils import (
+    run_hybrid_search as _run_hybrid_search_base,
+)
+
 _BASE = Path(os.getenv("CODE_RAG_HOME", Path.home() / ".code-rag"))
 DB_PATH = _BASE / "db" / "knowledge.db"
 RESULTS_FILE = Path(__file__).parent.parent / "benchmark_flows_results.json"
 
 
-def _resolve_profile_dir() -> Path:
-    """Resolve the active profile directory (mirrors src/config.py logic)."""
-    if env_profile := os.getenv("ACTIVE_PROFILE"):
-        return _BASE / "profiles" / env_profile
-    marker = _BASE / ".active_profile"
-    if marker.exists():
-        name = marker.read_text().strip()
-        if name and (_BASE / "profiles" / name).is_dir():
-            return _BASE / "profiles" / name
-    return _BASE / "profiles" / "example"
-
-
 def _load_flow_queries() -> list[dict]:
     """Load flow_queries from the active profile's benchmarks.yaml."""
-    profile_dir = _resolve_profile_dir()
+    profile_dir = resolve_profile_dir()
     bench_path = profile_dir / "benchmarks.yaml"
     if not bench_path.exists():
         print(f"No benchmarks.yaml found in profile: {profile_dir}")
@@ -73,27 +68,14 @@ FLOWS = _load_flow_queries()
 
 
 def run_hybrid_search(query: str, limit: int = 15) -> dict:
-    """Run full hybrid search pipeline."""
-    try:
-        from src.search.fts import expand_query
-        from src.search.hybrid import hybrid_search
-
-        expanded = expand_query(query)
-        ranked, err, _total = hybrid_search(expanded, limit=limit)
-        return {
-            "repos": set(r["repo_name"] for r in ranked),
-            "results": [
-                {
-                    "repo": r["repo_name"],
-                    "file": r["file_path"],
-                    "snippet": r.get("snippet", r.get("content_preview", ""))[:500],
-                }
-                for r in ranked
-            ],
-            "error": err,
-        }
-    except Exception as e:
-        return {"repos": set(), "results": [], "error": str(e)}
+    """Run full hybrid search pipeline, returning dict-style results for flow evaluation."""
+    base = _run_hybrid_search_base(query, limit=limit)
+    # Re-format results as dicts (flow evaluation expects repo/file/snippet keys)
+    return {
+        "repos": base["repos"],
+        "results": [{"repo": repo, "file": fpath, "snippet": snippet} for repo, fpath, snippet in base["results"]],
+        "error": base.get("error"),
+    }
 
 
 def run_trace_flow(source: str, target: str) -> dict:
@@ -227,7 +209,7 @@ def evaluate_flow(flow: dict, verbose: bool = False) -> dict:
 def main():
     verbose = "--verbose" in sys.argv or "-v" in sys.argv
 
-    profile_name = _resolve_profile_dir().name
+    profile_name = resolve_profile_dir().name
     print("=" * 70)
     print(f"Flow Completeness Benchmark ({len(FLOWS)} flows, profile: {profile_name})")
     print("=" * 70)

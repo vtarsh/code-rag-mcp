@@ -13,7 +13,6 @@ Usage:
 
 import json
 import os
-import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -22,25 +21,19 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from scripts.bench_utils import (
+    get_db,
+    resolve_profile_dir,
+    run_fts_search,
+    run_hybrid_search,
+)
+
 _BASE = Path(os.getenv("CODE_RAG_HOME", Path.home() / ".code-rag"))
-DB_PATH = _BASE / "db" / "knowledge.db"
-
-
-def _resolve_profile_dir() -> Path:
-    """Resolve the active profile directory (mirrors src/config.py logic)."""
-    if env_profile := os.getenv("ACTIVE_PROFILE"):
-        return _BASE / "profiles" / env_profile
-    marker = _BASE / ".active_profile"
-    if marker.exists():
-        name = marker.read_text().strip()
-        if name and (_BASE / "profiles" / name).is_dir():
-            return _BASE / "profiles" / name
-    return _BASE / "profiles" / "example"
 
 
 def _load_realworld_queries() -> list[dict]:
     """Load realworld_queries from the active profile's benchmarks.yaml."""
-    profile_dir = _resolve_profile_dir()
+    profile_dir = resolve_profile_dir()
     bench_path = profile_dir / "benchmarks.yaml"
     if not bench_path.exists():
         print(f"No benchmarks.yaml found in profile: {profile_dir}")
@@ -55,65 +48,11 @@ def _load_realworld_queries() -> list[dict]:
     return queries
 
 
-def get_db():
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
 # ============================================================
 # Real-world queries — loaded from active profile
 # ============================================================
 
 REALWORLD_QUERIES = _load_realworld_queries()
-
-
-# ============================================================
-# Retrieval functions (same as benchmark_queries.py)
-# ============================================================
-
-
-def run_fts_search(conn, query, limit=20):
-    tokens = query.split()
-    sanitized = []
-    for t in tokens:
-        if len(t) < 3:
-            continue
-        if "-" in t:
-            sanitized.append(f'"{t}"')
-        else:
-            sanitized.append(t)
-    fts_query = " OR ".join(sanitized) if sanitized else query
-
-    try:
-        rows = conn.execute(
-            """SELECT repo_name, file_path,
-                      snippet(chunks, 0, '>>>', '<<<', '...', 30) as snippet
-               FROM chunks WHERE chunks MATCH ? ORDER BY rank LIMIT ?""",
-            (fts_query, limit),
-        ).fetchall()
-        return {
-            "repos": set(r["repo_name"] for r in rows),
-            "results": [(r["repo_name"], r["file_path"], r["snippet"][:200]) for r in rows],
-        }
-    except sqlite3.OperationalError as e:
-        return {"repos": set(), "results": [], "error": str(e)}
-
-
-def run_hybrid_search(query, limit=10):
-    try:
-        from src.search.fts import expand_query
-        from src.search.hybrid import hybrid_search
-
-        expanded = expand_query(query)
-        ranked, err, _total = hybrid_search(expanded, limit=limit)
-        return {
-            "repos": set(r["repo_name"] for r in ranked),
-            "results": [(r["repo_name"], r["file_path"], r.get("snippet", "")[:200]) for r in ranked],
-            "error": err,
-        }
-    except Exception as e:
-        return {"repos": set(), "results": [], "error": str(e)}
 
 
 def run_graph_dependents(conn, repo_name):
@@ -148,7 +87,7 @@ def main():
         if arg.startswith("--query="):
             filter_query = arg.split("=", 1)[1].upper()
 
-    profile_name = _resolve_profile_dir().name
+    profile_name = resolve_profile_dir().name
     print("=" * 70)
     print(f"Real-World Benchmark: {len(REALWORLD_QUERIES)} Developer Queries (profile: {profile_name})")
     print("Testing search quality for daily development tasks")

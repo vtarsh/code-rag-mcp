@@ -9,7 +9,7 @@ from pathlib import Path
 from src.config import GATEWAY_REPO, INFRA_REPOS, INFRA_SUFFIXES, PROVIDER_PREFIXES, WEBHOOK_REPOS
 from src.formatting import strip_repo_tag
 
-from .base import _KEYWORD_STOP_WORDS, AnalysisContext
+from .base import _KEYWORD_STOP_WORDS, AnalysisContext, Finding
 
 # Short/ambiguous words that match provider names but are common in non-provider contexts
 _AMBIGUOUS_PROVIDER_NAMES = frozenset({"ach", "iris", "volt", "checkout", "plaid"})
@@ -80,7 +80,7 @@ def section_bulk_providers(ctx: AnalysisContext) -> str:
     output = f"## Bulk Provider Change ({len(routed)} providers)\n\n"
     output += "_Task targets all providers — listing all routed repos:_\n\n"
     for r in routed:
-        ctx.findings.append(("provider", r["target"], "high"))
+        ctx.findings.append(Finding("provider", r["target"], "high"))
         output += f"  - **{r['target']}**\n"
     output += "\n"
     return output
@@ -103,7 +103,7 @@ def section_provider(ctx: AnalysisContext) -> str:
         ).fetchall()
         method_names = [Path(m["file_path"]).stem for m in methods]
         output += f"**{repo_name}** ({repo['type']})\n  Methods: {', '.join(method_names)}\n\n"
-        ctx.findings.append(("provider", repo_name, "high"))
+        ctx.findings.append(Finding("provider", repo_name, "high"))
 
         for keyword in ctx.words:
             if len(keyword) > 4 and keyword not in _KEYWORD_STOP_WORDS:
@@ -120,7 +120,7 @@ def section_provider(ctx: AnalysisContext) -> str:
     # Cross-provider content search: find other provider repos that reference
     # this provider name in their code (e.g., neteller references in grpc-providers-paysafe)
     if ctx.provider:
-        already = {rname for _, rname, *_ in ctx.findings}
+        already = {f.repo for f in ctx.findings}
         try:
             cross_hits = ctx.conn.execute(
                 "SELECT DISTINCT repo_name FROM chunks WHERE chunks MATCH ? AND repo_name NOT IN ({}) LIMIT 20".format(
@@ -134,7 +134,7 @@ def section_provider(ctx: AnalysisContext) -> str:
             if cross_provider:
                 output += f"### Cross-provider references to `{ctx.provider}`\n\n"
                 for repo in cross_provider:
-                    ctx.findings.append(("provider", repo, "high"))
+                    ctx.findings.append(Finding("provider", repo, "high"))
                     output += f"  - **{repo}** (mentions `{ctx.provider}` in code)\n"
                 output += "\n"
         except Exception:
@@ -163,7 +163,7 @@ def section_webhooks(ctx: AnalysisContext) -> str:
         if rname not in repos_seen:
             repos_seen.add(rname)
             output += f"**{rname}**\n"
-            ctx.findings.append(("webhook", rname, "high"))
+            ctx.findings.append(Finding("webhook", rname, "high"))
         snip = strip_repo_tag(row["snippet"])
         output += f"  `{row['file_path']}`: {snip[:150]}\n"
     output += "\n"
@@ -195,7 +195,7 @@ def section_change_impact(ctx: AnalysisContext) -> str:
         return ""
 
     output = "## 9. Change Impact (Method Consumers)\n\n"
-    provider_repos = [rname for ftype, rname, *_ in ctx.findings if ftype == "provider"]
+    provider_repos = [f.repo for f in ctx.findings if f.ftype == "provider"]
 
     for repo in provider_repos:
         consumers = ctx.conn.execute(
@@ -260,7 +260,7 @@ def section_provider_checklist(ctx: AnalysisContext) -> str:
         return ""
 
     output = "## 10. Provider Integration Checklist\n\n"
-    finding_repos = {rname for _, rname, *_ in ctx.findings}
+    finding_repos = {f.repo for f in ctx.findings}
 
     for item in INFRA_REPOS:
         repo = item.get("repo", "")

@@ -9,7 +9,7 @@ from pathlib import Path
 from src.config import GATEWAY_REPO, PROTO_REPOS
 from src.formatting import strip_repo_tag
 
-from .base import _KEYWORD_STOP_WORDS, AnalysisContext, extract_task_id, fts_queries
+from .base import _KEYWORD_STOP_WORDS, AnalysisContext, Finding, extract_task_id, fts_queries
 from .github_helpers import find_task_branches, find_task_prs
 from .method_helpers import check_method_exists
 
@@ -155,7 +155,7 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
     if similar_tasks:
         output_parts.append("## Historical Task Patterns\n")
         output_parts.append("_Based on similar past tasks, these repos/files were involved:_\n")
-        existing_finding_repos = {r for _, r, *_ in ctx.findings}
+        existing_finding_repos = {f.repo for f in ctx.findings}
         for t in similar_tasks:
             repos_str = ", ".join(f"**{r}**" for r in t["repos"][:8])
             if len(t["repos"]) > 8:
@@ -169,7 +169,7 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
                 output_parts.append(f"  PR repos: {pr_repos_str}\n")
                 for repo in pr_repos:
                     if repo not in existing_finding_repos:
-                        ctx.findings.append(("pr_url_signal", repo, "high"))
+                        ctx.findings.append(Finding("pr_url_signal", repo, "high"))
                         existing_finding_repos.add(repo)
 
             # Similar-task boost: if past task shares ≥3 repos with current findings,
@@ -178,7 +178,7 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
             if len(overlap) >= 3:
                 for repo in t["repos"]:
                     if repo not in existing_finding_repos:
-                        ctx.findings.append(("similar_task", repo, "medium"))
+                        ctx.findings.append(Finding("similar_task", repo, "medium"))
                         existing_finding_repos.add(repo)
 
     # Upstream caller patterns
@@ -231,11 +231,11 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
             output_parts.append(f"- {c}\n")
 
     # Inject pattern repos into findings
-    existing_finding_repos = {r for _, r, *_ in ctx.findings}
+    existing_finding_repos = {f.repo for f in ctx.findings}
     added = 0
     for repo, _reason, occurrences in pattern_repos:
         if repo not in existing_finding_repos and occurrences >= 5:
-            ctx.findings.append(("pattern", repo, "medium"))
+            ctx.findings.append(Finding("pattern", repo, "medium"))
             existing_finding_repos.add(repo)
             added += 1
 
@@ -338,7 +338,7 @@ def section_proto(ctx: AnalysisContext) -> str:
                 if matching:
                     output += f"  `{word}` matches proto method: **{', '.join(matching)}**\n"
             output += "\n"
-        ctx.findings.append(("proto", proto_repo, "high"))
+        ctx.findings.append(Finding("proto", proto_repo, "high"))
     return output
 
 
@@ -358,7 +358,7 @@ def section_gateway(ctx: AnalysisContext) -> str:
         if matching_methods:
             output += f"  Task-relevant methods: **{', '.join(matching_methods)}**\n"
         output += "\n"
-        ctx.findings.append(("gateway", GATEWAY_REPO, "high"))
+        ctx.findings.append(Finding("gateway", GATEWAY_REPO, "high"))
     return output
 
 
@@ -372,8 +372,9 @@ def section_methods(ctx: AnalysisContext) -> tuple[str, set[str], dict[str, dict
     task_methods: set[str] = ctx.words & known_method_names
 
     method_status: dict[str, dict] = {}
-    for ftype, rname, *_conf in ctx.findings:
-        if ftype in ("provider", "gateway"):
+    for finding in ctx.findings:
+        if finding.ftype in ("provider", "gateway"):
+            rname = finding.repo
             for method in task_methods:
                 result = check_method_exists(rname, method, ctx.conn)
                 key = f"{rname}:{method}"
@@ -395,7 +396,7 @@ def section_github(ctx: AnalysisContext) -> tuple[str, dict[str, list[dict]], di
     output = "## 7. GitHub Activity\n\n"
     task_id = extract_task_id(ctx.description)
 
-    all_repos = list({rname for _, rname, *_ in ctx.findings} | {"e2e-tests"})
+    all_repos = list({f.repo for f in ctx.findings} | {"e2e-tests"})
 
     pr_data: dict[str, list[dict]] = {}
     branch_data: dict[str, list[str]] = {}
@@ -479,16 +480,18 @@ def section_completeness(
     output = "## 8. Completeness Report\n\n"
 
     # Deduplicate by repo name, keeping highest confidence
-    best: dict[str, tuple[str, str, str]] = {}  # repo → (ftype, repo, confidence)
-    for ftype, rname, *rest in ctx.findings:
-        conf = rest[0] if rest else "medium"
-        if rname not in best or _CONFIDENCE_RANK.get(conf, 1) < _CONFIDENCE_RANK.get(best[rname][2], 1):
-            best[rname] = (ftype, rname, conf)
+    best: dict[str, Finding] = {}  # repo → Finding
+    for finding in ctx.findings:
+        if finding.repo not in best or _CONFIDENCE_RANK.get(finding.confidence, 1) < _CONFIDENCE_RANK.get(
+            best[finding.repo].confidence, 1
+        ):
+            best[finding.repo] = finding
 
     # Build checklist entries: (repo, label, status, reason, confidence)
     checklist: list[tuple[str, str, str, str, str]] = []
 
-    for rname, (ftype, _, conf) in best.items():
+    for rname, bf in best.items():
+        ftype, conf = bf.ftype, bf.confidence
         status = "TODO"
         reason = ""
 
@@ -587,7 +590,7 @@ def section_ci_risk(ctx: AnalysisContext) -> str:
     if not has_ci:
         return ""
 
-    finding_repos = {rname for _, rname, *_ in ctx.findings}
+    finding_repos = {f.repo for f in ctx.findings}
     if not finding_repos:
         return ""
 
