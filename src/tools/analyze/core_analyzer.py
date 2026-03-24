@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import re
 
-from src.config import CO_CHANGE_RULES, DOMAIN_PATTERNS
+from src.config import (
+    CO_CHANGE_RULES,
+    DOMAIN_PATTERNS,
+    HUB_DOWNSTREAM_MIN_DEPENDENTS,
+    HUB_NEVER_CASCADE,
+    HUB_SHALLOW_CASCADE,
+)
 from src.graph.queries import bfs_dependents
 
 from .base import _KEYWORD_STOP_WORDS, AnalysisContext
@@ -156,11 +162,14 @@ def _section_cascade(ctx: AnalysisContext, classification: TaskClassification) -
     all_affected: dict[str, tuple[str, str]] = {}  # repo → (via_seed, edge_type)
     seed_set = set(seed_repos)
 
-    # Upstream: repos that depend ON seeds (existing BFS)
-    # Hub penalty: don't expand nodes with >50 dependents (e.g., libs-types)
-    # They are still added to findings but their 400+ dependents don't flood output
+    # Upstream: repos that depend ON seeds (BFS with hub penalty)
+    # never_cascade repos: skip entirely as seeds (their 200+ dependents would flood output)
+    # shallow_cascade repos: max_depth=1 only (immediate dependents)
     for seed in seed_repos:
-        levels = bfs_dependents(ctx.conn, seed, max_depth=2, max_in_degree=50)
+        if seed in HUB_NEVER_CASCADE:
+            continue  # don't cascade through ultra-high-degree hubs
+        depth = 1 if seed in HUB_SHALLOW_CASCADE else 2
+        levels = bfs_dependents(ctx.conn, seed, max_depth=depth, max_in_degree=50)
         for _level, deps in levels.items():
             for dep_name, edge_type in deps:
                 if dep_name not in all_affected and dep_name not in seed_set:
@@ -185,8 +194,8 @@ def _section_cascade(ctx: AnalysisContext, classification: TaskClassification) -
                 "SELECT COUNT(DISTINCT source) as n FROM graph_edges WHERE target = ? AND source NOT LIKE 'pkg:%'",
                 (target,),
             ).fetchone()["n"]
-            # Hub threshold: at least 5 dependents (commonly shared infrastructure)
-            if in_degree >= 5 and target not in downstream_hubs:
+            # Hub threshold: configurable minimum dependents for downstream inclusion
+            if in_degree >= HUB_DOWNSTREAM_MIN_DEPENDENTS and target not in downstream_hubs:
                 downstream_hubs[target] = (seed, row["edge_type"], in_degree)
 
     if all_affected:

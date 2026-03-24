@@ -135,6 +135,12 @@ PROTO_TRIGGER_REPOS: set[str] = set(_conventions.get("proto_trigger_repos", []))
 REPO_NAME_PREFIXES: list[str] = _conventions.get("repo_name_prefixes", [])
 
 # Bulk migration detection
+# Hub penalty config — repos that should not be cascaded through
+_hub_penalty: dict = _conventions.get("hub_penalty", {})
+HUB_NEVER_CASCADE: set[str] = set(_hub_penalty.get("never_cascade", []))
+HUB_SHALLOW_CASCADE: set[str] = set(_hub_penalty.get("shallow_cascade", []))
+HUB_DOWNSTREAM_MIN_DEPENDENTS: int = _hub_penalty.get("downstream_min_dependents", 15)
+
 BULK_KEYWORDS: list[str] = _conventions.get("bulk_keywords", [])
 SERVICE_REPO_PATTERNS: list[str] = _conventions.get("service_repo_patterns", [])
 
