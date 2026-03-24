@@ -22,7 +22,7 @@ After EVERY code change or mechanism improvement:
 1. **Benchmark** — recall + precision before and after
 2. **Pattern mine** — `/pattern-mine` skill for new patterns
 3. **Implement** — if pattern found, implement and benchmark again
-4. **Update .claude** — update lessons-active.md, testing.md baselines
+4. **Update .claude** — update lessons-active.md, RECALL-TRACKER.md baselines
 
 Trigger points: after benchmark improvement, after adding tasks, after modifying cascade/classifier, after every 10th deep analysis.
 
