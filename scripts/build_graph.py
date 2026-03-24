@@ -253,6 +253,22 @@ def parse_npm_dep_edges(conn: sqlite3.Connection):
             edge_type = _classify_npm_dep(pkg_name, target)
             edges.append((source, target or f"pkg:{dep}", edge_type, dep))
 
+    # Upgrade npm_dep → grpc_client_usage for known gRPC consumer repos.
+    # Only specific consumer patterns (graphql, express-api-*, backoffice-web) that
+    # import @pay-com/core-X as gRPC client stubs deserve this upgrade.
+    # This is narrower than upgrading ALL npm_dep to grpc-* targets (which caused regression).
+    _grpc_consumer_prefixes = ("graphql", "express-api-", "backoffice-web", "next-web-")
+    upgraded = []
+    for i, (source, target, etype, detail) in enumerate(edges):
+        if (
+            etype == "npm_dep"
+            and target
+            and target.startswith("grpc-")
+            and any(source.startswith(p) or source == p.rstrip("-") for p in _grpc_consumer_prefixes)
+        ):
+            edges[i] = (source, target, "grpc_client_usage", detail)
+            upgraded.append((source, target))
+
     unique_edges = list(set(edges))
     for e in unique_edges:
         conn.execute("INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)", e)
@@ -260,7 +276,9 @@ def parse_npm_dep_edges(conn: sqlite3.Connection):
 
     resolved = len([e for e in unique_edges if not e[1].startswith("pkg:")])
     unresolved = len(unique_edges) - resolved
-    print(f"  npm dep edges: {len(unique_edges)} ({resolved} resolved to repos, {unresolved} unresolved packages)")
+    print(
+        f"  npm dep edges: {len(unique_edges)} ({resolved} resolved, {unresolved} unresolved, {len(upgraded)} upgraded to grpc_client_usage)"
+    )
 
 
 def parse_k8s_env_edges(conn: sqlite3.Connection):

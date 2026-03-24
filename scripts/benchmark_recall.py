@@ -55,6 +55,37 @@ def _repos_with_files(files_changed: str | None, repos: set[str]) -> set[str]:
     return (repos & repos_with) if repos_with else repos
 
 
+_PKG_BUMP_FILES = {"package.json", "package-lock.json", "yarn.lock"}
+
+
+def _filter_pkg_bump_repos(files_changed: str | None, repos: set[str]) -> tuple[set[str], int]:
+    """Exclude repos whose only changed files are package bump artifacts.
+
+    Returns (filtered_repos, count_of_excluded_repos).
+    """
+    if not files_changed:
+        return repos, 0  # no files data — keep all repos
+    files = json.loads(files_changed)
+    if not files:
+        return repos, 0
+
+    # Build mapping: repo -> set of file basenames
+    repo_files: dict[str, set[str]] = {}
+    for f in files:
+        if "/" in f:
+            repo = f.split("/")[0]
+            filename = f.rsplit("/", 1)[-1]
+            repo_files.setdefault(repo, set()).add(filename)
+
+    pkg_only_repos = set()
+    for repo, filenames in repo_files.items():
+        if filenames and filenames <= _PKG_BUMP_FILES:
+            pkg_only_repos.add(repo)
+
+    filtered = repos - pkg_only_repos
+    return filtered, len(repos) - len(filtered)
+
+
 _RERANK_SECTION_RE = re.compile(r"## Re-ranked Predictions \(Gemini\)\n(.*?)(?=\n## |\Z)", re.DOTALL)
 
 
@@ -70,6 +101,7 @@ def run_benchmark(
     groups: list[str] | None = None,
     single_task: str | None = None,
     filter_phantoms: bool = False,
+    filter_pkg_bumps: bool = False,
     rerank: bool = False,
 ) -> None:
     conn = sqlite3.connect(str(DB_PATH))
@@ -95,6 +127,7 @@ def run_benchmark(
     group_stats: dict[str, list[int]] = {}
     total_hits, total_actual, total_found = 0, 0, 0
     phantom_count = 0
+    pkg_bump_count = 0
 
     for r in rows:
         tid = r["ticket_id"]
@@ -106,6 +139,12 @@ def run_benchmark(
             filtered = _repos_with_files(r["files_changed"], actual)
             phantom_count += len(actual) - len(filtered)
             actual = filtered
+            if not actual:
+                continue
+
+        if filter_pkg_bumps:
+            actual, excluded = _filter_pkg_bump_repos(r["files_changed"], actual)
+            pkg_bump_count += excluded
             if not actual:
                 continue
 
@@ -155,6 +194,8 @@ def run_benchmark(
     print("\n" + "=" * 70)
     if filter_phantoms:
         print(f"[phantom filter ON: {phantom_count} phantom repos excluded]")
+    if filter_pkg_bumps:
+        print(f"[pkg-bump filter ON: {pkg_bump_count} pkg-bump-only repos excluded]")
     for g, (h, a, f) in sorted(group_stats.items()):
         g_recall = h / a * 100
         g_precision = h / f * 100 if f else 0.0
@@ -180,12 +221,23 @@ def main() -> None:
         "--filter-phantoms", action="store_true", help="Exclude repos with zero files_changed from ground truth"
     )
     parser.add_argument(
+        "--filter-pkg-bumps",
+        action="store_true",
+        help="Exclude repos whose only changes are package.json/package-lock.json/yarn.lock",
+    )
+    parser.add_argument(
         "--rerank", action="store_true", help="Enable Gemini re-ranking and measure from re-ranked section"
     )
     args = parser.parse_args()
 
     groups = [g.strip().upper() for g in args.group.split(",")] if args.group else None
-    run_benchmark(groups=groups, single_task=args.task, filter_phantoms=args.filter_phantoms, rerank=args.rerank)
+    run_benchmark(
+        groups=groups,
+        single_task=args.task,
+        filter_phantoms=args.filter_phantoms,
+        filter_pkg_bumps=args.filter_pkg_bumps,
+        rerank=args.rerank,
+    )
 
 
 if __name__ == "__main__":
