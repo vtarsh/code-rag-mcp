@@ -17,6 +17,16 @@ All payload fields MUST be conditional — never send `undefined` to a provider 
 
 Use sanitization helpers from `@pay-com/providers-common` for user inputs (phone, email, name fields).
 
+`sanitizeAndCutInput(value, maxLength)` from `@pay-com/providers-common/libs` does: trim + normalize unicode (ÀàÉé→AaEe) + cut to max length.
+
+**What to sanitize** (based on real provider usage):
+- **Always**: `firstName`, `lastName` — sanitize with provider's max length (or 255 default)
+- **Per provider need**: `addressLine`, `city`, `state`, `zip` — card providers (nuvei, paysafe, stripe) sanitize these; APM providers (volt, ppro, trustly) usually don't
+- **Never sanitize**: `email` (own format), `countryAlpha2` (2-letter ISO), `ip_address`, `currency`
+- **Phone**: separate logic — check `+` prefix if provider requires it, not via sanitize
+
+Reference: volt (APM, minimal — name only), nuvei (card, extensive — all billing fields), paysafe (card, all + country).
+
 ## 2. Reference Existing Providers
 
 Before implementing any pattern, find an existing provider that does the same thing:
