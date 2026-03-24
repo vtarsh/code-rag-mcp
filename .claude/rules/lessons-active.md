@@ -1,13 +1,5 @@
 # Active Lessons & Rules
 
-Distilled from lesson log. Full history: `.claude/archive/lessons-full-log.md`
-
-## Rule: Capture Repeated Instructions
-If user repeats the same instruction/correction — it's not documented well enough. Immediately:
-1. Save the lesson here with date and context.
-2. Update the relevant .claude/rules/ file.
-3. If user preference, save to memory too.
-
 ## Search & Recall
 
 1. Don't lower similar-task overlap threshold below 3 — causes more false positives than true positives.
@@ -36,9 +28,7 @@ If user repeats the same instruction/correction — it's not documented well eno
 
 16. Don't fix what you haven't seen in sandbox. If sandbox doesn't reproduce it, defer to e2e testing.
 17. Check platform generic handling (expiration workflows, generic callbacks, proto enums) BEFORE flagging gaps.
-18. CRITICAL = breaks functionality only. Not nice-to-haves, not theoretical edge cases.
-19. Never assume API error formats — fetch provider docs first.
-20. Missing repos: verify existence of types/schemas/routes before claiming they're missing.
+18-20. Severity calibration, API format verification, missing repos verification — see `impact-audit.md` (severity table + anti-patterns).
 
 ## Process
 

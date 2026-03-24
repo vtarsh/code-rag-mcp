@@ -44,7 +44,9 @@ Trigger points: after benchmark improvement, after adding tasks, after modifying
 - `vtarsh` — personal GitHub (code-rag-mcp, pay-knowledge-profile).
 - `tarshevskiy-v` — work GitHub (pay-com org repos).
 
-## Gotchas Are Temporary
+**Pushing to vtarsh repos** (pay-knowledge remote is vtarsh, but default auth is tarshevskiy-v):
+```bash
+gh auth switch --user vtarsh && git push origin main && gh auth switch --user tarshevskiy-v
+```
+ALWAYS switch back to tarshevskiy-v after push. Never leave auth on vtarsh.
 
-- Gotchas bootstrap the system; the goal is to eliminate them.
-- Build smarter analysis, not bigger checklists.

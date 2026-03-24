@@ -22,14 +22,8 @@ python scripts/benchmark_recall.py     # analyze_task recall regression
 
 ## Current Baselines (do not regress)
 
-- Conceptual: 0.85
-- Real-world: 0.83
-- Flows: 0.875
-- analyze_task recall: 96.4% total (phantom-filtered) on 361 tasks
-  - PI: 97.6%, CORE: 94.3%, BO: 98.0%, HS: 92.9%
-  - 20 mechanisms + hub penalty + domain templates + Gemini re-ranker
-  - Re-ranker (--rerank): 81% recall, 34% precision, F1=48% on PI
-- Unit tests: 185
+Live baselines: `profiles/pay-com/RECALL-TRACKER.md` (single source of truth).
+Key thresholds: conceptual ≥0.85, realworld ≥0.83, flows ≥0.875.
 
 ## Recall Methodology
 

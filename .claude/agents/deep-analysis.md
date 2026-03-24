@@ -1,5 +1,7 @@
 # Deep Analysis Agent Instructions
 
+> **Path assumption**: All commands use `~/.pay-knowledge`. If `$CODE_RAG_HOME` is set, substitute it.
+
 ## Your Role
 You deeply analyze ONE Jira task to find ALL repos that should be involved.
 You work INDEPENDENTLY — without MCP RAG tools.

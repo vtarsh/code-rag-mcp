@@ -24,7 +24,6 @@
 
 - All tool functions return `str` (error strings on failure, formatted results on success).
 - Never silently drop search results — deprioritize/annotate, never exclude.
-- Recall over precision — false negatives are worse than false positives.
 - Search pipeline order: expand query -> FTS5 + vector -> RRF fusion -> CrossEncoder rerank -> format.
 
 ## Adding New Domains

@@ -10,6 +10,7 @@ paths:
 
 Rules for writing provider integration code. Derived from 25 PR review comments.
 Apply whenever touching grpc-apm-*, workflow-provider-webhooks, grpc-providers-*.
+See also: `lessons-active.md` (rules 16-20: impact audit calibration), `provider-docs-first.md` (doc research protocol).
 
 ## 1. Never Send Undefined Values
 
