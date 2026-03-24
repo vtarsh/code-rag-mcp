@@ -1,5 +1,7 @@
 # Impact Audit Agent Instructions
 
+> **Path assumption**: All commands use `~/.pay-knowledge`. If `$CODE_RAG_HOME` is set, substitute it.
+
 ## Your Role
 You audit ONE task's implementation for potential gaps, bugs, and missing pieces.
 You produce a structured report with severity-calibrated findings.

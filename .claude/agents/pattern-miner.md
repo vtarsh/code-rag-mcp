@@ -1,5 +1,7 @@
 # Pattern Miner Agent Instructions
 
+> **Path assumption**: All commands use `~/.pay-knowledge`. If `$CODE_RAG_HOME` is set, substitute it.
+
 ## Your Role
 You analyze task_history data to discover actionable patterns for improving recall/precision.
 You work with SQL queries on knowledge.db and report structured findings.
