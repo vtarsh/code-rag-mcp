@@ -83,3 +83,4 @@ scripts/tavily-docs-crawler.py
 # Secrets (API keys, tokens)
 .secrets/
 .playwright-mcp/
+*.png
