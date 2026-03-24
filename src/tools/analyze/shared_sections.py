@@ -396,7 +396,11 @@ def section_github(ctx: AnalysisContext) -> tuple[str, dict[str, list[dict]], di
     output = "## 7. GitHub Activity\n\n"
     task_id = extract_task_id(ctx.description)
 
-    all_repos = list({f.repo for f in ctx.findings} | {"e2e-tests"})
+    # Prioritize high-confidence repos for GitHub API calls (capped at 20 by github_helpers)
+    _conf_order = {"high": 0, "medium": 1, "low": 2}
+    sorted_findings = sorted(ctx.findings, key=lambda f: _conf_order.get(f.confidence, 2))
+    all_repos = list(dict.fromkeys(f.repo for f in sorted_findings))  # dedupe, preserve order
+    all_repos.append("e2e-tests")  # always check e2e
 
     pr_data: dict[str, list[dict]] = {}
     branch_data: dict[str, list[str]] = {}
@@ -594,16 +598,21 @@ def section_ci_risk(ctx: AnalysisContext) -> str:
     if not finding_repos:
         return ""
 
+    # Batch query instead of N+1
+    placeholders = ",".join("?" for _ in finding_repos)
+    rows = ctx.conn.execute(
+        f"""SELECT repo_name,
+                   COUNT(*) as total,
+                   SUM(CASE WHEN conclusion = 'failure' THEN 1 ELSE 0 END) as fails
+            FROM ci_runs WHERE repo_name IN ({placeholders})
+            GROUP BY repo_name""",
+        list(finding_repos),
+    ).fetchall()
+
     risky: list[tuple[str, int, int]] = []
-    for repo in sorted(finding_repos):
-        row = ctx.conn.execute(
-            """SELECT COUNT(*) as total,
-                      SUM(CASE WHEN conclusion = 'failure' THEN 1 ELSE 0 END) as fails
-               FROM ci_runs WHERE repo_name = ?""",
-            (repo,),
-        ).fetchone()
-        if row and row["fails"] and row["fails"] > 0:
-            risky.append((repo, row["fails"], row["total"]))
+    for row in rows:
+        if row["fails"] and row["fails"] > 0:
+            risky.append((row["repo_name"], row["fails"], row["total"]))
 
     if not risky:
         return ""
