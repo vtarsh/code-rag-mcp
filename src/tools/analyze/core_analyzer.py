@@ -54,7 +54,7 @@ def run_co_change_rules(ctx: AnalysisContext) -> str:
     if not CO_CHANGE_RULES:
         return ""
 
-    finding_repos = {rname for _, rname in ctx.findings}
+    finding_repos = {rname for _, rname, *_ in ctx.findings}
     added: list[tuple[str, str]] = []  # (companion, trigger)
 
     for trigger, companions in CO_CHANGE_RULES.items():
@@ -64,7 +64,7 @@ def run_co_change_rules(ctx: AnalysisContext) -> str:
                     # Verify companion exists in our index
                     exists = ctx.conn.execute("SELECT 1 FROM repos WHERE name = ?", (companion,)).fetchone()
                     if exists:
-                        ctx.findings.append(("co_change_rule", companion))
+                        ctx.findings.append(("co_change_rule", companion, "high"))
                         finding_repos.add(companion)
                         added.append((companion, trigger))
 
@@ -92,7 +92,7 @@ def _section_domain_repos(ctx: AnalysisContext, classification: TaskClassificati
         exists = ctx.conn.execute("SELECT 1 FROM repos WHERE name = ?", (repo,)).fetchone()
         if exists:
             seed_repos_found.append(repo)
-            ctx.findings.append(("domain", repo))
+            ctx.findings.append(("domain", repo, "high"))
 
     # Also find repos matching domain repo_patterns
     pattern = DOMAIN_PATTERNS.get(classification.domain, {})
@@ -137,7 +137,7 @@ def _section_domain_repos(ctx: AnalysisContext, classification: TaskClassificati
 
         repo_counts = Counter(pattern_matched)
         for repo, _count in repo_counts.most_common(15):
-            ctx.findings.append(("keyword", repo))
+            ctx.findings.append(("keyword", repo, "medium"))
             output += f"  - **{repo}**\n"
         output += "\n"
 
@@ -206,7 +206,7 @@ def _section_cascade(ctx: AnalysisContext, classification: TaskClassification) -
         for etype, repos in sorted(by_edge.items(), key=lambda x: len(x[1]), reverse=True):
             output += f"**{etype}** ({len(repos)} repos):\n"
             for i, (repo, seed) in enumerate(sorted(repos)):
-                ctx.findings.append(("cascade", repo))
+                ctx.findings.append(("cascade", repo, "medium"))
                 if i < 15:
                     output += f"  - **{repo}** (via {seed})\n"
             if len(repos) > 15:
@@ -239,7 +239,7 @@ def _section_cascade(ctx: AnalysisContext, classification: TaskClassification) -
 
         output += "_Downstream (shared infrastructure seeds depend on):_\n\n"
         for repo, (seed, etype, in_deg) in sorted(relevant_hubs.items(), key=lambda x: x[1][2], reverse=True)[:15]:
-            ctx.findings.append(("downstream", repo))
+            ctx.findings.append(("downstream", repo, "medium"))
             output += f"  - **{repo}** ({in_deg} dependents, via {seed}/{etype})\n"
         output += "\n"
 
@@ -248,7 +248,7 @@ def _section_cascade(ctx: AnalysisContext, classification: TaskClassification) -
     # FROM workflow-provider-webhooks TO grpc-providers-crb). This discovers
     # targets that the forward BFS misses because it only walks incoming edges.
     reverse_edge_types = ("webhook_handler", "grpc_call", "grpc_method_call", "callback_handler")
-    finding_repos = {rname for _, rname in ctx.findings} | seed_set | set(all_affected) | set(downstream_hubs)
+    finding_repos = {rname for _, rname, *_ in ctx.findings} | seed_set | set(all_affected) | set(downstream_hubs)
     reverse_found: dict[str, tuple[str, str]] = {}  # repo → (via_source, edge_type)
 
     for repo in list(finding_repos):
@@ -270,7 +270,7 @@ def _section_cascade(ctx: AnalysisContext, classification: TaskClassification) -
     if reverse_found:
         output += "_Reverse cascade (targets called/handled by found repos):_\n\n"
         for repo, (via, etype) in sorted(reverse_found.items()):
-            ctx.findings.append(("reverse_cascade", repo))
+            ctx.findings.append(("reverse_cascade", repo, "low"))
             output += f"  - **{repo}** (via {via}/{etype})\n"
         output += "\n"
 
@@ -294,7 +294,7 @@ def _section_co_occurrence(ctx: AnalysisContext) -> str:
     except Exception:
         return ""
 
-    finding_repos = {rname for _, rname in ctx.findings}
+    finding_repos = {rname for _, rname, *_ in ctx.findings}
 
     import json
     from collections import Counter
@@ -344,7 +344,7 @@ def _section_co_occurrence(ctx: AnalysisContext) -> str:
         output_parts.append("## Frequently Changed Repos\n\n")
         output_parts.append(f"_Repos changed in ≥25% of CORE tasks ({len(rows)} total):_\n\n")
         for repo, cnt in universal:
-            ctx.findings.append(("universal", repo))
+            ctx.findings.append(("universal", repo, "medium"))
             pct = cnt / len(rows) * 100
             output_parts.append(f"  - **{repo}** — {cnt} tasks ({pct:.0f}%)\n")
         output_parts.append("\n")
@@ -371,7 +371,7 @@ def _section_co_occurrence(ctx: AnalysisContext) -> str:
             output_parts.append("## Co-occurrence Boost\n\n")
         output_parts.append("_Repos that historically co-change with found repos (≥40%):_\n\n")
         for repo, (via, prob) in sorted(cooccur_boosted.items(), key=lambda x: x[1][1], reverse=True)[:12]:
-            ctx.findings.append(("co-occurrence", repo))
+            ctx.findings.append(("co-occurrence", repo, "medium"))
             boosted.add(repo)
             output_parts.append(f"  - **{repo}** — {prob:.0%} when {via} changes\n")
         output_parts.append("\n")
@@ -398,7 +398,7 @@ def _section_bulk_migration(ctx: AnalysisContext) -> str:
 
     # Enumerate all repos matching service patterns
     all_repos = [r["name"] for r in ctx.conn.execute("SELECT name FROM repos").fetchall()]
-    already = {rname for _, rname in ctx.findings}
+    already = {rname for _, rname, *_ in ctx.findings}
     new_repos: list[str] = []
 
     for repo in all_repos:
@@ -417,7 +417,7 @@ def _section_bulk_migration(ctx: AnalysisContext) -> str:
     output += f"_Enumerating {len(new_repos)} service repos matching configured patterns:_\n\n"
 
     for repo in sorted(new_repos):
-        ctx.findings.append(("bulk_migration", repo))
+        ctx.findings.append(("bulk_migration", repo, "low"))
         output += f"  - **{repo}**\n"
     output += "\n"
     return output
@@ -430,7 +430,7 @@ def _section_provider_fanout(ctx: AnalysisContext) -> str:
     if not GATEWAY_REPO:
         return ""
 
-    finding_repos = {rname for _, rname in ctx.findings}
+    finding_repos = {rname for _, rname, *_ in ctx.findings}
 
     # Check if any finding is a proto/types repo that providers depend on
     trigger_repos = finding_repos & PROTO_TRIGGER_REPOS
@@ -459,7 +459,7 @@ def _section_provider_fanout(ctx: AnalysisContext) -> str:
     output += f"_Changes to {', '.join(sorted(trigger_repos))} affect all providers via gateway routing:_\n\n"
 
     for repo in new_providers:
-        ctx.findings.append(("fanout", repo))
+        ctx.findings.append(("fanout", repo, "medium"))
         output += f"  - **{repo}**\n"
     output += "\n"
     return output
@@ -492,7 +492,7 @@ def _section_function_search(ctx: AnalysisContext) -> str:
     if not func_names:
         return ""
 
-    already_found = {rname for _, rname in ctx.findings}
+    already_found = {rname for _, rname, *_ in ctx.findings}
     func_repos: dict[str, list[str]] = {}  # repo → [functions found]
 
     for func in func_names:
@@ -518,7 +518,7 @@ def _section_function_search(ctx: AnalysisContext) -> str:
     sorted_repos = sorted(func_repos.items(), key=lambda x: len(x[1]), reverse=True)
 
     for repo, funcs in sorted_repos[:20]:
-        ctx.findings.append(("function", repo))
+        ctx.findings.append(("function", repo, "medium"))
         output += f"  - **{repo}** — {', '.join(funcs)}\n"
 
     output += f"\n_Total: {len(func_repos)} repos reference these functions._\n\n"
@@ -538,7 +538,7 @@ def _section_keyword_scan(ctx: AnalysisContext, classification: TaskClassificati
         return ""
 
     # Skip words that are too common (would match too many repos)
-    already_found = {rname for _, rname in ctx.findings}
+    already_found = {rname for _, rname, *_ in ctx.findings}
 
     new_finds: dict[str, list[str]] = {}  # repo → [matched keywords]
 
@@ -601,7 +601,7 @@ def _section_keyword_scan(ctx: AnalysisContext, classification: TaskClassificati
     output += "_Repos matching 2+ task keywords (beyond domain/pattern repos):_\n\n"
 
     for repo, kws in strong_finds[:10]:
-        ctx.findings.append(("keyword", repo))
+        ctx.findings.append(("keyword", repo, "medium"))
         output += f"  - **{repo}** — matches: {', '.join(kws)}\n"
     output += "\n"
 

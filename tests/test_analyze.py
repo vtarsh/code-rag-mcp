@@ -227,21 +227,21 @@ class TestSimilarTaskBoost:
         conn = _mock_conn()
         ctx = AnalysisContext(conn=conn, description="test", words=set(), provider="")
         # Pre-populate findings with 3 repos
-        ctx.findings = [("domain", "repo-a"), ("domain", "repo-b"), ("domain", "repo-c")]
+        ctx.findings = [("domain", "repo-a", "high"), ("domain", "repo-b", "high"), ("domain", "repo-c", "high")]
 
         # Simulate similar task with 4 repos (3 overlap + 1 new)
         similar_repos = ["repo-a", "repo-b", "repo-c", "repo-new"]
-        existing = {r for _, r in ctx.findings}
+        existing = {r for _, r, *_ in ctx.findings}
         overlap = existing & set(similar_repos)
         assert len(overlap) >= 3  # overlap threshold met
 
         # Inject new repos
         for repo in similar_repos:
             if repo not in existing:
-                ctx.findings.append(("similar_task", repo))
+                ctx.findings.append(("similar_task", repo, "medium"))
                 existing.add(repo)
 
-        assert ("similar_task", "repo-new") in ctx.findings
+        assert ("similar_task", "repo-new", "medium") in ctx.findings
         assert len(ctx.findings) == 4  # 3 original + 1 injected
 
     def test_similar_task_no_boost_below_threshold(self):
@@ -250,10 +250,10 @@ class TestSimilarTaskBoost:
 
         conn = _mock_conn()
         ctx = AnalysisContext(conn=conn, description="test", words=set(), provider="")
-        ctx.findings = [("domain", "repo-a"), ("domain", "repo-b")]
+        ctx.findings = [("domain", "repo-a", "high"), ("domain", "repo-b", "high")]
 
         similar_repos = ["repo-a", "repo-b", "repo-c", "repo-new"]
-        existing = {r for _, r in ctx.findings}
+        existing = {r for _, r, *_ in ctx.findings}
         overlap = existing & set(similar_repos)
         assert len(overlap) == 2  # below threshold — no injection
 

@@ -114,13 +114,13 @@ def _inject_domain_template(ctx: AnalysisContext, classification: object) -> str
     if not base_repos:
         return ""
 
-    existing = {rname for _, rname in ctx.findings}
+    existing = {rname for _, rname, *_ in ctx.findings}
     new_repos = []
     for repo in base_repos:
         if repo not in existing:
             exists = ctx.conn.execute("SELECT 1 FROM repos WHERE name = ?", (repo,)).fetchone()
             if exists:
-                ctx.findings.append(("domain_template", repo))
+                ctx.findings.append(("domain_template", repo, "high"))
                 new_repos.append(repo)
 
     if not new_repos:
@@ -182,7 +182,7 @@ def _extract_repo_refs(ctx: AnalysisContext) -> str:
 
     output = ""
     for repo in matched:
-        ctx.findings.append(("repo_ref", repo))
+        ctx.findings.append(("repo_ref", repo, "high"))
         output += f"**{repo}** referenced in description.\n"
     return output
 
@@ -193,7 +193,7 @@ def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
     Catches shared libraries like node-libs-common that have provider-specific
     code but aren't found via cascade (too many dependents = deprioritized).
     """
-    finding_repos = {rname for _, rname in ctx.findings}
+    finding_repos = {rname for _, rname, *_ in ctx.findings}
     if not finding_repos:
         return ""
 
@@ -266,7 +266,7 @@ def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
     output = "## npm Dependency Scan\n\n"
     output += "_Shared libraries with task keyword matches (via npm_dep edges):_\n\n"
     for repo, via, kw in new_finds:
-        ctx.findings.append(("npm_dep_scan", repo))
+        ctx.findings.append(("npm_dep_scan", repo, "low"))
         output += f"  - **{repo}** — `{kw}` found (dep of {via})\n"
     output += "\n"
     return output

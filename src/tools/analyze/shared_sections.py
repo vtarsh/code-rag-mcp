@@ -155,7 +155,7 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
     if similar_tasks:
         output_parts.append("## Historical Task Patterns\n")
         output_parts.append("_Based on similar past tasks, these repos/files were involved:_\n")
-        existing_finding_repos = {r for _, r in ctx.findings}
+        existing_finding_repos = {r for _, r, *_ in ctx.findings}
         for t in similar_tasks:
             repos_str = ", ".join(f"**{r}**" for r in t["repos"][:8])
             if len(t["repos"]) > 8:
@@ -169,7 +169,7 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
                 output_parts.append(f"  PR repos: {pr_repos_str}\n")
                 for repo in pr_repos:
                     if repo not in existing_finding_repos:
-                        ctx.findings.append(("pr_url_signal", repo))
+                        ctx.findings.append(("pr_url_signal", repo, "high"))
                         existing_finding_repos.add(repo)
 
             # Similar-task boost: if past task shares ≥3 repos with current findings,
@@ -178,7 +178,7 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
             if len(overlap) >= 3:
                 for repo in t["repos"]:
                     if repo not in existing_finding_repos:
-                        ctx.findings.append(("similar_task", repo))
+                        ctx.findings.append(("similar_task", repo, "medium"))
                         existing_finding_repos.add(repo)
 
     # Upstream caller patterns
@@ -231,11 +231,11 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
             output_parts.append(f"- {c}\n")
 
     # Inject pattern repos into findings
-    existing_finding_repos = {r for _, r in ctx.findings}
+    existing_finding_repos = {r for _, r, *_ in ctx.findings}
     added = 0
     for repo, _reason, occurrences in pattern_repos:
         if repo not in existing_finding_repos and occurrences >= 5:
-            ctx.findings.append(("pattern", repo))
+            ctx.findings.append(("pattern", repo, "medium"))
             existing_finding_repos.add(repo)
             added += 1
 
@@ -338,7 +338,7 @@ def section_proto(ctx: AnalysisContext) -> str:
                 if matching:
                     output += f"  `{word}` matches proto method: **{', '.join(matching)}**\n"
             output += "\n"
-        ctx.findings.append(("proto", proto_repo))
+        ctx.findings.append(("proto", proto_repo, "high"))
     return output
 
 
@@ -358,7 +358,7 @@ def section_gateway(ctx: AnalysisContext) -> str:
         if matching_methods:
             output += f"  Task-relevant methods: **{', '.join(matching_methods)}**\n"
         output += "\n"
-        ctx.findings.append(("gateway", GATEWAY_REPO))
+        ctx.findings.append(("gateway", GATEWAY_REPO, "high"))
     return output
 
 
@@ -372,7 +372,7 @@ def section_methods(ctx: AnalysisContext) -> tuple[str, set[str], dict[str, dict
     task_methods: set[str] = ctx.words & known_method_names
 
     method_status: dict[str, dict] = {}
-    for ftype, rname in ctx.findings:
+    for ftype, rname, *_conf in ctx.findings:
         if ftype in ("provider", "gateway"):
             for method in task_methods:
                 result = check_method_exists(rname, method, ctx.conn)
@@ -395,7 +395,7 @@ def section_github(ctx: AnalysisContext) -> tuple[str, dict[str, list[dict]], di
     output = "## 7. GitHub Activity\n\n"
     task_id = extract_task_id(ctx.description)
 
-    all_repos = list({rname for _, rname in ctx.findings} | {"e2e-tests"})
+    all_repos = list({rname for _, rname, *_ in ctx.findings} | {"e2e-tests"})
 
     pr_data: dict[str, list[dict]] = {}
     branch_data: dict[str, list[str]] = {}
@@ -441,6 +441,33 @@ def section_github(ctx: AnalysisContext) -> tuple[str, dict[str, list[dict]], di
     return output, pr_data, branch_data
 
 
+_CONFIDENCE_RANK = {"high": 0, "medium": 1, "low": 2}
+
+_FTYPE_LABELS = {
+    "provider": "Implement method handler",
+    "proto": "Proto contract",
+    "webhook": "Webhook activity",
+    "gateway": "Gateway routing",
+    "pattern": "Pattern-based (historically missed)",
+    "similar_task": "Similar past task",
+    "bulk_migration": "Bulk migration",
+    "npm_dep_scan": "npm dependency",
+    "repo_ref": "Repo name in description",
+    "domain_template": "Domain template",
+    "co_change_rule": "Co-change rule (always changes together)",
+    "pr_url_signal": "PR URL from similar task",
+    "domain": "Domain service",
+    "cascade": "Cascade dependency",
+    "downstream": "Downstream dependency",
+    "reverse_cascade": "Reverse cascade (called by found repo)",
+    "keyword": "Keyword match",
+    "co-occurrence": "Co-occurrence",
+    "universal": "Frequently changed",
+    "fanout": "Provider fan-out",
+    "function": "Function reference",
+}
+
+
 def section_completeness(
     ctx: AnalysisContext,
     task_methods: set[str],
@@ -448,12 +475,20 @@ def section_completeness(
     pr_data: dict[str, list[dict]],
     branch_data: dict[str, list[str]],
 ) -> str:
-    """Section 8: Build completeness checklist from all findings."""
+    """Section 8: Build completeness checklist from all findings, grouped by confidence."""
     output = "## 8. Completeness Report\n\n"
-    checklist: list[tuple[str, str, str, str, bool]] = []
 
-    for ftype, rname in ctx.findings:
-        needs_change = True
+    # Deduplicate by repo name, keeping highest confidence
+    best: dict[str, tuple[str, str, str]] = {}  # repo → (ftype, repo, confidence)
+    for ftype, rname, *rest in ctx.findings:
+        conf = rest[0] if rest else "medium"
+        if rname not in best or _CONFIDENCE_RANK.get(conf, 1) < _CONFIDENCE_RANK.get(best[rname][2], 1):
+            best[rname] = (ftype, rname, conf)
+
+    # Build checklist entries: (repo, label, status, reason, confidence)
+    checklist: list[tuple[str, str, str, str, str]] = []
+
+    for rname, (ftype, _, conf) in best.items():
         status = "TODO"
         reason = ""
 
@@ -462,7 +497,6 @@ def section_completeness(
                 key = f"{rname}:{method}"
                 ms = method_status.get(key)
                 if ms and ms["exists"]:
-                    needs_change = False
                     status = "OK"
                     reason = f"`{method}` already implemented"
         elif ftype == "proto":
@@ -477,7 +511,6 @@ def section_completeness(
                     else None
                 )
                 if proto_check:
-                    needs_change = False
                     status = "OK"
                     reason = f"`{method}` RPC already in proto"
 
@@ -494,28 +527,9 @@ def section_completeness(
         elif branch_exists:
             status = "IN PROGRESS"
             reason = f"Branch `{branch_data[rname][0]}` exists"
-        elif not needs_change:
-            pass
 
-        label = {
-            "provider": "Implement method handler",
-            "proto": "Proto contract",
-            "webhook": "Webhook activity",
-            "gateway": "Gateway routing",
-            "pattern": "⚡ Pattern-based (historically missed)",
-            "similar_task": "📋 Similar past task",
-            "bulk_migration": "🔄 Bulk migration",
-            "npm_dep_scan": "📦 npm dependency",
-            "repo_ref": "🔗 Repo name in description",
-            "domain_template": "📋 Domain template",
-            "co_change_rule": "Co-change rule (always changes together)",
-            "pr_url_signal": "🔗 PR URL from similar task",
-            "domain": "Domain service",
-            "cascade": "Cascade dependency",
-            "reverse_cascade": "Reverse cascade (called by found repo)",
-            "keyword": "Keyword match",
-        }.get(ftype, ftype)
-        checklist.append((rname, label, status, reason, needs_change))
+        label = _FTYPE_LABELS.get(ftype, ftype)
+        checklist.append((rname, label, status, reason, conf))
 
     # e2e-tests
     e2e_status = "TODO"
@@ -527,18 +541,43 @@ def section_completeness(
     elif "e2e-tests" in branch_data:
         e2e_status = "IN PROGRESS"
         e2e_reason = f"Branch `{branch_data['e2e-tests'][0]}`"
-    checklist.append(("e2e-tests", "E2E tests", e2e_status, e2e_reason, e2e_status == "TODO"))
+    checklist.append(("e2e-tests", "E2E tests", e2e_status, e2e_reason, "high"))
 
     done = sum(1 for _, _, s, _, _ in checklist if s in ("DONE", "OK"))
     in_progress = sum(1 for _, _, s, _, _ in checklist if s == "IN PROGRESS")
     todo = sum(1 for _, _, s, _, _ in checklist if s == "TODO")
     output += f"**Progress**: {done} done, {in_progress} in progress, {todo} todo (out of {len(checklist)})\n\n"
 
-    output += "| Repo | Area | Status | Detail |\n|------|------|--------|--------|\n"
-    for rname, label, status, reason, _ in checklist:
-        icon = {"DONE": "[x]", "OK": "[x]", "IN PROGRESS": "[-]", "TODO": "[ ]"}.get(status, "[ ]")
-        output += f"| {icon} **{rname}** | {label} | **{status}** | {reason} |\n"
-    output += "\n"
+    # Group by confidence tier
+    high_items = [(r, lbl, s, d) for r, lbl, s, d, c in checklist if c == "high"]
+    medium_items = [(r, lbl, s, d) for r, lbl, s, d, c in checklist if c == "medium"]
+    low_items = [(r, lbl, s, d) for r, lbl, s, d, c in checklist if c == "low"]
+
+    def _render_row(rname: str, label: str, status: str, reason: str, marker: str) -> str:
+        icon = {"DONE": "[x]", "OK": "[x]", "IN PROGRESS": "[-]"}.get(status, marker)
+        return f"| {icon} **{rname}** | {label} | **{status}** | {reason} |\n"
+
+    if high_items:
+        output += "### High Confidence\n\n"
+        output += "| Repo | Area | Status | Detail |\n|------|------|--------|--------|\n"
+        for r, lbl, s, d in high_items:
+            output += _render_row(r, lbl, s, d, "[x]")
+        output += "\n"
+
+    if medium_items:
+        output += "### Medium Confidence\n\n"
+        output += "| Repo | Area | Status | Detail |\n|------|------|--------|--------|\n"
+        for r, lbl, s, d in medium_items:
+            output += _render_row(r, lbl, s, d, "[?]")
+        output += "\n"
+
+    if low_items:
+        output += f"<details>\n<summary>Low Confidence ({len(low_items)} repos)</summary>\n\n"
+        output += "| Repo | Area | Status | Detail |\n|------|------|--------|--------|\n"
+        for r, lbl, s, d in low_items:
+            output += _render_row(r, lbl, s, d, "[ ]")
+        output += "\n</details>\n\n"
+
     return output
 
 
@@ -548,7 +587,7 @@ def section_ci_risk(ctx: AnalysisContext) -> str:
     if not has_ci:
         return ""
 
-    finding_repos = {rname for _, rname in ctx.findings}
+    finding_repos = {rname for _, rname, *_ in ctx.findings}
     if not finding_repos:
         return ""
 

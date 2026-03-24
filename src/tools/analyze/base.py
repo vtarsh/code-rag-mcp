@@ -32,7 +32,9 @@ class AnalysisContext:
     description: str
     words: set[str]
     provider: str
-    findings: list[tuple[str, str]] = field(default_factory=list)
+    findings: list[tuple[str, str, str]] = field(default_factory=list)
+    # Each finding: (finding_type, repo_name, confidence)
+    # confidence: "high", "medium", "low"
 
 
 def useful_keywords(words: set[str]) -> list[str]:
