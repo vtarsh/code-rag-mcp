@@ -33,9 +33,20 @@ Tavily API key: `~/.pay-knowledge/.secrets/tavily-keys.json` or `TAVILY_API_KEY`
 For docs behind auth (login required, Notion, Confluence, etc.):
 
 1. Ask user to provide access via browser
-2. User connects via browser extension and navigates to docs
-3. Scrape available pages through the UI
-4. Save to `profiles/pay-com/docs/providers/{provider}/`
+2. User connects via browser extension and navigates to docs root page
+3. Launch **background agents** to scrape — one agent per browser tab, STRICTLY:
+   - **ONE tab per agent** — agents MUST NOT share tabs or they overwrite each other
+   - Each agent scrapes ONE page/section completely before moving to next
+   - Large docs = many pages = takes time. This is expected.
+4. For each page, scrape EVERYTHING:
+   - Full page content (text, code samples, tables)
+   - **Response examples**: look for 200, 400, 401, 403, 404, 500 status codes
+   - **If responses not visible**: click "Try it" / "Try me" / "Test" / "Send" buttons to reveal real responses
+   - **Click on each status code tab** (200, 4xx, 5xx) to see actual response bodies
+   - **Expand all collapsed sections** — error codes, enums, field descriptions
+   - Request/response schemas with all fields and types
+5. Save each page as markdown to `profiles/pay-com/docs/providers/{provider}/`
+6. Scrape ALL pages — don't skip anything. Full API reference, guides, webhooks, error codes, authentication.
 
 ### After fetching docs:
 1. Index them: `python3 scripts/build_index.py` (or incremental via `build_vectors.py --repos=provider-docs`)
