@@ -233,12 +233,15 @@ def parse_npm_dep_edges(conn: sqlite3.Connection):
         for dep in deps:
             pkg_name = dep.replace(scope_prefix, "") if dep.startswith(scope_prefix) else dep
 
-            # Try to find matching repo
+            # Try to find matching repo (ordered by likelihood)
             target_candidates = [
                 pkg_name,
+                f"grpc-{pkg_name}",
+                f"grpc-core-{pkg_name}",
                 f"node-libs-{pkg_name}",
                 f"libs-{pkg_name}",
             ]
+            target_candidates.extend(f"{p}{pkg_name}" for p in PROVIDER_PREFIXES)
 
             target = None
             for candidate in target_candidates:
