@@ -99,6 +99,18 @@ Always: `${transactionId}aid${attempt}`
 For refunds (no attempt available): `${transactionId}aid1`
 Pass reference on completion, refund, and cancellation calls.
 
+**Why `aid1` for refund**: Refund is a separate transaction in Pay.com — not a retry of the original. If refund fails, gateway creates a new refund transaction with a new `transactionId`, not a retry of the old one. So attempt is always 1.
+
+**Where to use**: UDF fields (`udfs`), external reference IDs, `processorTransactionId` mapping — anywhere a unique transaction reference is sent to the provider.
+
+```js
+// initialize:
+udfs: [`${transactionId}aid${attempt}`]
+
+// refund (no attempt in req):
+udfs: [`${transactionId}aid1`]
+```
+
 ## 8. Remove Boilerplate That Doesn't Apply
 
 - APM providers: delete e2e workflow (card providers only)
