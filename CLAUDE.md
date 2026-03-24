@@ -6,7 +6,7 @@ Python 3.12, FastMCP, SQLite FTS5, LanceDB, CrossEncoder reranker.
 
 **Key docs** (read for full context):
 - `ARCHITECTURE.md` — system design, analyze_task package, 20 mechanisms, conventions.yaml
-- `.claude/rules/` — workflow, testing, conventions, lessons, deep-analysis-tiers, deep-analysis-agent, data-collection
+- `.claude/rules/` — conventions, impact-audit, lessons-active, provider-code-rules, provider-docs-first, testing, workflow
 - `TESTING.md` — recall methodology, how to measure/improve, validation without MCP
 - `profiles/pay-com/RECALL-TRACKER.md` — current scores, improvement log
 - `profiles/pay-com/NEXT-SESSION-PROMPT.md` — context for new sessions
@@ -29,6 +29,9 @@ make build  # or: ACTIVE_PROFILE=my-org ./scripts/full_update.sh --full
 
 # Start daemon (normally auto-started by launchd, or by mcp_server.py proxy)
 python daemon.py
+
+# Incremental build (only changed repos, seconds vs 30min)
+python scripts/build_index.py --incremental
 
 # MCP proxy (auto-started by Claude Code/Desktop — forwards to daemon)
 python mcp_server.py
@@ -160,7 +163,7 @@ Current scores: conceptual 0.850, realworld 4/6 passing, flows 0.875
 - Graph viz virtual nodes (pkg:, proto:, route:) are filtered in visualize_graph.py and queries.py
 - FTS5 virtual tables cannot have columns added — use separate tables (chunk_meta, env_vars)
 - Tests mock DB layer — no integration tests with real SQLite yet
-- Pre-commit runs ruff + ruff-format + pytest (133 tests) — fix lint before committing
+- Pre-commit runs ruff + ruff-format + pytest (185 tests) — fix lint before committing
 - Daemon uses ~400 MB real memory (VSZ shows ~2.5 GB but that's virtual/mmap — not real usage)
 - Embedding model selected via profile config `embedding_model` key or `CODE_RAG_MODEL` env var
 - After adding tasks/references, run incremental vectors: `build_vectors.py --repos=task-slug,ref-slug`

@@ -49,13 +49,14 @@ cd ~/.pay-knowledge && python3 scripts/build_index.py
 # Or incremental: python3 scripts/build_vectors.py --repos=provider-docs
 ```
 
-## Existing Provider Docs (14 providers)
+## Existing Provider Docs (27 providers)
 
 ```
 profiles/pay-com/docs/providers/
-braintree, checkout, nuvei, plaid, volt, paylands, paynearme,
-paysafe, ppro, silverflow, stripe-cashapp, tabapay-crawl,
-tabapay-extract, worldpay
+aps, braintree, checkout, credorax, ecp, flutterwave, gumballpay,
+monek, neosurf, nexi, nuvei, paylands, paynearme, paypal, payper,
+paysafe, plaid, ppro, rapyd, silverflow, stripe, stripe-cashapp,
+tabapay-crawl, tabapay-extract, trustly, volt, worldpay
 ```
 
-Missing: trustly, rapyd, okto, iris, aps, gumballpay, neosurf, payper, ilixium, nexi
+Missing: okto, iris, ilixium

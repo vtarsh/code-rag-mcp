@@ -21,13 +21,14 @@ For fetching docs, use the `/scrape-docs` skill.
 
 Audit claimed `message?.[0]?.error` was dead code. Reality: Payper returns `message` as array of objects. The audit was WRONG because it assumed the format without checking docs or sandbox.
 
-## Existing Provider Docs (14 providers)
+## Existing Provider Docs (27 providers)
 
 ```
 profiles/pay-com/docs/providers/
-braintree, checkout, nuvei, plaid, volt, paylands, paynearme,
-paysafe, ppro, silverflow, stripe-cashapp, tabapay-crawl,
-tabapay-extract, worldpay
+aps, braintree, checkout, credorax, ecp, flutterwave, gumballpay,
+monek, neosurf, nexi, nuvei, paylands, paynearme, paypal, payper,
+paysafe, plaid, ppro, rapyd, silverflow, stripe, stripe-cashapp,
+tabapay-crawl, tabapay-extract, trustly, volt, worldpay
 ```
 
-Missing docs for active providers: trustly, rapyd, okto, iris, aps, gumballpay, neosurf, payper, ilixium, nexi
+Missing docs for active providers: okto, iris, ilixium

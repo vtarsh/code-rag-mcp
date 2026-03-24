@@ -32,4 +32,5 @@
 - Full rebuild: `extract_artifacts.py -> build_index.py -> build_graph.py -> build_vectors.py` (~30 min).
 - `build_index.py` recreates repos/chunks tables — backup task_history first.
 - FTS5 virtual tables cannot have columns added — use separate tables.
+- Incremental build: `build_index.py --incremental` re-indexes only changed repos (by SHA comparison).
 - Restart daemon after editing glossaries: they load at import time.

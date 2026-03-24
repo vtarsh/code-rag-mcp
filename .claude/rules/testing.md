@@ -29,7 +29,7 @@ python scripts/benchmark_recall.py     # analyze_task recall regression
   - PI: 97.6%, CORE: 94.3%, BO: 98.0%, HS: 92.9%
   - 20 mechanisms + hub penalty + domain templates + Gemini re-ranker
   - Re-ranker (--rerank): 81% recall, 34% precision, F1=48% on PI
-- Unit tests: 133
+- Unit tests: 185
 
 ## Recall Methodology
 
