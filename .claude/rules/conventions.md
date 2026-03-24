@@ -6,6 +6,12 @@
 - Org-specific data MUST live in `profiles/{name}/`.
 - Profile setup: `cd profiles/{name} && ./install.sh` to symlink scripts.
 
+## Git Commits
+
+- **NEVER use `--no-verify`**. Pre-commit hooks (ruff + pytest) exist for a reason. If hooks fail — fix the issue, don't skip the check.
+- **NEVER use `--force` push** without explicit user approval.
+- Always run full test suite before committing.
+
 ## Secrets & Credentials
 
 - **NEVER hardcode API keys, tokens, or passwords in source code.** Use `os.getenv()`.
