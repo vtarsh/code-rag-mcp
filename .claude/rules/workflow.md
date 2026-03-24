@@ -4,34 +4,27 @@
 
 - Distribute ALL independent tasks to parallel background agents. Don't ask — just do it.
 - Never run parallel features that touch the same DB/files.
-- Sequential feature dev: build → audit (5 parallel agents) → test (5 parallel agents) → conclusions → next feature.
+- Sequential feature dev: build -> audit (5 parallel agents) -> test (5 parallel agents) -> conclusions -> next feature.
 
 ## Task Validation Cycle (for recall/quality work)
 
-1. **Collect** — gather tasks from Jira in batches, parallel agents for GitHub PR enrichment.
-2. **Validate independently** — launch background agents that search for repos WITHOUT MCP RAG (only grep on `raw/`, git log, file reads). Verify agent output contains zero `mcp__pay-knowledge__*` tool calls — if it does, result is invalid.
-3. **Validate via MCP RAG** — in parallel, other agents use MCP RAG tools (analyze_task, search, etc.) to find repos.
+1. **Collect** — gather tasks from Jira in batches (`/collect-tasks` skill)
+2. **Validate independently** — background agents search WITHOUT MCP RAG (only grep on `raw/`, git log, file reads). Agent output must have zero `mcp__pay-knowledge__*` calls.
+3. **Validate via MCP RAG** — in parallel, other agents use MCP RAG tools.
 4. **Compare** — main session compares both results, identifies misses, categorizes root causes.
-5. **Improve** — implement fixes in generic code (src/), update profile data (profiles/pay-com/), add patterns.
-6. **Benchmark** — run `benchmark_recall.py` before AND after changes. Never regress.
+5. **Improve** — implement fixes in generic code (src/), update profile data (profiles/).
+6. **Benchmark** — run `/recall-test` before AND after changes. Never regress.
 7. **Repeat** — next batch of tasks or next improvement area.
 
-## Continuous Improvement Cycle (automatic, don't wait for user)
+## Continuous Improvement Cycle (automatic)
 
 After EVERY code change or mechanism improvement:
-1. **Benchmark** — run recall + precision before and after
-2. **Pattern mine** — launch background agent to search for new patterns in task_history
+1. **Benchmark** — recall + precision before and after
+2. **Pattern mine** — `/pattern-mine` skill for new patterns
 3. **Implement** — if pattern found, implement and benchmark again
-4. **Update .claude** — update lessons.md, testing.md baselines, NEXT-SESSION-PROMPT
+4. **Update .claude** — update lessons-active.md, testing.md baselines
 
-This cycle runs automatically — don't wait for user to say "search for patterns".
-Trigger points:
-- After any recall/precision benchmark shows improvement
-- After adding new tasks to task_history
-- After modifying cascade/co-occurrence/classifier logic
-- After every 5th Tier 1 deep analysis
-
-When running overnight/background: set a recurring cron every 60 min that checks if improvements were made and triggers pattern mining if so.
+Trigger points: after benchmark improvement, after adding tasks, after modifying cascade/classifier, after every 10th deep analysis.
 
 ## Improvement Targets (priority order)
 
@@ -43,7 +36,7 @@ When running overnight/background: set a recurring cron every 60 min that checks
 ## GitHub Policy
 
 - **pay-com org is READ-ONLY**: no PR comments, no issues, no pushes, no reviews via automation.
-- All output → local logs only. User reviews and posts manually.
+- All output -> local logs only. User reviews and posts manually.
 - Only lift when user explicitly says "enable writing to pay-com".
 
 ## GitHub Accounts
