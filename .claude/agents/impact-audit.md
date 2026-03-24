@@ -32,6 +32,20 @@ ls ~/.pay-knowledge/profiles/pay-com/docs/providers/{provider}/ 2>/dev/null
 If docs exist, READ them before making any claims about API formats.
 If docs don't exist, note this as a limitation — do NOT assume formats.
 
+### Step 2b: Check Provider Integration Checklist (for PI tasks)
+Read `profiles/pay-com/docs/references/provider-integration-checklist.md` — this is the official
+team checklist used after implementation. Verify each applicable item against the code.
+Key items to verify:
+- Transaction reference format `${transactionId}aid${attempt}`
+- Amount formatting (currency exponent, ISK/HUF)
+- CVV removal on APPROVED or wrong-CVV codes (N7, 82, 63)
+- 4xx → DECLINE not ERROR
+- Unknown status → DECLINED
+- No `InvalidDataError` throws
+- No `undefined` values in requests
+- Card fields masked in logs
+- AVS securityOptions handling
+
 ### Step 3: Trace Downstream Impact
 1. Find all repos touched by the task
 2. For each repo, trace downstream dependencies via graph
