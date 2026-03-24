@@ -49,6 +49,9 @@ Status is NEVER a simple 1:1 map. It depends on:
 Refunds are usually ASYNC — don't return APPROVED immediately.
 Map to PENDING and let the webhook signal completion.
 
+Refunds are usually ASYNC — don't return APPROVED immediately.
+Map to PENDING and let the webhook signal completion.
+
 ```js
 // WRONG: flat status map
 const STATUS_MAP = { completed: 'APPROVED', failed: 'DECLINED' }
@@ -59,6 +62,11 @@ const STATUS_MAP = {
   refund: { completed: 'APPROVED', pending: 'PENDING', initiated: 'PENDING' },
 }
 ```
+
+**How to determine mappings**: Check provider's status flow documentation.
+- For **sale**: look at "Ending Combinations" (final states: approved, declined, expired)
+- For **refund**: look at "Initial Combinations" (refund is async — best case = PENDING on our side, completed comes via webhook later)
+- Always check provider docs for the **complete status list** before mapping — don't guess.
 
 ## 4. No Env Var Defaults
 
