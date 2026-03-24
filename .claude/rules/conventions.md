@@ -6,6 +6,14 @@
 - Org-specific data MUST live in `profiles/{name}/`.
 - Profile setup: `cd profiles/{name} && ./install.sh` to symlink scripts.
 
+## Secrets & Credentials
+
+- **NEVER hardcode API keys, tokens, or passwords in source code.** Use `os.getenv()`.
+- **NEVER commit secrets to git** — even in test files. GitHub Push Protection will block, and leaked keys get flagged by providers.
+- Secrets go in: `~/.zshrc` (env vars), `.secrets/` (gitignored), or `.env` files (gitignored).
+- Before committing, grep staged files: `git diff --cached | grep -iE "api.key|token|password|secret"`.
+- If a key leaks: rotate immediately, filter-branch to remove from history, force push.
+
 ## Code Style
 
 - All tool functions return `str` (error strings on failure, formatted results on success).
