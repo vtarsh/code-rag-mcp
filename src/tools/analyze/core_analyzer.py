@@ -99,23 +99,38 @@ def _section_domain_repos(ctx: AnalysisContext, classification: TaskClassificati
     repo_patterns = pattern.get("repo_patterns", [])
     pattern_matched: list[str] = []
 
-    for rp in repo_patterns:
-        try:
-            rows = ctx.conn.execute("SELECT name FROM repos").fetchall()
-            for row in rows:
-                name = row["name"]
-                if re.match(rp, name) and name not in seed_repos_found:
-                    # Only include if task keywords appear in repo content
-                    for kw in classification.matched_keywords[:3]:
-                        hit = ctx.conn.execute(
-                            "SELECT 1 FROM chunks WHERE repo_name = ? AND chunks MATCH ? LIMIT 1",
-                            (name, f'"{kw}"'),
-                        ).fetchone()
-                        if hit:
-                            pattern_matched.append(name)
-                            break
-        except Exception:
-            continue
+    if repo_patterns:
+        # Cache all repo names once instead of querying per pattern
+        all_repo_names = [r["name"] for r in ctx.conn.execute("SELECT name FROM repos").fetchall()]
+
+        # Collect candidate repos matching any pattern
+        candidate_repos: list[str] = []
+        for name in all_repo_names:
+            if name in seed_repos_found:
+                continue
+            for rp in repo_patterns:
+                if re.match(rp, name):
+                    candidate_repos.append(name)
+                    break
+
+        # For each keyword, search FTS5 once and filter by candidates in Python
+        keywords = classification.matched_keywords[:3]
+        candidate_set = set(candidate_repos)
+        matched_set: set[str] = set()
+
+        for kw in keywords:
+            try:
+                rows = ctx.conn.execute(
+                    "SELECT DISTINCT repo_name FROM chunks WHERE chunks MATCH ? LIMIT 200",
+                    (f'"{kw}"',),
+                ).fetchall()
+                for row in rows:
+                    repo = row["repo_name"]
+                    if repo in candidate_set and repo not in matched_set:
+                        matched_set.add(repo)
+                        pattern_matched.append(repo)
+            except Exception:
+                continue
 
     if seed_repos_found:
         output += "**Seed repos** (domain entry points):\n"

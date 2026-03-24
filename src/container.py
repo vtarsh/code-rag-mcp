@@ -37,6 +37,8 @@ def get_db() -> sqlite3.Connection:
     if not _wal_set:
         conn.execute("PRAGMA journal_mode=WAL")
         _wal_set = True
+    conn.execute("PRAGMA mmap_size=268435456")  # 256MB mmap for faster reads
+    conn.execute("PRAGMA cache_size=-32000")  # 32MB page cache
     return conn
 
 

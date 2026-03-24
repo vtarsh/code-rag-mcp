@@ -71,6 +71,8 @@ def init_graph_tables(conn: sqlite3.Connection):
         CREATE INDEX idx_edges_source ON graph_edges(source);
         CREATE INDEX idx_edges_target ON graph_edges(target);
         CREATE INDEX idx_edges_type ON graph_edges(edge_type);
+        CREATE INDEX IF NOT EXISTS idx_edges_source_type ON graph_edges(source, edge_type);
+        CREATE INDEX IF NOT EXISTS idx_edges_target_type ON graph_edges(target, edge_type);
     """)
     conn.commit()
 
@@ -80,7 +82,6 @@ def populate_nodes(conn: sqlite3.Connection):
     repos = conn.execute("SELECT name, type FROM repos").fetchall()
     for r in repos:
         conn.execute("INSERT OR IGNORE INTO graph_nodes (name, type) VALUES (?, ?)", (r[0], r[1]))
-    conn.commit()
     print(f"  Nodes: {len(repos)}")
 
 
@@ -169,7 +170,6 @@ def parse_grpc_url_edges(conn: sqlite3.Connection):
     unique_edges = list(set(edges))
     for e in unique_edges:
         conn.execute("INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)", e)
-    conn.commit()
     print(f"  gRPC call edges: {len(unique_edges)}")
 
 
@@ -272,7 +272,6 @@ def parse_npm_dep_edges(conn: sqlite3.Connection):
     unique_edges = list(set(edges))
     for e in unique_edges:
         conn.execute("INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)", e)
-    conn.commit()
 
     resolved = len([e for e in unique_edges if not e[1].startswith("pkg:")])
     unresolved = len(unique_edges) - resolved
@@ -309,7 +308,6 @@ def parse_k8s_env_edges(conn: sqlite3.Connection):
     unique_edges = list(set(edges))
     for e in unique_edges:
         conn.execute("INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)", e)
-    conn.commit()
     print(f"  K8s env edges: {len(unique_edges)}")
 
 
@@ -343,7 +341,6 @@ def parse_proto_import_edges(conn: sqlite3.Connection):
     unique_edges = list(set(edges))
     for e in unique_edges:
         conn.execute("INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)", e)
-    conn.commit()
     print(f"  Proto import edges: {len(unique_edges)}")
 
 
@@ -459,7 +456,6 @@ def parse_webhook_edges(conn: sqlite3.Connection):
     unique_edges = list(set(edges))
     for e in unique_edges:
         conn.execute("INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)", e)
-    conn.commit()
 
     dispatch_count = len([e for e in unique_edges if e[2] == "webhook_dispatch"])
     handler_count = len([e for e in unique_edges if e[2] == "webhook_handler"])
@@ -543,7 +539,6 @@ def parse_grpc_client_require_edges(conn: sqlite3.Connection):
     unique_edges = list(set(edges))
     for e in unique_edges:
         conn.execute("INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)", e)
-    conn.commit()
     print(f"  gRPC client usage edges: {len(unique_edges)}")
 
 
@@ -676,7 +671,6 @@ def parse_grpc_method_call_edges(conn: sqlite3.Connection):
     unique = list(set(edges))
     for e in unique:
         conn.execute("INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)", e)
-    conn.commit()
     print(f"  gRPC method call edges: {len(unique)}")
 
 
@@ -966,7 +960,6 @@ def parse_proto_field_edges(conn: sqlite3.Connection):
         unique_edges = list(set(edges_list))
         for e in unique_edges:
             conn.execute("INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)", e)
-    conn.commit()
 
     unique_msg_defs = len(set(msg_def_edges))
     unique_svc_defs = len(set(svc_def_edges))
@@ -1038,7 +1031,6 @@ def parse_fetch_edges(conn: sqlite3.Connection):
     unique_edges = list(set(edges))
     for e in unique_edges:
         conn.execute("INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)", e)
-    conn.commit()
     print(f"  HTTP/fetch call edges: {len(unique_edges)}")
 
 
@@ -1118,7 +1110,6 @@ def parse_express_routes(conn: sqlite3.Connection):
     unique_edges = list(set(edges))
     for e in unique_edges:
         conn.execute("INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)", e)
-    conn.commit()
     print(f"  Express routes: {routes_found} routes, {mounts_found} mounts ({len(unique_edges)} unique edges)")
 
 
@@ -1347,7 +1338,6 @@ def parse_temporal_edges(conn: sqlite3.Connection):
     unique_edges = list(set(edges))
     for e in unique_edges:
         conn.execute("INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)", e)
-    conn.commit()
 
     # Connect signal senders to signal receivers through shared signal names
     signal_edges = 0
@@ -1373,7 +1363,6 @@ def parse_temporal_edges(conn: sqlite3.Connection):
                         (sender, handler, "temporal_signal", sig_name),
                     )
                     signal_edges += 1
-    conn.commit()
 
     resolved = len(
         [
@@ -1435,7 +1424,6 @@ def parse_domain_registry_edges(conn: sqlite3.Connection):
             "INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)",
             edges,
         )
-        conn.commit()
 
     real_edges = [e for e in edges if not e[1].startswith("domain:")]
     print(f"  Domain registry: {len(edges)} edges ({len(real_edges)} repo-to-repo references)")
@@ -1551,7 +1539,6 @@ def parse_flow_annotation_edges(conn: sqlite3.Connection):
             "INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)",
             edges,
         )
-        conn.commit()
 
     print(f"  Flow annotations: {len(edges)} edges from {len(list(flows_dir.glob('*.yaml')))} files")
 
@@ -1592,7 +1579,6 @@ def parse_redirect_edges(conn: sqlite3.Connection):
             "INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)",
             unique,
         )
-        conn.commit()
     print(f"  Static redirect edges: {len(unique)}")
 
 
@@ -1644,7 +1630,6 @@ def parse_url_reference_edges(conn: sqlite3.Connection):
             "INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)",
             unique,
         )
-        conn.commit()
     print(f"  URL reference edges: {len(unique)}")
 
 
@@ -1739,7 +1724,6 @@ def parse_similar_repo_edges(conn: sqlite3.Connection):
             "INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)",
             edges,
         )
-        conn.commit()
 
     print(f"  Similar repo edges: {len(edges) // 2} pairs")
 
@@ -1837,7 +1821,6 @@ def parse_connection_validation_edges(conn: sqlite3.Connection):
             "INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)",
             edges,
         )
-        conn.commit()
 
     print(f"  Connection validation edges: {len(edges)}")
 
@@ -1898,7 +1881,6 @@ def parse_merchant_entity_edges(conn: sqlite3.Connection):
             "INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)",
             edges,
         )
-        conn.commit()
 
     print(f"  Merchant entity edges: {len(edges)}")
 
@@ -1933,7 +1915,6 @@ def build_package_repo_map(conn: sqlite3.Connection):
         )
         count += 1
 
-    conn.commit()
     print(f"  Package-to-repo map: {count} packages indexed")
 
 
@@ -1944,81 +1925,90 @@ def main():
     print("\n1. Creating graph tables...")
     init_graph_tables(conn)
 
-    print("\n2. Populating nodes...")
-    populate_nodes(conn)
+    try:
+        print("\n2. Populating nodes...")
+        populate_nodes(conn)
 
-    print("\n3. Parsing gRPC URL edges...")
-    parse_grpc_url_edges(conn)
+        print("\n3. Parsing gRPC URL edges...")
+        parse_grpc_url_edges(conn)
 
-    print("\n4. Parsing npm dependency edges...")
-    parse_npm_dep_edges(conn)
+        print("\n4. Parsing npm dependency edges...")
+        parse_npm_dep_edges(conn)
 
-    print("\n5. Parsing K8s env edges...")
-    parse_k8s_env_edges(conn)
+        print("\n5. Parsing K8s env edges...")
+        parse_k8s_env_edges(conn)
 
-    print("\n6. Parsing proto import edges...")
-    parse_proto_import_edges(conn)
+        print("\n6. Parsing proto import edges...")
+        parse_proto_import_edges(conn)
 
-    print("\n7. Parsing Temporal workflow edges...")
-    parse_temporal_edges(conn)
+        print("\n7. Parsing Temporal workflow edges...")
+        parse_temporal_edges(conn)
 
-    print("\n8. Parsing webhook edges...")
-    parse_webhook_edges(conn)
+        print("\n8. Parsing webhook edges...")
+        parse_webhook_edges(conn)
 
-    print("\n9. Parsing gRPC client require() edges...")
-    parse_grpc_client_require_edges(conn)
+        print("\n9. Parsing gRPC client require() edges...")
+        parse_grpc_client_require_edges(conn)
 
-    print("\n10. Parsing gRPC method-level call edges...")
-    parse_grpc_method_call_edges(conn)
+        print("\n10. Parsing gRPC method-level call edges...")
+        parse_grpc_method_call_edges(conn)
 
-    print("\n11. Parsing HTTP/fetch call edges...")
-    parse_fetch_edges(conn)
+        print("\n11. Parsing HTTP/fetch call edges...")
+        parse_fetch_edges(conn)
 
-    print("\n12. Parsing proto field/message/service edges...")
-    parse_proto_field_edges(conn)
+        print("\n12. Parsing proto field/message/service edges...")
+        parse_proto_field_edges(conn)
 
-    print("\n13. Parsing Express route definitions...")
-    parse_express_routes(conn)
+        print("\n13. Parsing Express route definitions...")
+        parse_express_routes(conn)
 
-    print("\n14. Parsing domain registry edges...")
-    parse_domain_registry_edges(conn)
+        print("\n14. Parsing domain registry edges...")
+        parse_domain_registry_edges(conn)
 
-    print("\n15. Parsing flow annotation edges...")
-    parse_flow_annotation_edges(conn)
+        print("\n15. Parsing flow annotation edges...")
+        parse_flow_annotation_edges(conn)
 
-    print("\n16. Parsing static redirect edges...")
-    parse_redirect_edges(conn)
+        print("\n16. Parsing static redirect edges...")
+        parse_redirect_edges(conn)
 
-    print("\n17. Parsing URL reference edges...")
-    parse_url_reference_edges(conn)
+        print("\n17. Parsing URL reference edges...")
+        parse_url_reference_edges(conn)
 
-    print("\n18. Computing similar repo edges...")
-    parse_similar_repo_edges(conn)
+        print("\n18. Computing similar repo edges...")
+        parse_similar_repo_edges(conn)
 
-    print("\n19. Parsing connection validation edges...")
-    parse_connection_validation_edges(conn)
+        print("\n19. Parsing connection validation edges...")
+        parse_connection_validation_edges(conn)
 
-    print("\n20. Parsing merchant entity edges...")
-    parse_merchant_entity_edges(conn)
+        print("\n20. Parsing merchant entity edges...")
+        parse_merchant_entity_edges(conn)
 
-    print("\n21. Gateway runtime routing edges...")
-    if GATEWAY_REPO:
-        known = {r[0] for r in conn.execute("SELECT name FROM graph_nodes").fetchall()}
-        provider_repos = [r for r in known if any(r.startswith(p) for p in PROVIDER_PREFIXES)]
-        rt_edges = []
-        for pr in provider_repos:
-            rt_edges.append((GATEWAY_REPO, pr, "runtime_routing", "gateway routes to provider at runtime"))
-        if rt_edges:
-            conn.executemany(
-                "INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?,?,?,?)", rt_edges
-            )
-            conn.commit()
-        print(f"  Runtime routing: {len(rt_edges)} provider routes")
+        print("\n21. Gateway runtime routing edges...")
+        if GATEWAY_REPO:
+            known = {r[0] for r in conn.execute("SELECT name FROM graph_nodes").fetchall()}
+            provider_repos = [r for r in known if any(r.startswith(p) for p in PROVIDER_PREFIXES)]
+            rt_edges = []
+            for pr in provider_repos:
+                rt_edges.append((GATEWAY_REPO, pr, "runtime_routing", "gateway routes to provider at runtime"))
+            if rt_edges:
+                conn.executemany(
+                    "INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?,?,?,?)", rt_edges
+                )
+            print(f"  Runtime routing: {len(rt_edges)} provider routes")
 
-    print("\n22. Building package-to-repo map...")
-    build_package_repo_map(conn)
+        print("\n22. Building package-to-repo map...")
+        build_package_repo_map(conn)
 
-    print("\n22. Building env var index...")
+        # Commit all graph data in a single transaction
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        conn.close()
+        print("\nERROR: Graph build failed — rolled back all changes.")
+        raise
+
+    print("\n23. Building env var index...")
     try:
         import importlib.util
 

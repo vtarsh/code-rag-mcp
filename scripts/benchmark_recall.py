@@ -111,9 +111,9 @@ def run_benchmark(
         condition = "ticket_id = ?"
         params: tuple = (single_task,)
     elif groups:
-        conditions = " OR ".join(f"ticket_id LIKE '{g}-%'" for g in groups)
+        conditions = " OR ".join("ticket_id LIKE ?" for _ in groups)
         condition = f"({conditions})"
-        params = ()
+        params = tuple(f"{g}-%" for g in groups)
     else:
         condition = "1=1"
         params = ()

@@ -16,6 +16,7 @@ Usage:
 import contextlib
 import json
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -298,9 +299,16 @@ def main():
 
         # Update LanceDB
         print(f"\n[4/4] Updating LanceDB at {lance_path}...")
+        # Validate repo names to prevent injection (only lowercase alphanumeric + hyphens)
+        _valid_repo = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+        for r in only_repos:
+            if not _valid_repo.match(r):
+                print(f"  ERROR: Invalid repo name '{r}' — skipping vector update")
+                conn.close()
+                return
         db = lancedb.connect(str(lance_path))
         table = db.open_table("chunks")
-        repo_filter = " OR ".join(f"repo_name = '{r.replace(chr(39), chr(39) + chr(39))}'" for r in only_repos)
+        repo_filter = " OR ".join(f"repo_name = '{r}'" for r in only_repos)
         table.delete(repo_filter)
         print(f"  Deleted old vectors for: {', '.join(sorted(only_repos))}")
         table.add(data)

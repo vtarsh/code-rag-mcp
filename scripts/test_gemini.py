@@ -2,6 +2,7 @@
 """Test Gemini 3.1 Pro as reasoning layer for analyze_task."""
 
 import json
+import os
 import re
 import sqlite3
 import sys
@@ -9,7 +10,7 @@ from pathlib import Path
 
 from google import genai
 
-API_KEY = "REDACTED_ROTATE_KEY"
+API_KEY = os.getenv("GEMINI_API_KEY", "")
 MODEL = "gemini-3.1-pro-preview"
 DB_PATH = Path(__file__).parent.parent / "db" / "knowledge.db"
 

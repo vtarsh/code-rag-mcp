@@ -20,7 +20,7 @@ import sys
 import time
 import traceback
 from collections.abc import Callable
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -168,7 +168,7 @@ def main() -> None:
     start_preload()
     write_pid()
 
-    server = HTTPServer(("127.0.0.1", PORT), DaemonHandler)
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), DaemonHandler)
     try:
         log.info(f"Daemon ready at http://127.0.0.1:{PORT}")
         server.serve_forever()
