@@ -325,12 +325,15 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
     # Extract repo names from GitHub URLs and description text
     repo_refs_output = _run_section("repo_refs", _extract_repo_refs, ctx)
 
-    output = f"# Task Analysis\n\n**Task**: {description}\n"
-    output += f"**Domain**: {classification.domain}"
+    header = f"# Task Analysis\n\n**Task**: {description}\n"
+    header += f"**Domain**: {classification.domain}"
     if classification.confidence > 0:
-        output += f" ({classification.confidence:.0%} confidence)"
-    output += "\n\n"
+        header += f" ({classification.confidence:.0%} confidence)"
+    header += "\n"
+    # SUMMARY_PLACEHOLDER will be replaced with tier counts after all sections run
+    header += "SUMMARY_PLACEHOLDER\n"
 
+    output = ""
     if repo_refs_output:
         output += repo_refs_output + "\n"
 
@@ -412,4 +415,17 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
             output += f"  - `{name}`: {error}\n"
         output += "\n"
 
-    return output
+    # Build confidence tier summary from all findings
+    _conf_rank = {"high": 0, "medium": 1, "low": 2}
+    best_conf: dict[str, str] = {}
+    for f in ctx.findings:
+        prev = best_conf.get(f.repo)
+        if prev is None or _conf_rank.get(f.confidence, 1) < _conf_rank.get(prev, 1):
+            best_conf[f.repo] = f.confidence
+    n_core = sum(1 for c in best_conf.values() if c == "high")
+    n_related = sum(1 for c in best_conf.values() if c == "medium")
+    n_peripheral = sum(1 for c in best_conf.values() if c == "low")
+    summary = f"**Repos found**: {n_core} core + {n_related} related + {n_peripheral} peripheral"
+    header = header.replace("SUMMARY_PLACEHOLDER", summary)
+
+    return header + output

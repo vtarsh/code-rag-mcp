@@ -45,6 +45,11 @@ PROTO_REPOS: list[str] = _conv.get("proto_repos", ["providers-proto"])
 FEATURE_REPO: str = _conv.get("feature_repo", "")
 CREDENTIALS_REPO: str = _conv.get("credentials_repo", "")
 MANUAL_EDGES: dict[str, list[dict]] = _conv.get("manual_edges", {})
+PKG_RESOLUTION_PREFIXES: list[str] = _conv.get(
+    "pkg_resolution_prefixes", ["", "grpc-", "grpc-core-", "node-libs-", "libs-"]
+)
+PKG_RESOLUTION_SUFFIXES: list[str] = _conv.get("pkg_resolution_suffixes", [])
+PKG_RESOLUTION_MAP: dict[str, str] = _conv.get("pkg_resolution_map", {})
 
 
 def init_graph_tables(conn: sqlite3.Connection):
@@ -1852,6 +1857,94 @@ def build_package_repo_map(conn: sqlite3.Connection):
     print(f"  Package-to-repo map: {count} packages indexed")
 
 
+def resolve_pkg_edges(conn: sqlite3.Connection):
+    """Resolve pkg: virtual node edges to direct repo edges.
+
+    For each edge with a pkg:@scope/X target, try to find the real repo using:
+    1. Explicit overrides from pkg_resolution_map (conventions.yaml)
+    2. Prefix matching: {prefix}{pkg_name} (e.g., node-cli-envsub)
+    3. Suffix matching: {pkg_name}{suffix} (e.g., microfrontends-web)
+
+    Creates a parallel direct edge (source → real_repo) with the same edge_type
+    and detail. The original pkg: edge is kept for provenance.
+    """
+    repo_names = set(r[0] for r in conn.execute("SELECT name FROM repos").fetchall())
+
+    # Get all edges with pkg: targets
+    pkg_edges = conn.execute("SELECT DISTINCT target FROM graph_edges WHERE target LIKE 'pkg:%'").fetchall()
+
+    resolved_count = 0
+    edge_count = 0
+
+    for row in pkg_edges:
+        pkg_target = row[0]
+        # Extract package name: pkg:@pay-com/envsub -> envsub
+        pkg_name = pkg_target.split("/")[-1] if "/" in pkg_target else pkg_target.replace("pkg:", "")
+
+        # 1. Check explicit map first
+        real_repo = None
+        if pkg_name in PKG_RESOLUTION_MAP:
+            candidate = PKG_RESOLUTION_MAP[pkg_name]
+            if candidate in repo_names:
+                real_repo = candidate
+
+        # 2. Try prefix matching
+        if not real_repo:
+            for prefix in PKG_RESOLUTION_PREFIXES:
+                candidate = f"{prefix}{pkg_name}"
+                if candidate in repo_names:
+                    real_repo = candidate
+                    break
+
+        # 3. Try suffix matching
+        if not real_repo:
+            for suffix in PKG_RESOLUTION_SUFFIXES:
+                candidate = f"{pkg_name}{suffix}"
+                if candidate in repo_names:
+                    real_repo = candidate
+                    break
+
+        if not real_repo:
+            continue
+
+        resolved_count += 1
+
+        # Create direct edges for all sources that point to this pkg: target
+        sources = conn.execute(
+            "SELECT source, edge_type, detail FROM graph_edges WHERE target = ?",
+            (pkg_target,),
+        ).fetchall()
+
+        for src in sources:
+            if src[0] != real_repo:  # Don't create self-edges
+                conn.execute(
+                    "INSERT OR IGNORE INTO graph_edges (source, target, edge_type, detail) VALUES (?, ?, ?, ?)",
+                    (src[0], real_repo, src[1], src[2]),
+                )
+                edge_count += 1
+
+    unresolved = len(pkg_edges) - resolved_count
+    print(f"  Resolved {resolved_count}/{len(pkg_edges)} pkg: targets → {edge_count} direct edges added")
+    if unresolved:
+        # Show which packages couldn't be resolved
+        for row in pkg_edges:
+            pkg_target = row[0]
+            pkg_name = pkg_target.split("/")[-1] if "/" in pkg_target else pkg_target.replace("pkg:", "")
+            found = pkg_name in PKG_RESOLUTION_MAP
+            if not found:
+                for prefix in PKG_RESOLUTION_PREFIXES:
+                    if f"{prefix}{pkg_name}" in repo_names:
+                        found = True
+                        break
+            if not found:
+                for suffix in PKG_RESOLUTION_SUFFIXES:
+                    if f"{pkg_name}{suffix}" in repo_names:
+                        found = True
+                        break
+            if not found:
+                print(f"    Unresolved: {pkg_target}")
+
+
 def main():
     print("Building dependency graph...")
     conn = sqlite3.connect(str(DB_PATH))
@@ -1930,7 +2023,10 @@ def main():
                 )
             print(f"  Runtime routing: {len(rt_edges)} provider routes")
 
-        print("\n22. Building package-to-repo map...")
+        print("\n22. Resolving pkg: virtual node edges...")
+        resolve_pkg_edges(conn)
+
+        print("\n23. Building package-to-repo map...")
         build_package_repo_map(conn)
 
         # Commit all graph data in a single transaction
@@ -1942,7 +2038,7 @@ def main():
         print("\nERROR: Graph build failed — rolled back all changes.")
         raise
 
-    print("\n23. Building env var index...")
+    print("\n24. Building env var index...")
     try:
         import importlib.util
 

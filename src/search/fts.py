@@ -195,13 +195,14 @@ def fts_search(
                 params.extend(excluded)
 
         where = " AND ".join(where_clauses)
+        params.append(limit)
 
         try:
             raw_rows = conn.execute(
                 f"""
                 SELECT rowid, repo_name, file_path, file_type, chunk_type,
                        snippet(chunks, 0, '>>>', '<<<', '...', 64) as snippet
-                FROM chunks WHERE {where} ORDER BY rank LIMIT {limit}
+                FROM chunks WHERE {where} ORDER BY rank LIMIT ?
             """,
                 params,
             ).fetchall()

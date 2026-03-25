@@ -570,21 +570,21 @@ def section_completeness(
         return f"| {icon} **{rname}** | {label} | **{status}** | {reason} |\n"
 
     if high_items:
-        output += "### High Confidence\n\n"
+        output += "### Core repos (high confidence)\n\n"
         output += "| Repo | Area | Status | Detail |\n|------|------|--------|--------|\n"
         for r, lbl, s, d in high_items:
             output += _render_row(r, lbl, s, d, "[x]")
         output += "\n"
 
     if medium_items:
-        output += "### Medium Confidence\n\n"
+        output += "### Related repos (medium confidence)\n\n"
         output += "| Repo | Area | Status | Detail |\n|------|------|--------|--------|\n"
         for r, lbl, s, d in medium_items:
             output += _render_row(r, lbl, s, d, "[?]")
         output += "\n"
 
     if low_items:
-        output += f"<details>\n<summary>Low Confidence ({len(low_items)} repos)</summary>\n\n"
+        output += f"<details>\n<summary>Peripheral repos (low confidence) — {len(low_items)} repos</summary>\n\n"
         output += "| Repo | Area | Status | Detail |\n|------|------|--------|--------|\n"
         for r, lbl, s, d in low_items:
             output += _render_row(r, lbl, s, d, "[ ]")
