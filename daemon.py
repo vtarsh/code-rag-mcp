@@ -42,6 +42,7 @@ from src.graph.service import (
 from src.search.service import search_tool
 from src.tools.analyze import analyze_task_tool
 from src.tools.context import context_builder_tool
+from src.tools.fields import trace_field_tool
 from src.tools.service import (
     diff_provider_config_tool,
     health_check_tool,
@@ -109,6 +110,7 @@ TOOLS: dict[str, Callable[[dict[str, Any]], str]] = {
     "search_task_history": lambda args: search_task_history_tool(
         args["query"], args.get("developer", ""), args.get("limit", 10)
     ),
+    "trace_field": lambda args: trace_field_tool(args["field"], args.get("provider", ""), args.get("mode", "trace")),
 }
 
 

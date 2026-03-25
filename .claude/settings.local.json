@@ -14,7 +14,12 @@
       "Bash(/usr/local/bin/python3 -m pytest tests/ -q --tb=short)",
       "Bash(CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=pay-com /usr/local/bin/python3 scripts/build_audit_context.py --task PI-60 --provider payper)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(mv ~/.pay-knowledge/.claude/rules/line-trace-map-response.md ~/.pay-knowledge/.claude/agents/)",
+      "Bash(mv ~/.pay-knowledge/.claude/rules/line-trace-webhook.md ~/.pay-knowledge/.claude/agents/)",
+      "Bash(mv ~/.pay-knowledge/.claude/rules/line-trace-provider-request.md ~/.pay-knowledge/.claude/agents/)",
+      "Bash(git rm:*)",
+      "Bash(find /Users/vaceslavtarsevskij/.pay-knowledge -name knowledge.db -o -name *.db)"
     ]
   }
 }

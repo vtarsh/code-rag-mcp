@@ -194,6 +194,21 @@ def trace_chain(start: str, direction: str = "both", max_depth: int = 4) -> str:
 
 
 @mcp.tool()
+def trace_field(field: str, provider: str = "", mode: str = "trace") -> str:
+    """Trace a field through the service chain — from producer to final consumer.
+
+    Core principle: every field change must be traced through ALL services.
+
+    Args:
+        field: Field name to trace (e.g., "processorTransactionId", "finalize.issuerResponseCode")
+        provider: Optional provider name to filter results (e.g., "payper", "volt")
+        mode: Query type — "trace" (full chain), "consumers" (who reads it),
+              "compare" (cross-provider), "contract" (field spec)
+    """
+    return _call_daemon("trace_field", {"field": field, "provider": provider, "mode": mode})
+
+
+@mcp.tool()
 def repo_overview(repo_name: str) -> str:
     """Get detailed overview of a specific repo.
 

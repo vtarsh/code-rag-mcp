@@ -25,6 +25,7 @@ from src.graph.service import (
 from src.search.service import search_tool
 from src.tools.analyze import analyze_task_tool
 from src.tools.context import context_builder_tool
+from src.tools.fields import trace_field_tool
 from src.tools.service import (
     diff_provider_config_tool,
     health_check_tool,
@@ -131,6 +132,22 @@ def trace_chain(start: str, direction: str = "both", max_depth: int = 4) -> str:
         max_depth: How many hops to follow (default 4, max 6)
     """
     return trace_chain_tool(start, direction, max_depth)
+
+
+@mcp.tool()
+@tracked
+def trace_field(field: str, provider: str = "", mode: str = "trace") -> str:
+    """Trace a field through the service chain — from producer to final consumer.
+
+    Core principle: every field change must be traced through ALL services.
+
+    Args:
+        field: Field name to trace (e.g., "processorTransactionId", "finalize.issuerResponseCode")
+        provider: Optional provider name to filter results (e.g., "payper", "volt")
+        mode: Query type — "trace" (full chain), "consumers" (who reads it),
+              "compare" (cross-provider), "contract" (field spec)
+    """
+    return trace_field_tool(field, provider, mode)
 
 
 # --- Utility tools ---
