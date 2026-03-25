@@ -28,13 +28,11 @@
 
 16. Don't fix what you haven't seen in sandbox. If sandbox doesn't reproduce it, defer to e2e testing.
 17. Check platform generic handling (expiration workflows, generic callbacks, proto enums) BEFORE flagging gaps.
-18-20. Severity calibration, API format verification, missing repos verification — see `impact-audit.md` (severity table + anti-patterns).
 
 ## Process
 
-21. Don't report context percentages — just say "continuing" or "plenty of room" without numbers.
-22. Don't create watchdog crons that only report. Make them ACT or don't create them.
-23. When setting up overnight work, add recurring "continue" cron (every 30-60 min) that picks next item.
-24. Always verify data collection tools are actually working. Silent failures are the worst kind.
-25. When a tool is fixed/created, immediately document it in the relevant .claude/rules file.
-26. Independent validation agents MUST NOT use MCP tools. Verify agent output has zero `mcp__pay-knowledge__*` calls.
+18. Don't report context percentages — just say "continuing" or "plenty of room" without numbers.
+19. Don't create watchdog crons that only report. Make them ACT or don't create them.
+20. When setting up overnight work, add recurring "continue" cron (every 30-60 min) that picks next item.
+21. Always verify data collection tools are actually working. Silent failures are the worst kind.
+22. When a tool is fixed/created, immediately document it in the relevant .claude/rules file.

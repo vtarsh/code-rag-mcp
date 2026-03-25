@@ -87,17 +87,17 @@ For new provider implementations, run 3 specialized trace agents in parallel. Ea
 - `trace-chains.yaml` — field-level traceability: 7 critical fields traced through all hops
 
 ### Agent 1: map-response trace
-- Template: `.claude/rules/line-trace-map-response.md`
+- Template: `.claude/agents/line-trace-map-response.md`
 - Scope: `grpc-apm-{provider}/libs/map-response.js` + `status-mappings.js`
 - Checks each returned field against contract, reference, proto, and consumer code
 
 ### Agent 2: webhook handler trace
-- Template: `.claude/rules/line-trace-webhook.md`
+- Template: `.claude/agents/line-trace-webhook.md`
 - Scope: `workflow-provider-webhooks/activities/{provider}/*/parse-payload.js` + `handle-activities.js`
 - Checks field extraction, action routing, gateway params, async signaling
 
 ### Agent 3: request construction trace
-- Template: `.claude/rules/line-trace-provider-request.md`
+- Template: `.claude/agents/line-trace-provider-request.md`
 - Scope: `grpc-apm-{provider}/methods/*.js` + `libs/payload-builders/*.js` + `consts.js`
 - Checks each API request field against provider docs, conditionals, UDF format
 
