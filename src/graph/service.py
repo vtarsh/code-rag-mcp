@@ -6,7 +6,7 @@ All graph-based analysis tools registered with FastMCP.
 from __future__ import annotations
 
 from src.config import IMPACT_HINTS, KNOWN_FLOWS
-from src.container import get_db, require_db
+from src.container import db_connection, require_db
 from src.graph.queries import (
     bfs_chain,
     bfs_dependents,
@@ -25,8 +25,7 @@ def find_dependencies_tool(repo_name: str) -> str:
     Args:
         repo_name: Exact repo name
     """
-    conn = get_db()
-    try:
+    with db_connection() as conn:
         resolved, err = resolve_repo_name(conn, repo_name)
         if err:
             return err
@@ -63,8 +62,6 @@ def find_dependencies_tool(repo_name: str) -> str:
                 lines.append(f"  ... and {len(sources) - 20} more\n")
 
         return "".join(lines)
-    finally:
-        conn.close()
 
 
 @require_db
@@ -75,8 +72,7 @@ def trace_impact_tool(repo_name: str, depth: int = 2) -> str:
         repo_name: Repo to trace impact from (e.g., "providers-proto")
         depth: How many levels deep to trace (default 2, max 4)
     """
-    conn = get_db()
-    try:
+    with db_connection() as conn:
         resolved, err = resolve_repo_name(conn, repo_name)
         if err:
             return err
@@ -126,8 +122,6 @@ def trace_impact_tool(repo_name: str, depth: int = 2) -> str:
                 lines.append("- [ ] Consider phased rollout — many services affected\n")
 
         return "".join(lines)
-    finally:
-        conn.close()
 
 
 @require_db
@@ -139,8 +133,7 @@ def trace_flow_tool(source: str, target: str, max_depth: int = 5) -> str:
         target: Destination repo (e.g., "grpc-apm-trustly")
         max_depth: Maximum hops to search (default 5, max 8)
     """
-    conn = get_db()
-    try:
+    with db_connection() as conn:
         max_depth = min(max(1, max_depth), 8)
 
         src, err = resolve_repo_name(conn, source)
@@ -155,8 +148,6 @@ def trace_flow_tool(source: str, target: str, max_depth: int = 5) -> str:
             return f"Source and target are the same: {src}"
 
         found_paths = find_shortest_paths(conn, src, tgt, max_depth)
-    finally:
-        conn.close()
 
     # Score and sort paths
     edge_weight = {
@@ -230,8 +221,7 @@ def trace_chain_tool(start: str, direction: str = "both", max_depth: int = 4) ->
         direction: "downstream" (what it calls), "upstream" (who calls it), or "both" (default)
         max_depth: How many hops to follow (default 4, max 6)
     """
-    conn = get_db()
-    try:
+    with db_connection() as conn:
         max_depth = min(max(1, max_depth), 6)
 
         # Resolve start
@@ -268,8 +258,6 @@ def trace_chain_tool(start: str, direction: str = "both", max_depth: int = 4) ->
         for e in edges:
             downstream_adj.setdefault(e["source"], []).append((e["target"], e["edge_type"], e.get("detail", "")))
             upstream_adj.setdefault(e["target"], []).append((e["source"], e["edge_type"], e.get("detail", "")))
-    finally:
-        conn.close()
 
     # BFS
     show_downstream = direction in ("downstream", "both")

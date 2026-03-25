@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 
 from src.config import GATEWAY_REPO, PROTO_REPOS
@@ -34,7 +35,8 @@ def section_gotchas(ctx: AnalysisContext) -> str:
                 if snip not in seen_snippets:
                     seen_snippets.add(snip)
                     results.append(row)
-        except Exception:
+        except Exception as e:
+            print(f"[section_gotchas] FTS query failed for '{q}': {e}", file=sys.stderr)
             continue
 
     if not results:
@@ -71,7 +73,8 @@ def section_existing_tasks(ctx: AnalysisContext) -> str:
                 if snip not in seen_snippets:
                     seen_snippets.add(snip)
                     results.append(row)
-        except Exception:
+        except Exception as e:
+            print(f"[section_existing_tasks] FTS query failed for '{q}': {e}", file=sys.stderr)
             continue
 
     if not results:
@@ -100,7 +103,8 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
         ).fetchall()
         if not patterns:
             return ""
-    except Exception:
+    except Exception as e:
+        print(f"[section_task_patterns] failed to load patterns: {e}", file=sys.stderr)
         return ""
 
     # Similar tasks from FTS (exclude self-match to prevent data leakage)
@@ -149,8 +153,8 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
                         }
                     )
                 similar_tasks = similar_tasks[:3]
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[section_task_patterns] similar task search failed: {e}", file=sys.stderr)
 
     if similar_tasks:
         output_parts.append("## Historical Task Patterns\n")
@@ -253,7 +257,8 @@ def section_file_patterns(ctx: AnalysisContext) -> str:
         tables = {r[0] for r in ctx.conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
         if "file_patterns" not in tables:
             return ""
-    except Exception:
+    except Exception as e:
+        print(f"[section_file_patterns] failed to check tables: {e}", file=sys.stderr)
         return ""
 
     output_parts: list[str] = []

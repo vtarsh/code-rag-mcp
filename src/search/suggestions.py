@@ -8,7 +8,7 @@ Suggests similar terms from:
 from __future__ import annotations
 
 from src.config import DOMAIN_GLOSSARY
-from src.container import get_db
+from src.container import db_connection
 
 
 def _fuzzy_match(query: str, candidates: list[str], max_results: int = 5) -> list[str]:
@@ -67,14 +67,11 @@ def suggest_queries(query: str, max_suggestions: int = 5) -> list[str]:
 
     # 2. Repo name matches
     try:
-        conn = get_db()
-        try:
+        with db_connection() as conn:
             rows = conn.execute(
                 "SELECT DISTINCT name FROM graph_nodes WHERE node_type = 'repo' OR node_type IS NULL"
             ).fetchall()
             repo_names = [r["name"] for r in rows]
-        finally:
-            conn.close()
     except Exception:
         repo_names = []
 

@@ -15,10 +15,12 @@ import sqlite3
 
 # subprocess re-export for test mocking
 import subprocess
+import sys
 
-from src.container import get_db, require_db
+from src.container import db_connection, require_db
 
 from .base import AnalysisContext, Finding
+from .github_helpers import clear_gh_cache as _clear_gh_cache
 
 # --- Backward compat re-exports (tests mock these paths) ---
 from .github_helpers import find_task_branches as _find_task_branches
@@ -31,6 +33,7 @@ from .method_helpers import check_method_exists as _check_method_exists
 __all__ = [
     "_analyze_task_impl",
     "_check_method_exists",
+    "_clear_gh_cache",
     "_find_task_branches",
     "_find_task_prs",
     "_gh_api",
@@ -211,7 +214,8 @@ def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
                 target = row["target"]
                 if target not in finding_repos and target not in dep_repos:
                     dep_repos[target] = repo
-        except Exception:
+        except Exception as e:
+            print(f"[npm_dep_scan] query failed for repo '{repo}': {e}", file=sys.stderr)
             continue
 
     if not dep_repos:
@@ -257,7 +261,8 @@ def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
                 if hit:
                     new_finds.append((dep_repo, via_repo, kw))
                     break
-            except Exception:
+            except Exception as e:
+                print(f"[npm_dep_scan] FTS query failed for '{kw}' in '{dep_repo}': {e}", file=sys.stderr)
                 continue
 
     if not new_finds:
@@ -281,15 +286,14 @@ def analyze_task_tool(description: str, provider: str = "", rerank: bool = False
         provider: Optional provider name to focus on (e.g., "trustly", "paypal")
         rerank: Set to true to filter predictions via Gemini 3.1 Pro (requires GEMINI_API_KEY)
     """
-    conn = get_db()
-    try:
+    with db_connection() as conn:
         return _analyze_task_impl(conn, description, provider, rerank=rerank)
-    finally:
-        conn.close()
 
 
 def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str, *, rerank: bool = False) -> str:
     """Orchestrate task analysis. Dispatches to shared + domain-specific sections."""
+    import sys
+
     from .classifier import classify_task
     from .core_analyzer import run_co_change_rules, run_co_occurrence, run_core_analysis
 
@@ -306,8 +310,20 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
         provider=provider,
     )
 
+    # Track section failures for end-of-output warning
+    failed_sections: list[tuple[str, str]] = []  # (section_name, error_message)
+
+    def _run_section(name: str, func, *args, **kwargs):
+        """Run a section function with error capture. Returns result or empty string."""
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            failed_sections.append((name, str(e)))
+            print(f"[analyze_task] section '{name}' failed: {e}", file=sys.stderr)
+            return ""
+
     # Extract repo names from GitHub URLs and description text
-    repo_refs_output = _extract_repo_refs(ctx)
+    repo_refs_output = _run_section("repo_refs", _extract_repo_refs, ctx)
 
     output = f"# Task Analysis\n\n**Task**: {description}\n"
     output += f"**Domain**: {classification.domain}"
@@ -319,24 +335,24 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
         output += repo_refs_output + "\n"
 
     # Domain template injection — auto-add base repos for the classified domain
-    output += _inject_domain_template(ctx, classification)
+    output += _run_section("domain_template", _inject_domain_template, ctx, classification)
 
     # Shared sections (all task types)
-    output += section_gotchas(ctx)
-    output += section_existing_tasks(ctx)
-    output += section_task_patterns(ctx)
-    output += section_file_patterns(ctx)
+    output += _run_section("gotchas", section_gotchas, ctx)
+    output += _run_section("existing_tasks", section_existing_tasks, ctx)
+    output += _run_section("task_patterns", section_task_patterns, ctx)
+    output += _run_section("file_patterns", section_file_patterns, ctx)
 
     # PI-specific sections (only when provider detected)
-    output += section_provider(ctx)
-    output += section_bulk_providers(ctx)
-    output += section_proto(ctx)
-    output += section_webhooks(ctx)
-    output += section_gateway(ctx)
-    output += section_impact(ctx)
+    output += _run_section("provider", section_provider, ctx)
+    output += _run_section("bulk_providers", section_bulk_providers, ctx)
+    output += _run_section("proto", section_proto, ctx)
+    output += _run_section("webhooks", section_webhooks, ctx)
+    output += _run_section("gateway", section_gateway, ctx)
+    output += _run_section("impact", section_impact, ctx)
 
     # CORE/BO/HS-specific sections (when not PI)
-    output += run_core_analysis(ctx, classification)
+    output += _run_section("core_analysis", run_core_analysis, ctx, classification)
 
     # For CORE-prefix tasks classified as PI, also run keyword scan
     # (catches banking/workflow repos not found by PI analyzer)
@@ -344,35 +360,56 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
     if prefix_match and classification.domain == "pi":
         from .core_analyzer import _section_keyword_scan
 
-        output += _section_keyword_scan(ctx, classification)
+        output += _run_section("keyword_scan", _section_keyword_scan, ctx, classification)
 
     # npm_dep scan: check npm dependencies of found repos for task keyword matches
-    output += _section_npm_dep_scan(ctx)
+    output += _run_section("npm_dep_scan", _section_npm_dep_scan, ctx)
 
     # Co-occurrence boost (all domains — data-driven from task_history)
-    output += run_co_occurrence(ctx)
+    output += _run_section("co_occurrence", run_co_occurrence, ctx)
 
     # Co-change rules (high-confidence pairs from conventions.yaml)
-    output += run_co_change_rules(ctx)
+    output += _run_section("co_change_rules", run_co_change_rules, ctx)
 
-    # Shared analysis sections
-    method_output, task_methods, method_status = section_methods(ctx)
-    output += method_output
+    # Shared analysis sections — these return tuples, handle separately
+    task_methods: set[str] = set()
+    method_status: dict[str, dict] = {}
+    try:
+        method_output, task_methods, method_status = section_methods(ctx)
+        output += method_output
+    except Exception as e:
+        failed_sections.append(("methods", str(e)))
+        print(f"[analyze_task] section 'methods' failed: {e}", file=sys.stderr)
 
-    github_output, pr_data, branch_data = section_github(ctx)
-    output += github_output
+    pr_data: dict[str, list[dict]] = {}
+    branch_data: dict[str, list[str]] = {}
+    try:
+        github_output, pr_data, branch_data = section_github(ctx)
+        output += github_output
+    except Exception as e:
+        failed_sections.append(("github", str(e)))
+        print(f"[analyze_task] section 'github' failed: {e}", file=sys.stderr)
 
-    output += section_completeness(ctx, task_methods, method_status, pr_data, branch_data)
+    output += _run_section("completeness", section_completeness, ctx, task_methods, method_status, pr_data, branch_data)
 
     # PI-specific post-analysis
-    output += section_change_impact(ctx)
-    output += section_provider_checklist(ctx)
+    output += _run_section("change_impact", section_change_impact, ctx)
+    output += _run_section("provider_checklist", section_provider_checklist, ctx)
 
     # CI risk (all task types)
-    output += section_ci_risk(ctx)
+    output += _run_section("ci_risk", section_ci_risk, ctx)
 
     # Optional Gemini re-ranking
     if rerank:
-        output += _section_rerank(ctx, description, output)
+        output += _run_section("rerank", _section_rerank, ctx, description, output)
+
+    # Append warning if any sections failed
+    if failed_sections:
+        section_names = ", ".join(name for name, _ in failed_sections)
+        output += "\n---\n"
+        output += f"\n**Incomplete analysis**: sections [{section_names}] failed:\n"
+        for name, error in failed_sections:
+            output += f"  - `{name}`: {error}\n"
+        output += "\n"
 
     return output

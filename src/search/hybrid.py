@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 
-from src.container import get_db, get_reranker
+from src.container import db_connection, get_reranker
 from src.search.fts import fts_search
 from src.search.vector import vector_search
 
@@ -165,71 +165,67 @@ def _expand_siblings(results: list[dict], max_siblings: int = 2) -> list[dict]:
         return results
 
     try:
-        conn = get_db()
-    except Exception:
-        return results
+        with db_connection() as conn:
+            # Check if chunk_meta table exists
+            table_check = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='chunk_meta'"
+            ).fetchone()
+            if not table_check:
+                return results
 
-    try:
-        # Check if chunk_meta table exists
-        table_check = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunk_meta'").fetchone()
-        if not table_check:
+            for result in results[:max_siblings]:
+                repo = result["repo_name"]
+                file_path = result["file_path"]
+
+                # Find all chunks for this (repo, file) with ordering
+                rows = conn.execute(
+                    """SELECT c.rowid, c.content, cm.chunk_order
+                       FROM chunks c
+                       JOIN chunk_meta cm ON cm.chunk_rowid = c.rowid
+                       WHERE c.repo_name = ? AND c.file_path = ?
+                       ORDER BY cm.chunk_order""",
+                    (repo, file_path),
+                ).fetchall()
+
+                if len(rows) <= 1:
+                    continue
+
+                # Find which chunk in the sequence matches our result
+                snippet_text = result.get("snippet", "")
+                current_order = None
+                for row in rows:
+                    # Match by content overlap
+                    content = row[1] if isinstance(row, tuple) else row["content"]
+                    if content and snippet_text and content[:100] in snippet_text[:200]:
+                        current_order = row[2] if isinstance(row, tuple) else row["chunk_order"]
+                        break
+
+                if current_order is None:
+                    continue
+
+                # Collect adjacent chunks
+                siblings = []
+                for row in rows:
+                    order = row[2] if isinstance(row, tuple) else row["chunk_order"]
+                    content = row[1] if isinstance(row, tuple) else row["content"]
+                    if order == current_order - 1 or order == current_order + 1:
+                        siblings.append((order, content))
+
+                if siblings:
+                    siblings.sort(key=lambda x: x[0])
+                    context_parts = []
+                    for order, content in siblings:
+                        label = "prev" if order < current_order else "next"
+                        # Truncate sibling content to avoid huge results
+                        truncated = content[:1000] if len(content) > 1000 else content
+                        context_parts.append(f"\n--- [{label} chunk from same file] ---\n{truncated}")
+
+                    result["snippet"] += "".join(context_parts)
+                    result["has_siblings"] = True
+
             return results
-
-        for result in results[:max_siblings]:
-            repo = result["repo_name"]
-            file_path = result["file_path"]
-
-            # Find all chunks for this (repo, file) with ordering
-            rows = conn.execute(
-                """SELECT c.rowid, c.content, cm.chunk_order
-                   FROM chunks c
-                   JOIN chunk_meta cm ON cm.chunk_rowid = c.rowid
-                   WHERE c.repo_name = ? AND c.file_path = ?
-                   ORDER BY cm.chunk_order""",
-                (repo, file_path),
-            ).fetchall()
-
-            if len(rows) <= 1:
-                continue
-
-            # Find which chunk in the sequence matches our result
-            snippet_text = result.get("snippet", "")
-            current_order = None
-            for row in rows:
-                # Match by content overlap
-                content = row[1] if isinstance(row, tuple) else row["content"]
-                if content and snippet_text and content[:100] in snippet_text[:200]:
-                    current_order = row[2] if isinstance(row, tuple) else row["chunk_order"]
-                    break
-
-            if current_order is None:
-                continue
-
-            # Collect adjacent chunks
-            siblings = []
-            for row in rows:
-                order = row[2] if isinstance(row, tuple) else row["chunk_order"]
-                content = row[1] if isinstance(row, tuple) else row["content"]
-                if order == current_order - 1 or order == current_order + 1:
-                    siblings.append((order, content))
-
-            if siblings:
-                siblings.sort(key=lambda x: x[0])
-                context_parts = []
-                for order, content in siblings:
-                    label = "prev" if order < current_order else "next"
-                    # Truncate sibling content to avoid huge results
-                    truncated = content[:1000] if len(content) > 1000 else content
-                    context_parts.append(f"\n--- [{label} chunk from same file] ---\n{truncated}")
-
-                result["snippet"] += "".join(context_parts)
-                result["has_siblings"] = True
-
-        return results
     except Exception:
         return results
-    finally:
-        conn.close()
 
 
 def _annotate_similar_repos(results: list[dict]) -> list[dict]:
@@ -242,57 +238,51 @@ def _annotate_similar_repos(results: list[dict]) -> list[dict]:
         return results
 
     try:
-        conn = get_db()
+        with db_connection() as conn:
+            # Check if graph_edges table exists
+            table_check = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='graph_edges'"
+            ).fetchone()
+            if not table_check:
+                return results
+
+            result_repos = {r["repo_name"] for r in results}
+
+            # Find similar_repo edges for repos in results
+            if not result_repos:
+                return results
+
+            placeholders = ",".join("?" * len(result_repos))
+            similar_rows = conn.execute(
+                f"SELECT source, target, detail FROM graph_edges "
+                f"WHERE edge_type = 'similar_repo' AND source IN ({placeholders})",
+                list(result_repos),
+            ).fetchall()
+
+            if not similar_rows:
+                return results
+
+            # Group by source repo
+            similar_map: dict[str, list[tuple[str, str]]] = {}
+            for source, target, detail in similar_rows:
+                similar_map.setdefault(source, []).append((target, detail))
+
+            # Annotate results that have similar repos NOT already in results
+            for result in results:
+                repo = result["repo_name"]
+                if repo in similar_map:
+                    missing_similar = [
+                        (target, detail) for target, detail in similar_map[repo] if target not in result_repos
+                    ]
+                    if missing_similar:
+                        annotations = []
+                        for target, detail in missing_similar[:3]:
+                            annotations.append(f"{target} ({detail})")
+                        result["snippet"] += "\n\n--- Similar repos (may be confused) ---\n" + "\n".join(
+                            f"  - {a}" for a in annotations
+                        )
+                        result["has_similar_repos"] = True
+
+            return results
     except Exception:
         return results
-
-    try:
-        # Check if graph_edges table exists
-        table_check = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='graph_edges'"
-        ).fetchone()
-        if not table_check:
-            return results
-
-        result_repos = {r["repo_name"] for r in results}
-
-        # Find similar_repo edges for repos in results
-        if not result_repos:
-            return results
-
-        placeholders = ",".join("?" * len(result_repos))
-        similar_rows = conn.execute(
-            f"SELECT source, target, detail FROM graph_edges "
-            f"WHERE edge_type = 'similar_repo' AND source IN ({placeholders})",
-            list(result_repos),
-        ).fetchall()
-
-        if not similar_rows:
-            return results
-
-        # Group by source repo
-        similar_map: dict[str, list[tuple[str, str]]] = {}
-        for source, target, detail in similar_rows:
-            similar_map.setdefault(source, []).append((target, detail))
-
-        # Annotate results that have similar repos NOT already in results
-        for result in results:
-            repo = result["repo_name"]
-            if repo in similar_map:
-                missing_similar = [
-                    (target, detail) for target, detail in similar_map[repo] if target not in result_repos
-                ]
-                if missing_similar:
-                    annotations = []
-                    for target, detail in missing_similar[:3]:
-                        annotations.append(f"{target} ({detail})")
-                    result["snippet"] += "\n\n--- Similar repos (may be confused) ---\n" + "\n".join(
-                        f"  - {a}" for a in annotations
-                    )
-                    result["has_similar_repos"] = True
-
-        return results
-    except Exception:
-        return results
-    finally:
-        conn.close()

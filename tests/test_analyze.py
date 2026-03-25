@@ -1,6 +1,7 @@
 """Tests for tools/analyze.py — analyze_task_tool."""
 
 import sqlite3
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 
@@ -13,6 +14,16 @@ def _mock_conn():
     # FTS5 table for chunks
     conn.execute("CREATE VIRTUAL TABLE chunks USING fts5(repo_name, file_path, file_type, chunk_type, content)")
     return conn
+
+
+def _mock_db_connection(conn):
+    """Create a mock db_connection context manager that yields conn."""
+
+    @contextmanager
+    def _cm():
+        yield conn
+
+    return _cm
 
 
 class TestAnalyzeTaskTool:
@@ -29,12 +40,12 @@ class TestAnalyzeTaskTool:
     @patch("src.tools.analyze._find_task_prs", return_value={})
     @patch("src.tools.analyze._find_task_branches", return_value={})
     @patch("src.container.check_db_health", return_value=None)
-    @patch("src.tools.analyze.get_db")
-    def test_basic_output_structure(self, mock_get_db, mock_health, mock_branches, mock_prs):
+    @patch("src.tools.analyze.db_connection")
+    def test_basic_output_structure(self, mock_db_conn, mock_health, mock_branches, mock_prs):
         from src.tools.analyze import analyze_task_tool
 
         conn = _mock_conn()
-        mock_get_db.return_value = conn
+        mock_db_conn.side_effect = _mock_db_connection(conn)
         result = analyze_task_tool("implement something new")
         assert "# Task Analysis" in result
         assert "Proto Contract" in result
@@ -44,38 +55,38 @@ class TestAnalyzeTaskTool:
     @patch("src.tools.analyze._find_task_prs", return_value={})
     @patch("src.tools.analyze._find_task_branches", return_value={})
     @patch("src.container.check_db_health", return_value=None)
-    @patch("src.tools.analyze.get_db")
-    def test_provider_autodetect(self, mock_get_db, mock_health, mock_branches, mock_prs):
+    @patch("src.tools.analyze.db_connection")
+    def test_provider_autodetect(self, mock_db_conn, mock_health, mock_branches, mock_prs):
         from src.tools.analyze import analyze_task_tool
 
         conn = _mock_conn()
         conn.execute("INSERT INTO repos VALUES ('grpc-apm-trustly', 'service')")
-        mock_get_db.return_value = conn
+        mock_db_conn.side_effect = _mock_db_connection(conn)
         result = analyze_task_tool("implement verification for trustly")
         assert "Provider: trustly" in result
 
     @patch("src.tools.analyze._find_task_prs", return_value={})
     @patch("src.tools.analyze._find_task_branches", return_value={})
     @patch("src.container.check_db_health", return_value=None)
-    @patch("src.tools.analyze.get_db")
-    def test_explicit_provider(self, mock_get_db, mock_health, mock_branches, mock_prs):
+    @patch("src.tools.analyze.db_connection")
+    def test_explicit_provider(self, mock_db_conn, mock_health, mock_branches, mock_prs):
         from src.tools.analyze import analyze_task_tool
 
         conn = _mock_conn()
         conn.execute("INSERT INTO repos VALUES ('grpc-apm-paypal', 'service')")
-        mock_get_db.return_value = conn
+        mock_db_conn.side_effect = _mock_db_connection(conn)
         result = analyze_task_tool("implement refund", provider="paypal")
         assert "Provider: paypal" in result
 
     @patch("src.tools.analyze._find_task_prs", return_value={})
     @patch("src.tools.analyze._find_task_branches", return_value={})
     @patch("src.container.check_db_health", return_value=None)
-    @patch("src.tools.analyze.get_db")
-    def test_task_id_detection(self, mock_get_db, mock_health, mock_branches, mock_prs):
+    @patch("src.tools.analyze.db_connection")
+    def test_task_id_detection(self, mock_db_conn, mock_health, mock_branches, mock_prs):
         from src.tools.analyze import analyze_task_tool
 
         conn = _mock_conn()
-        mock_get_db.return_value = conn
+        mock_db_conn.side_effect = _mock_db_connection(conn)
         result = analyze_task_tool("PI-54 implement DirectDebitMandate for trustly")
         assert "pi-54" in result.lower()
         assert "Task ID detected" in result
@@ -83,24 +94,24 @@ class TestAnalyzeTaskTool:
     @patch("src.tools.analyze._find_task_prs", return_value={})
     @patch("src.tools.analyze._find_task_branches", return_value={})
     @patch("src.container.check_db_health", return_value=None)
-    @patch("src.tools.analyze.get_db")
-    def test_no_task_id(self, mock_get_db, mock_health, mock_branches, mock_prs):
+    @patch("src.tools.analyze.db_connection")
+    def test_no_task_id(self, mock_db_conn, mock_health, mock_branches, mock_prs):
         from src.tools.analyze import analyze_task_tool
 
         conn = _mock_conn()
-        mock_get_db.return_value = conn
+        mock_db_conn.side_effect = _mock_db_connection(conn)
         result = analyze_task_tool("generic task without id")
         assert "No task ID detected" in result
 
     @patch("src.tools.analyze._find_task_prs", return_value={})
     @patch("src.tools.analyze._find_task_branches", return_value={})
     @patch("src.container.check_db_health", return_value=None)
-    @patch("src.tools.analyze.get_db")
-    def test_e2e_in_completeness(self, mock_get_db, mock_health, mock_branches, mock_prs):
+    @patch("src.tools.analyze.db_connection")
+    def test_e2e_in_completeness(self, mock_db_conn, mock_health, mock_branches, mock_prs):
         from src.tools.analyze import analyze_task_tool
 
         conn = _mock_conn()
-        mock_get_db.return_value = conn
+        mock_db_conn.side_effect = _mock_db_connection(conn)
         result = analyze_task_tool("implement something")
         assert "e2e-tests" in result
         assert "E2E tests" in result
@@ -148,8 +159,8 @@ class TestBidirectionalCoOccurrence:
     @patch("src.tools.analyze._find_task_prs", return_value={})
     @patch("src.tools.analyze._find_task_branches", return_value={})
     @patch("src.container.check_db_health", return_value=None)
-    @patch("src.tools.analyze.get_db")
-    def test_reverse_probability_adds_satellite(self, mock_get_db, mock_health, mock_branches, mock_prs):
+    @patch("src.tools.analyze.db_connection")
+    def test_reverse_probability_adds_satellite(self, mock_db_conn, mock_health, mock_branches, mock_prs):
         import json
 
         from src.tools.analyze import analyze_task_tool
@@ -177,7 +188,7 @@ class TestBidirectionalCoOccurrence:
                 "INSERT INTO task_history (ticket_id, summary, repos_changed) VALUES (?, ?, ?)",
                 (f"CORE-{2700 + i}", f"Other task {i}", repos),
             )
-        mock_get_db.return_value = conn
+        mock_db_conn.side_effect = _mock_db_connection(conn)
 
         result = analyze_task_tool("CORE-2650 Add new API endpoint for settlements")
         # P(apikeys2 | express-api-v1) = 5/20 = 25% (below 40% threshold)
@@ -192,8 +203,8 @@ class TestSimilarTaskBoost:
     @patch("src.tools.analyze._find_task_prs", return_value={})
     @patch("src.tools.analyze._find_task_branches", return_value={})
     @patch("src.container.check_db_health", return_value=None)
-    @patch("src.tools.analyze.get_db")
-    def test_self_match_excluded(self, mock_get_db, mock_health, mock_branches, mock_prs):
+    @patch("src.tools.analyze.db_connection")
+    def test_self_match_excluded(self, mock_db_conn, mock_health, mock_branches, mock_prs):
         import json
 
         from src.tools.analyze import analyze_task_tool
@@ -214,14 +225,14 @@ class TestSimilarTaskBoost:
             ("CORE-100", "Fix audit logging", json.dumps(["repo-a", "repo-b", "repo-c"])),
         )
         conn.execute("INSERT INTO task_history_fts (rowid, summary, description) VALUES (1, 'Fix audit logging', '')")
-        mock_get_db.return_value = conn
+        mock_db_conn.side_effect = _mock_db_connection(conn)
 
         result = analyze_task_tool("Fix audit logging CORE-100")
         # Should NOT inject repos from self-match — repo-a/b/c should NOT appear as similar_task findings
         assert "Similar past task" not in result
 
     def test_similar_task_boost_logic(self):
-        """Test the similar-task boost logic directly: ≥3 repo overlap triggers injection."""
+        """Test the similar-task boost logic directly: >=3 repo overlap triggers injection."""
         from src.tools.analyze.base import AnalysisContext, Finding
 
         conn = _mock_conn()
@@ -292,7 +303,8 @@ class TestGhApi:
 
     @patch("src.tools.analyze.subprocess.run", side_effect=Exception("timeout"))
     def test_failure(self, mock_run):
-        from src.tools.analyze import _gh_api
+        from src.tools.analyze import _clear_gh_cache, _gh_api
 
+        _clear_gh_cache()  # Ensure no cached result from test_success
         result = _gh_api("repos/org/repo/branches")
         assert result is None

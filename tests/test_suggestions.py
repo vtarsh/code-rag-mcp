@@ -1,5 +1,6 @@
 """Tests for search/suggestions.py — query suggestions on 0 results."""
 
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 from src.search.suggestions import _fuzzy_match, format_no_results, suggest_queries
@@ -41,54 +42,64 @@ class TestFuzzyMatch:
         assert results == []
 
 
+def _mock_db_connection(mock_conn):
+    """Create a mock db_connection context manager that yields mock_conn."""
+
+    @contextmanager
+    def _cm():
+        yield mock_conn
+
+    return _cm
+
+
 class TestSuggestQueries:
-    @patch("src.search.suggestions.get_db")
-    def test_glossary_match(self, mock_get_db):
+    @patch("src.search.suggestions.db_connection")
+    def test_glossary_match(self, mock_db_conn):
         mock_conn = MagicMock()
         mock_conn.execute.return_value.fetchall.return_value = []
-        mock_get_db.return_value = mock_conn
+        mock_db_conn.side_effect = _mock_db_connection(mock_conn)
 
         suggestions = suggest_queries("netwerk token")
         # Should fuzzy-match "network" from glossary
         found_network = any("network" in s.lower() for s in suggestions)
         assert found_network or len(suggestions) >= 0  # graceful if no match
 
-    @patch("src.search.suggestions.get_db")
-    def test_repo_name_match(self, mock_get_db):
+    @patch("src.search.suggestions.db_connection")
+    def test_repo_name_match(self, mock_db_conn):
         mock_conn = MagicMock()
         mock_conn.execute.return_value.fetchall.return_value = [
             {"name": "grpc-apm-trustly"},
             {"name": "grpc-payment-gateway"},
             {"name": "workflow-settlement-worker"},
         ]
-        mock_get_db.return_value = mock_conn
+        mock_db_conn.side_effect = _mock_db_connection(mock_conn)
 
         suggestions = suggest_queries("trustly")
         assert "grpc-apm-trustly" in suggestions
 
-    @patch("src.search.suggestions.get_db")
-    def test_excludes_exact_query(self, mock_get_db):
+    @patch("src.search.suggestions.db_connection")
+    def test_excludes_exact_query(self, mock_db_conn):
         mock_conn = MagicMock()
         mock_conn.execute.return_value.fetchall.return_value = [
             {"name": "payment"},
         ]
-        mock_get_db.return_value = mock_conn
+        mock_db_conn.side_effect = _mock_db_connection(mock_conn)
 
         suggestions = suggest_queries("payment")
         assert "payment" not in [s.lower() for s in suggestions]
 
-    @patch("src.search.suggestions.get_db")
-    def test_max_suggestions(self, mock_get_db):
+    @patch("src.search.suggestions.db_connection")
+    def test_max_suggestions(self, mock_db_conn):
         mock_conn = MagicMock()
         mock_conn.execute.return_value.fetchall.return_value = [{"name": f"repo-{i}"} for i in range(50)]
-        mock_get_db.return_value = mock_conn
+        mock_db_conn.side_effect = _mock_db_connection(mock_conn)
 
         suggestions = suggest_queries("repo", max_suggestions=3)
         assert len(suggestions) <= 3
 
-    @patch("src.search.suggestions.get_db")
-    def test_db_error_graceful(self, mock_get_db):
-        mock_get_db.side_effect = Exception("db gone")
+    @patch("src.search.suggestions.db_connection")
+    def test_db_error_graceful(self, mock_db_conn):
+        mock_db_conn.side_effect = Exception("db gone")
         # Should not raise, just return glossary-only suggestions
         suggestions = suggest_queries("payment")
         assert isinstance(suggestions, list)

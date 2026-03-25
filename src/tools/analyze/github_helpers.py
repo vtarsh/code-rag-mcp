@@ -6,6 +6,9 @@ import json
 import logging
 import re
 import subprocess
+import sys
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from src.config import ORG
@@ -21,6 +24,12 @@ _MAX_WORKERS = 8
 # Overall timeout for batch GitHub operations (seconds)
 _BATCH_TIMEOUT = 30
 
+# --- GitHub API response cache (thread-safe) ---
+_gh_cache: dict[str, tuple[float, dict | list]] = {}  # endpoint → (timestamp, result)
+_gh_cache_lock = threading.Lock()
+_GH_CACHE_TTL = 600  # 10 minutes
+_GH_CACHE_MAX = 256
+
 
 def validate_repo_name(repo_name: str) -> bool:
     """Validate repo name contains only safe characters."""
@@ -28,7 +37,23 @@ def validate_repo_name(repo_name: str) -> bool:
 
 
 def gh_api(endpoint: str) -> dict | list | None:
-    """Call GitHub API via gh CLI. Returns parsed JSON or None on failure."""
+    """Call GitHub API via gh CLI. Returns parsed JSON or None on failure.
+
+    Results are cached in-memory with a 10-minute TTL.
+    Failures (None) are never cached.
+    """
+    # Check cache (thread-safe)
+    with _gh_cache_lock:
+        entry = _gh_cache.get(endpoint)
+        if entry is not None:
+            ts, cached_result = entry
+            if time.time() - ts < _GH_CACHE_TTL:
+                _gh_cache[endpoint] = (time.time(), cached_result)  # LRU: update timestamp
+                return cached_result
+            else:
+                del _gh_cache[endpoint]
+
+    # Cache miss — call gh CLI (outside lock to avoid blocking other threads)
     try:
         result = subprocess.run(
             ["gh", "api", endpoint, "--paginate"],
@@ -37,10 +62,22 @@ def gh_api(endpoint: str) -> dict | list | None:
             timeout=10,
         )
         if result.returncode == 0 and result.stdout.strip():
-            return json.loads(result.stdout)
+            parsed = json.loads(result.stdout)
+            with _gh_cache_lock:
+                if len(_gh_cache) >= _GH_CACHE_MAX:
+                    oldest_key = min(_gh_cache, key=lambda k: _gh_cache[k][0])
+                    del _gh_cache[oldest_key]
+                _gh_cache[endpoint] = (time.time(), parsed)
+            return parsed
     except Exception as e:
         logging.warning(f"GitHub API error: {e}")
     return None
+
+
+def clear_gh_cache() -> None:
+    """Clear the GitHub API response cache. Used in tests."""
+    with _gh_cache_lock:
+        _gh_cache.clear()
 
 
 def task_id_matches(task_id: str, text: str) -> bool:
@@ -95,7 +132,9 @@ def find_task_branches(repos: list[str], task_id: str) -> dict[str, list[str]]:
                 repo_name, branches = future.result(timeout=1)
                 if branches:
                     results[repo_name] = branches
-            except Exception:
+            except Exception as e:
+                repo = futures[future]
+                print(f"[github_helpers] failed to fetch branches for {repo}: {e}", file=sys.stderr)
                 continue
     return results
 
@@ -114,6 +153,8 @@ def find_task_prs(repos: list[str], task_id: str) -> dict[str, list[dict]]:
                 repo_name, prs = future.result(timeout=1)
                 if prs:
                     results[repo_name] = prs
-            except Exception:
+            except Exception as e:
+                repo = futures[future]
+                print(f"[github_helpers] failed to fetch PRs for {repo}: {e}", file=sys.stderr)
                 continue
     return results

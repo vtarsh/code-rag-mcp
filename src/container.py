@@ -11,11 +11,12 @@ Thread-safe model preloading at startup.
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import logging
 import sqlite3
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from typing import Any, ParamSpec, TypeVar
 
 from src.config import DB_PATH, EMBEDDING_MODEL_KEY, LANCE_PATH
@@ -30,7 +31,10 @@ _lock = threading.Lock()
 
 
 def get_db() -> sqlite3.Connection:
-    """Get a new database connection. Caller must close it."""
+    """Get a new database connection. Caller must close it.
+
+    Prefer using ``db_connection()`` context manager for automatic cleanup.
+    """
     global _wal_set
     conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -40,6 +44,23 @@ def get_db() -> sqlite3.Connection:
     conn.execute("PRAGMA mmap_size=268435456")  # 256MB mmap for faster reads
     conn.execute("PRAGMA cache_size=-32000")  # 32MB page cache
     return conn
+
+
+@contextlib.contextmanager
+def db_connection() -> Generator[sqlite3.Connection, None, None]:
+    """Context manager for safe database connections.
+
+    Usage::
+
+        with db_connection() as conn:
+            rows = conn.execute("SELECT ...").fetchall()
+        # conn is automatically closed here
+    """
+    conn = get_db()
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def check_db_health() -> str | None:

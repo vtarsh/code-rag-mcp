@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import sys
 from pathlib import Path
 
 from src.config import GATEWAY_REPO, INFRA_REPOS, INFRA_SUFFIXES, PROVIDER_PREFIXES, WEBHOOK_REPOS
@@ -137,8 +138,8 @@ def section_provider(ctx: AnalysisContext) -> str:
                     ctx.findings.append(Finding("provider", repo, "high"))
                     output += f"  - **{repo}** (mentions `{ctx.provider}` in code)\n"
                 output += "\n"
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[section_provider] cross-provider search failed: {e}", file=sys.stderr)
 
     return output
 

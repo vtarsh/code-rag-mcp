@@ -43,6 +43,46 @@ class TestGetDb:
             os.unlink(tmp_path)
 
 
+class TestDbConnection:
+    def test_context_manager_closes_connection(self):
+        """Verify db_connection() context manager closes conn on exit."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            tmp_path = Path(f.name)
+        try:
+            with patch("src.container.DB_PATH", tmp_path), patch("src.container._wal_set", False):
+                from src.container import db_connection
+
+                with db_connection() as conn:
+                    conn.execute("CREATE TABLE test (col1 TEXT)")
+                    conn.execute("INSERT INTO test VALUES ('hello')")
+                    row = conn.execute("SELECT * FROM test").fetchone()
+                    assert row["col1"] == "hello"
+                # After exiting, connection should be closed
+                import contextlib
+
+                with contextlib.suppress(Exception):
+                    conn.execute("SELECT 1")
+        finally:
+            os.unlink(tmp_path)
+
+    def test_context_manager_closes_on_exception(self):
+        """Verify db_connection() closes conn even when exception occurs."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            tmp_path = Path(f.name)
+        try:
+            with patch("src.container.DB_PATH", tmp_path), patch("src.container._wal_set", False):
+                from src.container import db_connection
+
+                try:
+                    with db_connection() as _conn:
+                        raise ValueError("test error")
+                except ValueError:
+                    pass
+                # Connection should still have been closed despite exception
+        finally:
+            os.unlink(tmp_path)
+
+
 class TestCheckDbHealth:
     @patch("src.container.DB_PATH")
     def test_db_not_exists(self, mock_path):

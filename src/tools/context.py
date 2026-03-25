@@ -11,7 +11,7 @@ from pathlib import Path
 
 from src.cache import cache_get, cache_key, cache_set
 from src.config import PROTO_REPOS
-from src.container import get_db, require_db
+from src.container import db_connection, require_db
 from src.formatting import strip_repo_tag
 from src.graph.queries import get_incoming_edges, get_outgoing_edges
 from src.search.fts import expand_query, sanitize_fts_with_stop_words
@@ -94,8 +94,7 @@ def _build_context(
         output += f"⚠️ Vector search unavailable: {vec_err}\n\n"
 
     # Single DB connection for all subsequent sections
-    conn = get_db()
-    try:
+    with db_connection() as conn:
         # 2. Dependencies
         if include_deps and seen_repos:
             output += _build_deps_section(list(seen_repos.keys()), conn)
@@ -106,62 +105,56 @@ def _build_context(
 
         # 4. Repo summary
         output += _build_repo_summary(list(seen_repos.keys()), conn)
-    finally:
-        conn.close()
 
     return output
 
 
 def _build_deps_section(repo_names: list[str], conn=None) -> str:
     """Build compact dependency overview for discovered repos."""
-    own_conn = conn is None
-    if own_conn:
-        conn = get_db()
-    try:
-        output = f"## Dependencies ({len(repo_names)} repos)\n\n"
+    if conn is None:
+        with db_connection() as conn:
+            return _build_deps_section(repo_names, conn)
+    output = f"## Dependencies ({len(repo_names)} repos)\n\n"
 
-        for repo_name in repo_names[:6]:  # cap to avoid huge output
-            outgoing = get_outgoing_edges(conn, repo_name)
-            incoming = get_incoming_edges(conn, repo_name)
+    for repo_name in repo_names[:6]:  # cap to avoid huge output
+        outgoing = get_outgoing_edges(conn, repo_name)
+        incoming = get_incoming_edges(conn, repo_name)
 
-            if not outgoing and not incoming:
-                continue
+        if not outgoing and not incoming:
+            continue
 
-            output += f"### {repo_name}\n"
+        output += f"### {repo_name}\n"
 
-            # Compact outgoing: group by type, show max 5 per type
-            if outgoing:
-                by_type: dict[str, list[str]] = {}
-                for e in outgoing:
-                    if not e.target.startswith(("pkg:", "proto:", "msg:", "svc:")):
-                        by_type.setdefault(e.edge_type, []).append(e.target)
-                if by_type:
-                    output += "**Depends on**: "
-                    parts: list[str] = []
-                    for etype, targets in sorted(by_type.items()):
-                        unique = sorted(set(targets))
-                        shown = unique[:5]
-                        suffix = f" +{len(unique) - 5}" if len(unique) > 5 else ""
-                        parts.append(f"{etype}: {', '.join(shown)}{suffix}")
-                    output += " | ".join(parts) + "\n"
+        # Compact outgoing: group by type, show max 5 per type
+        if outgoing:
+            by_type: dict[str, list[str]] = {}
+            for e in outgoing:
+                if not e.target.startswith(("pkg:", "proto:", "msg:", "svc:")):
+                    by_type.setdefault(e.edge_type, []).append(e.target)
+            if by_type:
+                output += "**Depends on**: "
+                parts: list[str] = []
+                for etype, targets in sorted(by_type.items()):
+                    unique = sorted(set(targets))
+                    shown = unique[:5]
+                    suffix = f" +{len(unique) - 5}" if len(unique) > 5 else ""
+                    parts.append(f"{etype}: {', '.join(shown)}{suffix}")
+                output += " | ".join(parts) + "\n"
 
-            # Compact incoming: just count by type
-            if incoming:
-                by_type_in: dict[str, int] = {}
-                for e in incoming:
-                    if not e.source.startswith(("pkg:", "proto:", "msg:", "svc:")):
-                        by_type_in[e.edge_type] = by_type_in.get(e.edge_type, 0) + 1
-                if by_type_in:
-                    output += "**Used by**: "
-                    parts = [f"{cnt} via {etype}" for etype, cnt in sorted(by_type_in.items(), key=lambda x: -x[1])]
-                    output += ", ".join(parts) + "\n"
+        # Compact incoming: just count by type
+        if incoming:
+            by_type_in: dict[str, int] = {}
+            for e in incoming:
+                if not e.source.startswith(("pkg:", "proto:", "msg:", "svc:")):
+                    by_type_in[e.edge_type] = by_type_in.get(e.edge_type, 0) + 1
+            if by_type_in:
+                output += "**Used by**: "
+                parts = [f"{cnt} via {etype}" for etype, cnt in sorted(by_type_in.items(), key=lambda x: -x[1])]
+                output += ", ".join(parts) + "\n"
 
-            output += "\n"
+        output += "\n"
 
-        return output
-    finally:
-        if own_conn:
-            conn.close()
+    return output
 
 
 def _build_proto_section(
@@ -171,9 +164,9 @@ def _build_proto_section(
     conn=None,
 ) -> str:
     """Find relevant proto definitions, prioritizing results from repos in search hits."""
-    own_conn = conn is None
-    if own_conn:
-        conn = get_db()
+    if conn is None:
+        with db_connection() as conn:
+            return _build_proto_section(expanded_query, raw_query, relevant_repos, conn)
     try:
         fts_q = sanitize_fts_with_stop_words(expanded_query)
         if not fts_q:
@@ -222,9 +215,6 @@ def _build_proto_section(
         return output
     except Exception:
         return ""
-    finally:
-        if own_conn:
-            conn.close()
 
 
 # Backward-compat alias — callers (including tests) that import _sanitize_for_fts
@@ -234,28 +224,25 @@ _sanitize_for_fts = sanitize_fts_with_stop_words
 
 def _build_repo_summary(repo_names: list[str], conn=None) -> str:
     """Build a compact summary of discovered repos."""
-    own_conn = conn is None
-    if own_conn:
-        conn = get_db()
-    try:
-        output = "## Repo Summary\n\n"
-        output += "| Repo | Type | Methods |\n|------|------|--------|\n"
+    if conn is None:
+        with db_connection() as conn:
+            return _build_repo_summary(repo_names, conn)
 
-        for repo_name in repo_names[:10]:
-            repo = conn.execute("SELECT type FROM repos WHERE name = ?", (repo_name,)).fetchone()
-            if not repo:
-                continue
-            methods = conn.execute(
-                "SELECT DISTINCT file_path FROM chunks WHERE repo_name = ? AND file_type = 'grpc_method'", (repo_name,)
-            ).fetchall()
-            method_names = [Path(m["file_path"]).stem for m in methods]
-            methods_str = ", ".join(method_names[:5])
-            if len(method_names) > 5:
-                methods_str += f" +{len(method_names) - 5}"
-            output += f"| {repo_name} | {repo['type']} | {methods_str or '-'} |\n"
+    output = "## Repo Summary\n\n"
+    output += "| Repo | Type | Methods |\n|------|------|--------|\n"
 
-        output += "\n"
-        return output
-    finally:
-        if own_conn:
-            conn.close()
+    for repo_name in repo_names[:10]:
+        repo = conn.execute("SELECT type FROM repos WHERE name = ?", (repo_name,)).fetchone()
+        if not repo:
+            continue
+        methods = conn.execute(
+            "SELECT DISTINCT file_path FROM chunks WHERE repo_name = ? AND file_type = 'grpc_method'", (repo_name,)
+        ).fetchall()
+        method_names = [Path(m["file_path"]).stem for m in methods]
+        methods_str = ", ".join(method_names[:5])
+        if len(method_names) > 5:
+            methods_str += f" +{len(method_names) - 5}"
+        output += f"| {repo_name} | {repo['type']} | {methods_str or '-'} |\n"
+
+    output += "\n"
+    return output

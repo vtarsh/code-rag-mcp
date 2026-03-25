@@ -12,7 +12,7 @@ from pathlib import Path
 
 from src.cache import get_runtime_stats
 from src.config import BASE_DIR, DB_PATH, LANCE_PATH, NPM_SCOPE, REPO_NAME_PREFIXES
-from src.container import get_db, is_model_loaded, is_reranker_loaded, require_db
+from src.container import db_connection, is_model_loaded, is_reranker_loaded, require_db
 
 
 @require_db
@@ -22,8 +22,7 @@ def repo_overview_tool(repo_name: str) -> str:
     Args:
         repo_name: Exact repo name (e.g., "grpc-apm-trustly", "workflow-provider-webhooks")
     """
-    conn = get_db()
-    try:
+    with db_connection() as conn:
         repo = conn.execute("SELECT * FROM repos WHERE name = ?", (repo_name,)).fetchone()
         if not repo:
             repos = conn.execute("SELECT name FROM repos WHERE name LIKE ? LIMIT 10", (f"%{repo_name}%",)).fetchall()
@@ -84,8 +83,6 @@ def repo_overview_tool(repo_name: str) -> str:
                 output += f"  - {ft['file_type']}: {ft['cnt']}\n"
 
         return output
-    finally:
-        conn.close()
 
 
 @require_db
@@ -97,8 +94,7 @@ def list_repos_tool(type: str = "", has_dep: str = "", limit: int = 30) -> str:
         has_dep: Filter repos that depend on this package
         limit: Max results (default 30)
     """
-    conn = get_db()
-    try:
+    with db_connection() as conn:
         where_clauses: list[str] = []
         params: list[str | int] = []
 
@@ -132,8 +128,6 @@ def list_repos_tool(type: str = "", has_dep: str = "", limit: int = 30) -> str:
             output += f"- **{r['name']}** ({r['type']}) — {len(deps)} org deps\n"
 
         return output
-    finally:
-        conn.close()
 
 
 def health_check_tool() -> str:
@@ -183,41 +177,34 @@ def _check_database(lines: list[str]) -> tuple[int, str | None] | None:
     lines.append(f"Database:      OK ({size_mb:.1f} MB)")
 
     try:
-        conn = get_db()
+        with db_connection() as conn:
+            tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+
+            chunk_count = 0
+            repo_count = 0
+            file_count = 0
+            last_build: str | None = None
+
+            if "build_info" in tables:
+                info = dict(conn.execute("SELECT key, value FROM build_info").fetchall())
+                last_build = info.get("last_build")
+                chunk_count = int(info.get("total_chunks", 0))
+                repo_count = int(info.get("total_repos", 0))
+                file_count = int(info.get("total_files", 0))
+
+            if not chunk_count and "chunks" in tables:
+                chunk_count = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+            if not repo_count and "repos" in tables:
+                repo_count = conn.execute("SELECT COUNT(*) FROM repos").fetchone()[0]
+
+            lines.append(f"  Last build:  {last_build or 'unknown'}")
+            lines.append(f"  Chunks:      {chunk_count:,}")
+            lines.append(f"  Repos:       {repo_count:,}")
+            lines.append(f"  Files:       {file_count:,}")
+            return chunk_count, last_build
     except Exception as e:
         lines.append(f"  Error reading DB: {e}")
         return None
-
-    try:
-        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-
-        chunk_count = 0
-        repo_count = 0
-        file_count = 0
-        last_build: str | None = None
-
-        if "build_info" in tables:
-            info = dict(conn.execute("SELECT key, value FROM build_info").fetchall())
-            last_build = info.get("last_build")
-            chunk_count = int(info.get("total_chunks", 0))
-            repo_count = int(info.get("total_repos", 0))
-            file_count = int(info.get("total_files", 0))
-
-        if not chunk_count and "chunks" in tables:
-            chunk_count = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
-        if not repo_count and "repos" in tables:
-            repo_count = conn.execute("SELECT COUNT(*) FROM repos").fetchone()[0]
-
-        lines.append(f"  Last build:  {last_build or 'unknown'}")
-        lines.append(f"  Chunks:      {chunk_count:,}")
-        lines.append(f"  Repos:       {repo_count:,}")
-        lines.append(f"  Files:       {file_count:,}")
-        return chunk_count, last_build
-    except Exception as e:
-        lines.append(f"  Error reading DB: {e}")
-        return None
-    finally:
-        conn.close()
 
 
 def _check_vector_store(lines: list[str]) -> int:
@@ -262,26 +249,19 @@ def _check_graph(lines: list[str]) -> None:
         return
 
     try:
-        conn = get_db()
+        with db_connection() as conn:
+            tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+            if "graph_nodes" in tables and "graph_edges" in tables:
+                node_count = conn.execute("SELECT COUNT(*) as cnt FROM graph_nodes").fetchone()["cnt"]
+                edge_count = conn.execute("SELECT COUNT(*) as cnt FROM graph_edges").fetchone()["cnt"]
+                lines.append("Graph:         OK")
+                lines.append(f"  Nodes:       {node_count:,}")
+                lines.append(f"  Edges:       {edge_count:,}")
+            else:
+                missing = [t for t in ["graph_nodes", "graph_edges"] if t not in tables]
+                lines.append(f"Graph:         NOT AVAILABLE (missing: {', '.join(missing)})")
     except Exception as e:
         lines.append(f"Graph:         ERROR ({e})")
-        return
-
-    try:
-        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-        if "graph_nodes" in tables and "graph_edges" in tables:
-            node_count = conn.execute("SELECT COUNT(*) as cnt FROM graph_nodes").fetchone()["cnt"]
-            edge_count = conn.execute("SELECT COUNT(*) as cnt FROM graph_edges").fetchone()["cnt"]
-            lines.append("Graph:         OK")
-            lines.append(f"  Nodes:       {node_count:,}")
-            lines.append(f"  Edges:       {edge_count:,}")
-        else:
-            missing = [t for t in ["graph_nodes", "graph_edges"] if t not in tables]
-            lines.append(f"Graph:         NOT AVAILABLE (missing: {', '.join(missing)})")
-    except Exception as e:
-        lines.append(f"Graph:         ERROR ({e})")
-    finally:
-        conn.close()
 
 
 def _append_runtime_stats(lines: list[str]) -> None:
@@ -324,11 +304,8 @@ def diff_provider_config_tool(provider_a: str, provider_b: str) -> str:
         provider_a: First provider name (e.g., "trustly", "epx")
         provider_b: Second provider name (e.g., "paypal", "nuvei")
     """
-    conn = get_db()
-    try:
+    with db_connection() as conn:
         return _diff_provider_config_impl(conn, provider_a, provider_b)
-    finally:
-        conn.close()
 
 
 def _diff_provider_config_impl(conn: sqlite3.Connection, provider_a: str, provider_b: str) -> str:
@@ -496,8 +473,7 @@ def search_task_history_tool(query: str, developer: str = "", limit: int = 10) -
         return "Error: query cannot be empty"
     limit = min(max(1, limit), 20)
 
-    conn = get_db()
-    try:
+    with db_connection() as conn:
         # FTS5 search over task_history_fts
         sql = """
             SELECT t.ticket_id, t.ticket_type, t.summary, t.developer,
@@ -557,5 +533,3 @@ def search_task_history_tool(query: str, developer: str = "", limit: int = 10) -
             lines.append("")
 
         return "\n".join(lines)
-    finally:
-        conn.close()

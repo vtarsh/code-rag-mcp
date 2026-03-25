@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sys
 
 from src.config import (
     CO_CHANGE_RULES,
@@ -129,7 +130,8 @@ def _section_domain_repos(ctx: AnalysisContext, classification: TaskClassificati
                     if repo in candidate_set and repo not in matched_set:
                         matched_set.add(repo)
                         pattern_matched.append(repo)
-            except Exception:
+            except Exception as e:
+                print(f"[section_domain_repos] FTS query failed for '{kw}': {e}", file=sys.stderr)
                 continue
 
     if seed_repos_found:
@@ -247,7 +249,8 @@ def _reverse_cascade(
                 target = row["target"]
                 if target not in finding_repos and target not in reverse_found:
                     reverse_found[target] = (repo, row["edge_type"])
-        except Exception:
+        except Exception as e:
+            print(f"[reverse_cascade] query failed for repo '{repo}': {e}", file=sys.stderr)
             continue
 
     return reverse_found
@@ -349,7 +352,8 @@ def _section_co_occurrence(ctx: AnalysisContext) -> str:
         tables = {r[0] for r in ctx.conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
         if "task_history" not in tables:
             return ""
-    except Exception:
+    except Exception as e:
+        print(f"[co_occurrence] failed to check tables: {e}", file=sys.stderr)
         return ""
 
     finding_repos = {f.repo for f in ctx.findings}
@@ -563,7 +567,8 @@ def _section_function_search(ctx: AnalysisContext) -> str:
                 repo = row["repo_name"]
                 if repo not in already_found:
                     func_repos.setdefault(repo, []).append(func)
-        except Exception:
+        except Exception as e:
+            print(f"[function_search] FTS query failed for '{func}': {e}", file=sys.stderr)
             continue
 
     if not func_repos:
@@ -613,7 +618,8 @@ def _section_keyword_scan(ctx: AnalysisContext, classification: TaskClassificati
                 repo = row["repo_name"]
                 if repo not in already_found:
                     new_finds.setdefault(repo, []).append(term)
-        except Exception:
+        except Exception as e:
+            print(f"[keyword_scan] FTS query failed for '{term}': {e}", file=sys.stderr)
             continue
 
     # Phase 2: Repo name matching — lower threshold (4+ chars) since repo names are specific
@@ -635,7 +641,8 @@ def _section_keyword_scan(ctx: AnalysisContext, classification: TaskClassificati
                 repo = row["repo_name"]
                 if repo not in already_found:
                     new_finds.setdefault(repo, []).append(keyword)
-        except Exception:
+        except Exception as e:
+            print(f"[keyword_scan] FTS query failed for '{keyword}': {e}", file=sys.stderr)
             continue
 
     if not new_finds:

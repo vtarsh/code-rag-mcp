@@ -13,7 +13,7 @@ import re
 import sqlite3
 
 from src.config import DOMAIN_GLOSSARY, PHRASE_GLOSSARY
-from src.container import get_db
+from src.container import db_connection
 from src.types import SearchResult
 
 
@@ -178,8 +178,7 @@ def fts_search(
     """
     fts_query = sanitize_fts_query(query)
 
-    conn = get_db()
-    try:
+    with db_connection() as conn:
         where_clauses = ["chunks MATCH ?"]
         params: list[str | int] = [fts_query]
         if repo:
@@ -221,5 +220,3 @@ def fts_search(
 
         except sqlite3.OperationalError:
             return []
-    finally:
-        conn.close()
