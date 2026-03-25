@@ -44,9 +44,9 @@ Before flagging ANY issue:
 - Check if provider documents webhook behavior before assuming patterns
 - Refund flows may be synchronous — don't assume webhook-driven without checking docs
 
-## Anti-Patterns (from PI-60 calibration)
+## Anti-Patterns (from calibration)
 
-1. Assuming API error format without checking docs (e.g., `message?.[0]?.error` "dead code" that wasn't)
+1. Assuming API error format without checking docs (flagging valid parsing as "dead code")
 2. Flagging generic platform concerns as provider-specific issues
 3. Overstating severity of edge cases with safe fallbacks
 4. Claiming repos are missing when generic routes already handle the case
@@ -63,7 +63,7 @@ Before ANY HIGH+ recommendation that involves using a method, field, or config:
 2. **Consumer reads it?** `grep -r "fieldName" ~/.pay-knowledge/raw/{consuming_repo}/` — if consumer doesn't read the field, it's not "missing"
 3. **Env var used?** `grep -r "ENV_VAR_NAME" ~/.pay-knowledge/raw/{consuming_repo}/` — verify the consuming service actually reads this env var
 
-PI-60 example: Agent recommended `callGatewayRefundMethod` — method does not exist. Should have been `signalAsyncProcessingWorkflow`. A single grep would have prevented this harmful recommendation.
+A single grep before recommending a method prevents harmful recommendations for non-existent interfaces.
 
 Findings that fail existence check are INVALID — remove them from the report entirely. Do not downgrade to LOW.
 
@@ -75,9 +75,9 @@ Rules:
 - Method NOT in files_changed → finding is INFORMATIONAL at most
 - Repo NOT in repos_changed → finding is INFORMATIONAL only
 - "Method C is missing" when C is planned for future PR → do NOT flag
-- Payout/void/getStatus missing from MVP (initialize+sale+refund) → INFO, not CRITICAL
+- Methods outside MVP scope → INFO, not CRITICAL
 
-PI-60 example: Payout flagged as CRITICAL — but task scope was MVP (initialize + sale + refund only). Should have been INFO at most.
+Features outside the current task scope are INFORMATIONAL, never CRITICAL.
 
 ## Reviewer Override Prevention
 
@@ -87,6 +87,6 @@ If PR has review comments from a human reviewer, those decisions are IMMUTABLE c
 - Reviewer said "this is fine" → agent MUST NOT escalate severity
 - Reviewer said "don't add X" → agent MUST NOT flag missing X
 
-PI-60 example: Reviewer explicitly confirmed `aid1` hardcode for UDF matching. Agent recommended parameterizing it — this would have broken refund UDF matching and caused Payper to reject all refunds.
+Recommending changes to reviewer-confirmed design choices can break production behavior that the reviewer intentionally preserved.
 
 When reviewer comments conflict with agent analysis: **reviewer wins**. Always.

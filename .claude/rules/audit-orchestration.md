@@ -2,7 +2,7 @@
 
 ## Why This Exists
 
-PI-60 post-mortem: 15 agents across 3 cycles missed async refund flow, gave 3 harmful recommendations. Root cause: agents audit code in isolation without understanding runtime execution order. Solution: step-scoped auditing with flow context injection.
+Post-mortem from early audits: multiple agents across several cycles missed async flows and gave harmful recommendations. Root cause: agents audit code in isolation without understanding runtime execution order. Solution: step-scoped auditing with flow context injection.
 
 ## Three-Phase Audit
 
@@ -12,22 +12,22 @@ For each step in the execution flow, spawn a separate agent with injected flow c
 
 **Before launching agents:**
 1. Run `python scripts/build_audit_context.py --task {TASK_ID} --provider {PROVIDER}` to generate flow context
-2. Collect PR review comments if any: `gh api repos/pay-com/{repo}/pulls/{PR}/comments`
-3. Determine task scope from files_changed (which methods: initialize, sale, refund, void, getStatus)
+2. Collect PR review comments if any: `gh api repos/{org}/{repo}/pulls/{PR}/comments`
+3. Determine task scope from files_changed (which methods are being implemented)
 
 **Per-agent prompt structure:**
 Each agent receives:
 - Its step in the flow (repo, role, methods being implemented)
 - Previous step (what feeds into it, what data it receives)
 - Next step (what consumes its output, what breaks if wrong)
-- Reference provider code (how volt/paysafe/trustly do this step)
+- Reference provider code (how existing, well-tested providers do this step)
 - Task scope (which methods are MVP, which are out-of-scope)
 - Reviewer constraints (PR comments as immutable decisions)
 
-**Typical step breakdown for APM provider:**
-1. Agent: grpc-apm-{provider} (initialize + sale methods)
-2. Agent: grpc-apm-{provider} (refund method + async flow)
-3. Agent: workflow-provider-webhooks (parse-payload + handle-activities)
+**Typical step breakdown for a provider integration:**
+1. Agent: provider adapter (synchronous methods)
+2. Agent: provider adapter (async methods + callbacks)
+3. Agent: webhook handler (parse-payload + handle-activities)
 4. Agent: Cross-repo wiring (credentials, features, gateway routing, webhook routing)
 5. Agent: Tests (run all test suites, verify coverage)
 
@@ -37,8 +37,8 @@ Every HIGH or CRITICAL finding from Phase 1 MUST be verified by a separate Deep 
 
 **Verification protocol:**
 1. grep raw/{repo}/ for the method/field mentioned — does it exist?
-2. Check if reference providers actually do this (grep raw/grpc-apm-volt/, raw/grpc-apm-paysafe/)
-3. Check if platform handles this generically (grep raw/grpc-payment-gateway/)
+2. Check if reference providers actually do this (grep existing provider implementations)
+3. Check if platform handles this generically (grep shared/gateway repos)
 4. Check if finding contradicts reviewer comments
 5. If any check fails → finding is INVALID, remove entirely
 
@@ -66,12 +66,10 @@ Main session collects verified findings and:
 
 ## Anti-Pattern: "Audit Repo X"
 
-NEVER prompt an agent with just "audit repo X for bugs". This is the root cause of PI-60 failures. Always scope to a specific flow step with adjacent-step context.
+NEVER prompt an agent with just "audit repo X for bugs". This produces low-accuracy findings. Always scope to a specific flow step with adjacent-step context.
 
 ## Anti-Pattern: "Stop at Sufficient Explanation"
 
-When tracing a flow through services, agents MUST go all the way from HTTP request to HTTP response through EVERY layer. Never stop at the first "sufficient" explanation.
+When tracing a flow through services, go all the way from entry point to final response through EVERY layer. Never stop at the first "sufficient" explanation.
 
-Example: tracing `syncFlow: true` — don't stop at workflow.js (startChild vs executeChild). Go further to express-webhooks route handler to see WHERE the HTTP 200 is actually returned. The answer might be different from what the intermediate layer suggests.
-
-Rule: if an agent is asked to trace a flow, it must read the actual code at EVERY hop, not assume based on one layer.
+Rule: read the actual code at EVERY hop in the chain. Intermediate layers may suggest one behavior while the actual entry/exit points behave differently.
