@@ -4,7 +4,17 @@
       "Bash(python3 -m pytest tests/ -q --no-header)",
       "Bash(timeout 30 python3 -c \":*)",
       "Bash(python3 -c \":*)",
-      "Bash(lsof -i:8742)"
+      "Bash(lsof -i:8742)",
+      "Bash(sqlite3:*)",
+      "Bash(python3:*)",
+      "Bash(CODE_RAG_HOME=/Users/vaceslavtarsevskij/.pay-knowledge python3 scripts/build_audit_context.py --task PI-60 --provider payper)",
+      "Bash(CODE_RAG_HOME=/Users/vaceslavtarsevskij/.pay-knowledge python3 scripts/build_audit_context.py --task NONEXISTENT --provider test)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(chmod:*)",
+      "Bash(/usr/local/bin/python3 -m pytest tests/ -q --tb=short)",
+      "Bash(CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=pay-com /usr/local/bin/python3 scripts/build_audit_context.py --task PI-60 --provider payper)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

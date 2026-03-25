@@ -54,3 +54,39 @@ Before flagging ANY issue:
 6. Confusing backend vs frontend responsibility (e.g., redirect flag)
 7. Assuming webhook-driven flows without verifying provider supports webhooks for that operation
 8. Flagging status mapping gaps when sandbox never produces those statuses
+
+## Existence Verification (MANDATORY)
+
+Before ANY HIGH+ recommendation that involves using a method, field, or config:
+
+1. **Method exists?** `grep -r "methodName" ~/.pay-knowledge/raw/{repo}/` — if not found, the finding is INVALID (not LOW — INVALID, remove entirely)
+2. **Consumer reads it?** `grep -r "fieldName" ~/.pay-knowledge/raw/{consuming_repo}/` — if consumer doesn't read the field, it's not "missing"
+3. **Env var used?** `grep -r "ENV_VAR_NAME" ~/.pay-knowledge/raw/{consuming_repo}/` — verify the consuming service actually reads this env var
+
+PI-60 example: Agent recommended `callGatewayRefundMethod` — method does not exist. Should have been `signalAsyncProcessingWorkflow`. A single grep would have prevented this harmful recommendation.
+
+Findings that fail existence check are INVALID — remove them from the report entirely. Do not downgrade to LOW.
+
+## Scope Override Prevention
+
+Task scope = what is being implemented in THIS PR/task. Determined from files_changed and PR description.
+
+Rules:
+- Method NOT in files_changed → finding is INFORMATIONAL at most
+- Repo NOT in repos_changed → finding is INFORMATIONAL only
+- "Method C is missing" when C is planned for future PR → do NOT flag
+- Payout/void/getStatus missing from MVP (initialize+sale+refund) → INFO, not CRITICAL
+
+PI-60 example: Payout flagged as CRITICAL — but task scope was MVP (initialize + sale + refund only). Should have been INFO at most.
+
+## Reviewer Override Prevention
+
+If PR has review comments from a human reviewer, those decisions are IMMUTABLE constraints:
+
+- Reviewer confirmed a design choice → agent MUST NOT recommend changing it
+- Reviewer said "this is fine" → agent MUST NOT escalate severity
+- Reviewer said "don't add X" → agent MUST NOT flag missing X
+
+PI-60 example: Reviewer explicitly confirmed `aid1` hardcode for UDF matching. Agent recommended parameterizing it — this would have broken refund UDF matching and caused Payper to reject all refunds.
+
+When reviewer comments conflict with agent analysis: **reviewer wins**. Always.
