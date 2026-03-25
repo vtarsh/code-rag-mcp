@@ -8,7 +8,7 @@ paths:
 
 # Provider Code Rules
 
-Rules for writing provider integration code. Derived from 25 PR review comments.
+Rules for writing provider integration code. Derived from 38 PR review comments.
 Apply whenever touching grpc-apm-*, workflow-provider-webhooks, grpc-providers-*.
 See also: `lessons-active.md` (rules 16-20: impact audit calibration), `provider-docs-first.md` (doc research protocol).
 
@@ -149,3 +149,93 @@ Mask ALL card-related fields in provider request logs:
 - `networkToken.number`
 
 Add to `censoredFields` in `make-api-call.js`. Never log raw card data.
+
+## 11. Webhook Verification via IP Whitelisting
+
+When a provider has no signature/HMAC mechanism, use IP whitelisting for webhook authentication.
+
+Check `cf-connecting-ip` or `x-envoy-external-address` headers against the provider's known IP list.
+
+```js
+// verify-ip.js
+const ALLOWED_IPS = process.env.PROVIDER_WEBHOOK_IPS?.split(',') || [];
+const clientIp = req.headers['cf-connecting-ip'] || req.headers['x-envoy-external-address'];
+if (!ALLOWED_IPS.includes(clientIp)) throw new Error('Unauthorized webhook source');
+```
+
+Reference: payper `verify-ip.js`.
+
+## 12. Webhooks Are Fire-and-Forget
+
+Webhook handlers return `200` immediately. No `compose-response` needed, no `save-webhook-as-request-log` unless the provider service actually reads them back (rare — check first).
+
+The webhook flow is: receive -> validate -> map status -> signal workflow -> return 200.
+
+## 13. Refund Callbacks in Webhooks
+
+Webhooks MUST handle refund callbacks separately from sale callbacks. Route via `providerAction` field in the payload (e.g., `payment` vs `refund`).
+
+- **Sale callbacks**: use standard completion workflow signal
+- **Refund callbacks**: use `signalAsyncProcessingWorkflow` to notify the refund workflow
+
+```js
+if (providerAction === 'refund') {
+  await signalAsyncProcessingWorkflow(/* refund signal */);
+} else {
+  await completePaymentWorkflow(/* sale signal */);
+}
+```
+
+## 14. Async Refund Flow Setup
+
+Most APM providers process refunds asynchronously. Two changes required:
+
+1. **grpc-payment-gateway** `refund.js`: set `async: true` for the provider in the refund config variable
+2. **workflow-provider-webhooks**: handle refund webhook via `signalAsyncProcessingWorkflow`
+
+Without both, refunds will either timeout (missing async flag) or never complete (missing webhook handler).
+
+## 15. Error Code Mapping
+
+Map provider-specific error codes to gateway error codes. Don't return generic `PE` (Processing Error) for every failure.
+
+Check the provider's error codes documentation and map to the closest gateway error:
+- Authentication failures -> `AE` (Authentication Error)
+- Insufficient funds -> `IF`
+- Invalid card/account -> `IC`
+- Provider-specific declines -> map to closest match
+
+```js
+const ERROR_MAP = {
+  'insufficient_funds': 'IF',
+  'invalid_account': 'IC',
+  'auth_failed': 'AE',
+};
+// Fallback to PE only for truly unknown errors
+```
+
+Also include `providerErrorCode` and `providerErrorMessage` conditionally when available in the provider's error response.
+
+## 16. Fallback Dates
+
+Always provide a fallback date if the webhook payload doesn't include a timestamp. Use `new Date().toISOString()` as the generated fallback.
+
+```js
+const processedAt = webhookPayload.completed_at || new Date().toISOString();
+```
+
+Never let a missing date field cause a crash or produce `undefined` in the mapped response.
+
+## 17. Item Description Format
+
+Use generic description text, not transaction-specific identifiers.
+
+```js
+// WRONG:
+description: `Transaction ${transactionId}`
+
+// RIGHT:
+description: 'Online payment'
+```
+
+**Why**: Provider-facing descriptions should be human-readable and not leak internal IDs. Some providers display this to the end customer.
