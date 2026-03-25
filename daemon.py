@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import logging.handlers
 import os
 import sys
 import time
@@ -53,13 +54,26 @@ from src.tools.service import (
 PORT = int(os.environ.get("CODE_RAG_PORT", os.environ.get("PAY_KNOWLEDGE_PORT", "8742")))
 PID_FILE = Path(__file__).parent / "daemon.pid"
 
+_LOG_FORMAT = "%(asctime)s [daemon] %(levelname)s %(message)s"
+_LOG_DIR = Path(os.environ.get("CODE_RAG_HOME", Path(__file__).parent)) / "logs"
+_LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+_file_handler = logging.handlers.RotatingFileHandler(
+    _LOG_DIR / "daemon.log",
+    maxBytes=10 * 1024 * 1024,  # 10 MB
+    backupCount=3,
+)
+_file_handler.setLevel(logging.INFO)
+_file_handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+
+_stderr_handler = logging.StreamHandler()
+_stderr_handler.setLevel(logging.CRITICAL)
+_stderr_handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [daemon] %(levelname)s %(message)s",
-    handlers=[
-        logging.FileHandler(Path(__file__).parent / "logs" / "daemon.log"),
-        logging.StreamHandler(),
-    ],
+    format=_LOG_FORMAT,
+    handlers=[_file_handler, _stderr_handler],
 )
 log = logging.getLogger(__name__)
 

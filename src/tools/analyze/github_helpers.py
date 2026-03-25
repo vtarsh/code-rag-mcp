@@ -11,24 +11,31 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from src.config import ORG
+from src.config import (
+    BATCH_TIMEOUT,
+    GH_CACHE_MAX,
+    GH_CACHE_TTL,
+    MAX_GITHUB_REPOS,
+    MAX_WORKERS,
+    ORG,
+)
 
 _SAFE_REPO_NAME = re.compile(r"^[a-zA-Z0-9._-]+$")
 
 # Max repos to query via GitHub API (prevents timeout on large finding sets)
-_MAX_GITHUB_REPOS = 20
+_MAX_GITHUB_REPOS = MAX_GITHUB_REPOS
 
 # Max concurrent GitHub API calls
-_MAX_WORKERS = 8
+_MAX_WORKERS = MAX_WORKERS
 
 # Overall timeout for batch GitHub operations (seconds)
-_BATCH_TIMEOUT = 30
+_BATCH_TIMEOUT = BATCH_TIMEOUT
 
 # --- GitHub API response cache (thread-safe) ---
 _gh_cache: dict[str, tuple[float, dict | list]] = {}  # endpoint → (timestamp, result)
 _gh_cache_lock = threading.Lock()
-_GH_CACHE_TTL = 600  # 10 minutes
-_GH_CACHE_MAX = 256
+_GH_CACHE_TTL = GH_CACHE_TTL
+_GH_CACHE_MAX = GH_CACHE_MAX
 
 
 def validate_repo_name(repo_name: str) -> bool:

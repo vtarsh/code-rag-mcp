@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import sqlite3
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 _KEYWORD_STOP_WORDS = frozenset(
     {
@@ -42,6 +43,29 @@ class AnalysisContext:
     words: set[str]
     provider: str
     findings: list[Finding] = field(default_factory=list)
+
+    _CONF_RANK: ClassVar[dict[str, int]] = {"high": 0, "medium": 1, "low": 2}
+
+    def get_repos_by_confidence(self) -> dict[str, list[str]]:
+        """Return unique repos grouped by their best confidence tier.
+
+        Returns:
+            {"high": [...], "medium": [...], "low": [...]}
+        """
+        best: dict[str, str] = {}
+        for f in self.findings:
+            prev = best.get(f.repo)
+            if prev is None or self._CONF_RANK.get(f.confidence, 1) < self._CONF_RANK.get(prev, 1):
+                best[f.repo] = f.confidence
+        result: dict[str, list[str]] = {"high": [], "medium": [], "low": []}
+        for repo, conf in best.items():
+            if conf in result:
+                result[conf].append(repo)
+        return result
+
+    def get_unique_repos(self) -> set[str]:
+        """Return all unique repo names from findings."""
+        return {f.repo for f in self.findings}
 
 
 def useful_keywords(words: set[str]) -> list[str]:

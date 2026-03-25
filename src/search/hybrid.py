@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 
+from src.config import GOTCHAS_BOOST, KEYWORD_WEIGHT, REFERENCE_BOOST, RRF_K
 from src.container import db_connection, get_reranker
 from src.search.fts import fts_search
 from src.search.vector import vector_search
@@ -72,9 +73,8 @@ def hybrid_search(
 
     Returns (ranked_results, vector_error | None, total_candidates).
     """
-    K = 60  # RRF constant
-    KEYWORD_WEIGHT = 2.0
-    GOTCHAS_BOOST = 1.5  # Boost gotchas chunks in ranking
+    K = RRF_K
+    KW_WEIGHT = KEYWORD_WEIGHT
 
     # 1. Keyword search (FTS5) — large pool, no per-repo cap
     keyword_results = fts_search(query, repo, file_type, exclude_file_types, limit=100)
@@ -87,7 +87,7 @@ def hybrid_search(
 
     for rank_idx, sr in enumerate(keyword_results):
         rid = sr.rowid
-        rrf_score = KEYWORD_WEIGHT / (K + rank_idx + 1)
+        rrf_score = KW_WEIGHT / (K + rank_idx + 1)
         if rid not in scores:
             scores[rid] = {
                 "score": 0,
@@ -128,7 +128,6 @@ def hybrid_search(
         "task_progress": 0.7,
         "task_section": 1.0,
     }
-    REFERENCE_BOOST = 1.3
     for _rid, data in scores.items():
         ft = data.get("file_type", "")
         if ft == "gotchas":

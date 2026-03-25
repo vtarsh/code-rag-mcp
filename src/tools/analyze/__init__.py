@@ -64,12 +64,12 @@ from .shared_sections import (
     section_task_patterns,
 )
 
-_BOLD_REPO_RE = re.compile(r"\*\*([a-z][a-z0-9-]+)\*\*")
-_RERANK_EXCLUDE_PREFIXES = ("todo", "ok", "done", "in-progress", "check", "found")
+# Note: _BOLD_REPO_RE regex was removed — repo extraction now uses ctx.findings directly.
+# benchmark_recall.py still has its own copy for parsing markdown output externally.
 
 
 def _section_rerank(ctx: AnalysisContext, description: str, output: str) -> str:
-    """Run Gemini re-ranker on all bold repo names found in output."""
+    """Run Gemini re-ranker on all repo names collected in ctx.findings."""
     import sys
 
     try:
@@ -78,10 +78,8 @@ def _section_rerank(ctx: AnalysisContext, description: str, output: str) -> str:
         print("[reranker] reranker module not available, skipping", file=sys.stderr)
         return ""
 
-    # Extract candidate repos from existing output
-    candidates = sorted(
-        {m.group(1) for m in _BOLD_REPO_RE.finditer(output) if not m.group(1).startswith(_RERANK_EXCLUDE_PREFIXES)}
-    )
+    # Extract candidate repos from structured findings (replaces regex on markdown)
+    candidates = sorted(ctx.get_unique_repos())
     if not candidates:
         return ""
 
@@ -415,16 +413,11 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
             output += f"  - `{name}`: {error}\n"
         output += "\n"
 
-    # Build confidence tier summary from all findings
-    _conf_rank = {"high": 0, "medium": 1, "low": 2}
-    best_conf: dict[str, str] = {}
-    for f in ctx.findings:
-        prev = best_conf.get(f.repo)
-        if prev is None or _conf_rank.get(f.confidence, 1) < _conf_rank.get(prev, 1):
-            best_conf[f.repo] = f.confidence
-    n_core = sum(1 for c in best_conf.values() if c == "high")
-    n_related = sum(1 for c in best_conf.values() if c == "medium")
-    n_peripheral = sum(1 for c in best_conf.values() if c == "low")
+    # Build confidence tier summary from structured findings
+    repos_by_conf = ctx.get_repos_by_confidence()
+    n_core = len(repos_by_conf["high"])
+    n_related = len(repos_by_conf["medium"])
+    n_peripheral = len(repos_by_conf["low"])
     summary = f"**Repos found**: {n_core} core + {n_related} related + {n_peripheral} peripheral"
     header = header.replace("SUMMARY_PLACEHOLDER", summary)
 

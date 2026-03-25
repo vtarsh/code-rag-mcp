@@ -153,6 +153,30 @@ DOMAIN_TEMPLATES: dict[str, dict] = _conventions.get("domain_templates", {})
 # Domain classification patterns for non-PI tasks
 DOMAIN_PATTERNS: dict[str, dict] = _conventions.get("domain_patterns", {})
 
+# --- Tuning constants (overridable via conventions.yaml → tuning) ---
+_tuning: dict = _conventions.get("tuning", {})
+
+# RRF fusion
+RRF_K: int = int(_tuning.get("rrf_k", 60))
+KEYWORD_WEIGHT: float = float(_tuning.get("keyword_weight", 2.0))
+GOTCHAS_BOOST: float = float(_tuning.get("gotchas_boost", 1.5))
+REFERENCE_BOOST: float = float(_tuning.get("reference_boost", 1.3))
+
+# Query cache
+CACHE_TTL: int = int(_tuning.get("cache_ttl", 300))
+CACHE_MAX: int = int(_tuning.get("cache_max", 64))
+
+# GitHub API helpers
+MAX_GITHUB_REPOS: int = int(_tuning.get("max_github_repos", 20))
+MAX_WORKERS: int = int(_tuning.get("max_workers", 8))
+BATCH_TIMEOUT: int = int(_tuning.get("batch_timeout", 30))
+GH_CACHE_TTL: int = int(_tuning.get("gh_cache_ttl", 600))
+GH_CACHE_MAX: int = int(_tuning.get("gh_cache_max", 256))
+
+# SQLite pragmas
+MMAP_SIZE: int = int(_tuning.get("mmap_size", 268435456))
+CACHE_SIZE: int = int(_tuning.get("cache_size", -32000))
+
 # --- Graph constants ---
 # Meaningful edge types for flow tracing (ordered by signal strength).
 # These are generic — not org-specific.

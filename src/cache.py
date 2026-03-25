@@ -13,12 +13,13 @@ import time
 from collections.abc import Callable
 from typing import ParamSpec, TypeVar
 
+from src.config import CACHE_MAX, CACHE_TTL
 from src.types import RuntimeStats, ToolCallStat
 
 # --- Cache storage ---
 _query_cache: dict[str, tuple[float, str]] = {}  # key → (timestamp, result)
-_CACHE_TTL = 300  # 5 minutes
-_CACHE_MAX = 64
+_CACHE_TTL = CACHE_TTL
+_CACHE_MAX = CACHE_MAX
 
 # --- Runtime stats ---
 _stats = {

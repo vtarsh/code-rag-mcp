@@ -19,7 +19,7 @@ import threading
 from collections.abc import Callable, Generator
 from typing import Any, ParamSpec, TypeVar
 
-from src.config import DB_PATH, EMBEDDING_MODEL_KEY, LANCE_PATH
+from src.config import CACHE_SIZE, DB_PATH, EMBEDDING_MODEL_KEY, LANCE_PATH, MMAP_SIZE
 from src.models import get_model_config
 
 # --- Lazy-loaded singletons ---
@@ -41,8 +41,8 @@ def get_db() -> sqlite3.Connection:
     if not _wal_set:
         conn.execute("PRAGMA journal_mode=WAL")
         _wal_set = True
-    conn.execute("PRAGMA mmap_size=268435456")  # 256MB mmap for faster reads
-    conn.execute("PRAGMA cache_size=-32000")  # 32MB page cache
+    conn.execute(f"PRAGMA mmap_size={MMAP_SIZE}")
+    conn.execute(f"PRAGMA cache_size={CACHE_SIZE}")
     return conn
 
 
