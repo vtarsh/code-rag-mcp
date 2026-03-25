@@ -40,7 +40,6 @@ __all__ = [
     "_task_id_matches",
     "_validate_repo_name",
     "analyze_task_tool",
-    "get_db",
     "subprocess",
 ]
 from .pi_analyzer import (

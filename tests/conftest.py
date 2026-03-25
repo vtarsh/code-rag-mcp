@@ -18,8 +18,11 @@ sys.path.insert(0, _project_root)
 @pytest.fixture(autouse=True)
 def _clear_gh_cache_between_tests():
     """Clear GitHub API cache before each test to prevent cross-test pollution."""
+    from src.cache import _query_cache
     from src.tools.analyze.github_helpers import clear_gh_cache
 
     clear_gh_cache()
+    _query_cache.clear()
     yield
     clear_gh_cache()
+    _query_cache.clear()

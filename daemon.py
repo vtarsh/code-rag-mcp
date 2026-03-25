@@ -67,7 +67,8 @@ _file_handler.setLevel(logging.INFO)
 _file_handler.setFormatter(logging.Formatter(_LOG_FORMAT))
 
 _stderr_handler = logging.StreamHandler()
-_stderr_handler.setLevel(logging.CRITICAL)
+_stderr_level = getattr(logging, os.environ.get("DAEMON_STDERR_LEVEL", "CRITICAL"), logging.CRITICAL)
+_stderr_handler.setLevel(_stderr_level)
 _stderr_handler.setFormatter(logging.Formatter(_LOG_FORMAT))
 
 logging.basicConfig(

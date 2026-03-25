@@ -308,3 +308,133 @@ class TestGhApi:
         _clear_gh_cache()  # Ensure no cached result from test_success
         result = _gh_api("repos/org/repo/branches")
         assert result is None
+
+
+class TestAnalysisContextGetReposByConfidence:
+    """Test AnalysisContext.get_repos_by_confidence() method."""
+
+    def test_get_repos_by_confidence_empty(self):
+        from src.tools.analyze.base import AnalysisContext
+
+        conn = _mock_conn()
+        ctx = AnalysisContext(conn=conn, description="test", words=set(), provider="")
+        result = ctx.get_repos_by_confidence()
+        assert result == {"high": [], "medium": [], "low": []}
+
+    def test_get_repos_by_confidence_basic(self):
+        from src.tools.analyze.base import AnalysisContext, Finding
+
+        conn = _mock_conn()
+        ctx = AnalysisContext(conn=conn, description="test", words=set(), provider="")
+        ctx.findings = [
+            Finding("domain", "repo-high", "high"),
+            Finding("domain", "repo-medium", "medium"),
+            Finding("domain", "repo-low", "low"),
+        ]
+        result = ctx.get_repos_by_confidence()
+        assert result["high"] == ["repo-high"]
+        assert result["medium"] == ["repo-medium"]
+        assert result["low"] == ["repo-low"]
+
+    def test_get_repos_by_confidence_dedup(self):
+        """Same repo with high and low confidence → appears only in high tier."""
+        from src.tools.analyze.base import AnalysisContext, Finding
+
+        conn = _mock_conn()
+        ctx = AnalysisContext(conn=conn, description="test", words=set(), provider="")
+        ctx.findings = [
+            Finding("domain", "repo-a", "low"),
+            Finding("domain", "repo-a", "high"),  # Same repo, better confidence
+        ]
+        result = ctx.get_repos_by_confidence()
+        assert result["high"] == ["repo-a"]
+        assert result["medium"] == []
+        assert result["low"] == []
+
+    def test_get_repos_by_confidence_all_same(self):
+        """Multiple repos all with same confidence tier."""
+        from src.tools.analyze.base import AnalysisContext, Finding
+
+        conn = _mock_conn()
+        ctx = AnalysisContext(conn=conn, description="test", words=set(), provider="")
+        ctx.findings = [
+            Finding("domain", "repo-1", "medium"),
+            Finding("domain", "repo-2", "medium"),
+            Finding("domain", "repo-3", "medium"),
+        ]
+        result = ctx.get_repos_by_confidence()
+        assert result["high"] == []
+        assert set(result["medium"]) == {"repo-1", "repo-2", "repo-3"}
+        assert result["low"] == []
+
+    def test_get_repos_by_confidence_best_tier_wins(self):
+        """Multiple findings for same repo — best tier wins."""
+        from src.tools.analyze.base import AnalysisContext, Finding
+
+        conn = _mock_conn()
+        ctx = AnalysisContext(conn=conn, description="test", words=set(), provider="")
+        ctx.findings = [
+            Finding("search", "repo-x", "medium"),
+            Finding("dependency", "repo-x", "low"),
+            Finding("similar_task", "repo-x", "high"),
+        ]
+        result = ctx.get_repos_by_confidence()
+        assert result["high"] == ["repo-x"]
+        assert result["medium"] == []
+        assert result["low"] == []
+
+
+class TestAnalysisContextGetUniqueRepos:
+    """Test AnalysisContext.get_unique_repos() method."""
+
+    def test_get_unique_repos_empty(self):
+        from src.tools.analyze.base import AnalysisContext
+
+        conn = _mock_conn()
+        ctx = AnalysisContext(conn=conn, description="test", words=set(), provider="")
+        result = ctx.get_unique_repos()
+        assert result == set()
+
+    def test_get_unique_repos_dedup(self):
+        """Duplicate repo names across multiple findings → returns unique set."""
+        from src.tools.analyze.base import AnalysisContext, Finding
+
+        conn = _mock_conn()
+        ctx = AnalysisContext(conn=conn, description="test", words=set(), provider="")
+        ctx.findings = [
+            Finding("domain", "repo-a", "high"),
+            Finding("search", "repo-a", "medium"),
+            Finding("dependency", "repo-b", "high"),
+            Finding("similar_task", "repo-b", "low"),
+            Finding("domain", "repo-c", "medium"),
+        ]
+        result = ctx.get_unique_repos()
+        assert result == {"repo-a", "repo-b", "repo-c"}
+        assert len(result) == 3
+
+    def test_get_unique_repos_single(self):
+        """Single repo in findings."""
+        from src.tools.analyze.base import AnalysisContext, Finding
+
+        conn = _mock_conn()
+        ctx = AnalysisContext(conn=conn, description="test", words=set(), provider="")
+        ctx.findings = [Finding("domain", "repo-single", "high")]
+        result = ctx.get_unique_repos()
+        assert result == {"repo-single"}
+
+    def test_get_unique_repos_many_duplicates(self):
+        """Many findings for few unique repos."""
+        from src.tools.analyze.base import AnalysisContext, Finding
+
+        conn = _mock_conn()
+        ctx = AnalysisContext(conn=conn, description="test", words=set(), provider="")
+        ctx.findings = [
+            Finding("search", "repo-x", "high"),
+            Finding("dependency", "repo-x", "high"),
+            Finding("graph", "repo-x", "medium"),
+            Finding("similar_task", "repo-x", "low"),
+            Finding("search", "repo-y", "medium"),
+        ]
+        result = ctx.get_unique_repos()
+        assert result == {"repo-x", "repo-y"}
+        assert len(result) == 2
