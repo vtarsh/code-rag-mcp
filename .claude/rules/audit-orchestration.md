@@ -73,3 +73,42 @@ NEVER prompt an agent with just "audit repo X for bugs". This produces low-accur
 When tracing a flow through services, go all the way from entry point to final response through EVERY layer. Never stop at the first "sufficient" explanation.
 
 Rule: read the actual code at EVERY hop in the chain. Intermediate layers may suggest one behavior while the actual entry/exit points behave differently.
+
+---
+
+## Line-by-Line Trace Audit (Provider Implementations)
+
+For new provider implementations, run 3 specialized trace agents in parallel. Each traces EVERY field through the full service chain using reference providers as the "type system".
+
+### Data Artifacts (in `profiles/pay-com/docs/references/`)
+
+- `field-contracts.yaml` — implicit type definitions: what each service returns, who reads it, what breaks if missing
+- `reference-snapshots.yaml` — exact file:line pointers in reference providers for comparison
+- `trace-chains.yaml` — field-level traceability: 7 critical fields traced through all hops
+
+### Agent 1: map-response trace
+- Template: `.claude/rules/line-trace-map-response.md`
+- Scope: `grpc-apm-{provider}/libs/map-response.js` + `status-mappings.js`
+- Checks each returned field against contract, reference, proto, and consumer code
+
+### Agent 2: webhook handler trace
+- Template: `.claude/rules/line-trace-webhook.md`
+- Scope: `workflow-provider-webhooks/activities/{provider}/*/parse-payload.js` + `handle-activities.js`
+- Checks field extraction, action routing, gateway params, async signaling
+
+### Agent 3: request construction trace
+- Template: `.claude/rules/line-trace-provider-request.md`
+- Scope: `grpc-apm-{provider}/methods/*.js` + `libs/payload-builders/*.js` + `consts.js`
+- Checks each API request field against provider docs, conditionals, UDF format
+
+### Phase 2: Cross-Chain Verification
+
+After all 3 agents complete, verify the chains connect:
+1. processorTransactionId: map-response produces → gateway stores → webhook extracts → handle-activities uses
+2. UDF: initialize sends → provider stores → webhook body → parse-payload extracts
+3. Status enums: grpc-apm status-map values === workflow-provider-webhooks consts values
+4. paymentMethod.token: what map-response returns === what handle-activities sends to gateway
+
+### Cross-Repo PRs
+
+When reviewer comments link to OTHER repos (e.g., gateway env vars, express-webhooks routes) — each link is a SEPARATE PR to track explicitly. Do not "remember and forget" — create a concrete task for each.
