@@ -112,16 +112,14 @@ def get_vector_search() -> tuple[Any, Any, str | None]:
 
             lance_path = DB_PATH.parent / mcfg.lance_dir
             if not lance_path.exists():
-                # Gemini vectors not built yet — try local fallback
-                local_mcfg = get_model_config(EMBEDDING_MODEL_KEY)
-                fallback_path = DB_PATH.parent / local_mcfg.lance_dir
-                if fallback_path.exists() and "gemini" in provider.provider_name:
-                    logging.warning(
-                        f"Gemini vectors not built yet ({lance_path}). "
-                        f"Run: python3 scripts/build_vectors.py --model=gemini"
-                    )
-                    return provider, None, f"Gemini vectors not built. Run: python3 scripts/build_vectors.py --model=gemini"
-                lance_path = fallback_path
+                # Primary vectors not found — try fallback
+                fallback_mcfg = get_model_config(EMBEDDING_MODEL_KEY)
+                fallback_path = DB_PATH.parent / fallback_mcfg.lance_dir
+                if fallback_path.exists():
+                    logging.warning(f"Vectors for {mcfg.key} not found, using fallback {fallback_mcfg.key}")
+                    lance_path = fallback_path
+                else:
+                    return provider, None, "No vector tables found. Run: python3 scripts/build_vectors.py"
 
             db = lancedb.connect(str(lance_path))
             _lance_table = db.open_table("chunks")

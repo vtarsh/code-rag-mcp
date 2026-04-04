@@ -109,8 +109,10 @@ class GeminiEmbeddingProvider:
                         if norm > 0:
                             vec = (np.array(vec) / norm).tolist()
                         all_vectors.append(vec)
+                    notify_api_success()
                     break
                 except Exception as e:
+                    notify_api_error()
                     if attempt < 2:
                         # Longer wait for rate limits (429)
                         is_rate_limit = "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e)
@@ -118,7 +120,10 @@ class GeminiEmbeddingProvider:
                         log.warning(f"Gemini embed batch failed (attempt {attempt + 1}): {e}, retrying in {wait}s")
                         time.sleep(wait)
                     else:
-                        raise
+                        # All retries exhausted — fallback to local
+                        log.error(f"Gemini embedding failed after 3 attempts: {e}. Falling back to local.")
+                        local = LocalEmbeddingProvider()
+                        return local.embed(texts, task_type)
 
         duration_ms = (time.time() - t0) * 1000
         input_tokens = sum(len(t) // 4 for t in texts)  # rough estimate
@@ -203,10 +208,13 @@ Return JSON array of {len(documents)} float scores, e.g. [0.95, 0.2, 0.8, ...]. 
                 scores = (scores + [0.0] * len(documents))[:len(documents)]
 
             scores = [float(s) for s in scores]
+            notify_api_success()
 
         except Exception as e:
-            log.warning(f"Gemini reranker failed: {e}")
-            return [0.5] * len(documents)
+            notify_api_error()
+            log.warning(f"Gemini reranker failed: {e}, falling back to local")
+            local = LocalRerankerProvider()
+            return local.rerank(query, documents, limit)
 
         duration_ms = (time.time() - t0) * 1000
         input_tokens = len(prompt) // 4
@@ -291,6 +299,23 @@ class LocalRerankerProvider:
 _embedding_provider: EmbeddingProvider | None = None
 _reranker_provider: RerankerProvider | None = None
 _fallback_warning: str | None = None
+_api_error_count: int = 0
+_API_ERROR_THRESHOLD = 3  # Reset provider after this many consecutive API errors
+
+
+def notify_api_error() -> None:
+    """Called when an API provider fails. After threshold, resets providers to re-evaluate."""
+    global _api_error_count
+    _api_error_count += 1
+    if _api_error_count >= _API_ERROR_THRESHOLD:
+        log.warning(f"Gemini API failed {_api_error_count} times, resetting providers")
+        reset_providers()
+
+
+def notify_api_success() -> None:
+    """Called on successful API call. Resets error counter."""
+    global _api_error_count
+    _api_error_count = 0
 
 
 def get_embedding_provider() -> tuple[EmbeddingProvider, str | None]:
