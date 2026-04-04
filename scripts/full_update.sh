@@ -130,6 +130,21 @@ print(','.join(changed))
     BATCH_SIZE=30
     echo ""
     echo "[5/5] Building vector embeddings..."
+    # If model is gemini, verify API is available; fallback to coderank if not
+    if [[ "$MODEL_KEY" == "gemini" ]]; then
+      if python3 -c "
+from src.config import GEMINI_API_KEY
+from google import genai
+client = genai.Client(api_key=GEMINI_API_KEY)
+client.models.embed_content(model='gemini-embedding-001', contents=['test'], config={'output_dimensionality': 768})
+print('ok')
+" 2>/dev/null | grep -q "ok"; then
+        echo "  Gemini API available — building gemini vectors"
+      else
+        echo "  ⚠️ Gemini API unavailable — falling back to coderank (local)"
+        MODEL_KEY="coderank"
+      fi
+    fi
     if [[ -n "$REPOS_FLAG" ]]; then
       # Split repos into batches to avoid OOM — each batch is a separate process
       REPO_LIST="${REPOS_FLAG#--repos=}"

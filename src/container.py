@@ -111,15 +111,28 @@ def get_vector_search() -> tuple[Any, Any, str | None]:
                 mcfg = get_model_config(EMBEDDING_MODEL_KEY)
 
             lance_path = DB_PATH.parent / mcfg.lance_dir
+
+            # Check if a different vector table is fresher (e.g., nightly rebuild
+            # used coderank because Gemini was down)
+            fallback_mcfg = get_model_config("coderank") if mcfg.key == "gemini" else get_model_config("gemini")
+            fallback_path = DB_PATH.parent / fallback_mcfg.lance_dir
+
             if not lance_path.exists():
-                # Primary vectors not found — try fallback
-                fallback_mcfg = get_model_config(EMBEDDING_MODEL_KEY)
-                fallback_path = DB_PATH.parent / fallback_mcfg.lance_dir
                 if fallback_path.exists():
-                    logging.warning(f"Vectors for {mcfg.key} not found, using fallback {fallback_mcfg.key}")
+                    logging.warning(f"Vectors for {mcfg.key} not found, using {fallback_mcfg.key}")
                     lance_path = fallback_path
                 else:
                     return provider, None, "No vector tables found. Run: python3 scripts/build_vectors.py"
+            elif fallback_path.exists():
+                # Both exist — use the fresher one
+                import os
+                primary_mtime = os.path.getmtime(str(lance_path))
+                fallback_mtime = os.path.getmtime(str(fallback_path))
+                if fallback_mtime > primary_mtime + 3600:  # >1 hour newer
+                    logging.warning(
+                        f"Fallback vectors ({fallback_mcfg.key}) are newer than primary ({mcfg.key}), using fallback"
+                    )
+                    lance_path = fallback_path
 
             db = lancedb.connect(str(lance_path))
             _lance_table = db.open_table("chunks")

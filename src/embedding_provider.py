@@ -120,10 +120,15 @@ class GeminiEmbeddingProvider:
                         log.warning(f"Gemini embed batch failed (attempt {attempt + 1}): {e}, retrying in {wait}s")
                         time.sleep(wait)
                     else:
-                        # All retries exhausted — fallback to local
-                        log.error(f"Gemini embedding failed after 3 attempts: {e}. Falling back to local.")
-                        local = LocalEmbeddingProvider()
-                        return local.embed(texts, task_type)
+                        # All retries exhausted
+                        if task_type == "query":
+                            # Search-time: fallback to local transparently
+                            log.error(f"Gemini embedding failed after 3 attempts: {e}. Falling back to local.")
+                            local = LocalEmbeddingProvider()
+                            return local.embed(texts, task_type)
+                        else:
+                            # Build-time: don't mix vector spaces, let build script handle it
+                            raise
 
         duration_ms = (time.time() - t0) * 1000
         input_tokens = sum(len(t) // 4 for t in texts)  # rough estimate
