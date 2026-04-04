@@ -147,21 +147,22 @@ class DaemonHandler(BaseHTTPRequestHandler):
             self._json_response(400, {"error": f"invalid JSON: {e}"})
             return
 
-        # Detect caller source from User-Agent header
+        # Detect caller source and session from headers
         ua = self.headers.get("User-Agent", "")
         source = "cli" if "cli.py" in ua else "mcp" if "mcp_server" in ua else "direct"
+        session_id = self.headers.get("X-Session-ID", "")
 
         try:
             t0 = time.time()
             result = TOOLS[tool_name](args)
             duration_ms = (time.time() - t0) * 1000
             log.info(f"tool={tool_name} source={source} duration={duration_ms:.0f}ms")
-            _log_call(tool_name, args, result, duration_ms, source=source)
+            _log_call(tool_name, args, result, duration_ms, source=source, session=session_id)
             self._json_response(200, {"result": result})
         except Exception as e:
             duration_ms = (time.time() - t0) * 1000
             log.error(f"tool={tool_name} error: {traceback.format_exc()}")
-            _log_call(tool_name, args, str(e), duration_ms, error=str(e), source=source)
+            _log_call(tool_name, args, str(e), duration_ms, error=str(e), source=source, session=session_id)
             self._json_response(500, {"error": str(e)})
 
     def _json_response(self, status: int, data: dict) -> None:
@@ -183,7 +184,7 @@ _CALLS_LOG = _LOG_DIR / "tool_calls.jsonl"
 
 def _log_call(
     tool_name: str, args: dict, result: str, duration_ms: float,
-    error: str | None = None, source: str = "unknown",
+    error: str | None = None, source: str = "unknown", session: str = "",
 ) -> None:
     """Append tool call record to JSONL log. Never raises."""
     try:
@@ -198,6 +199,7 @@ def _log_call(
             "result_preview": result[:300].replace("\n", " "),
             "error": error,
             "source": source,
+            "session": session,
         }
         with open(_CALLS_LOG, "a") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")

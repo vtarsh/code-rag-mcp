@@ -33,6 +33,8 @@ PID_FILE = PROJECT_DIR / "daemon.pid"
 
 mcp = FastMCP("code-rag")
 
+_SESSION_ID = f"mcp-{os.getpid()}-{int(time.time())}"
+
 
 def _daemon_healthy() -> bool:
     """Check if daemon is responding."""
@@ -94,7 +96,7 @@ def _call_daemon(tool_name: str, args: dict) -> str:
     req = Request(
         f"{DAEMON_URL}/tool/{tool_name}",
         data=body,
-        headers={"Content-Type": "application/json", "User-Agent": "mcp_server"},
+        headers={"Content-Type": "application/json", "User-Agent": "mcp_server", "X-Session-ID": _SESSION_ID},
         method="POST",
     )
     try:

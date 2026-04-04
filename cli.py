@@ -15,6 +15,7 @@ Usage:
 """
 
 import json
+import os
 import sys
 import urllib.request
 
@@ -25,7 +26,12 @@ def call_tool(tool_name: str, args: dict) -> str:
     """Call RAG daemon tool and return result text."""
     url = f"{DAEMON_URL}/{tool_name}"
     data = json.dumps(args).encode()
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json", "User-Agent": "cli.py"})
+    session_id = f"cli-{os.getpid()}"
+    req = urllib.request.Request(url, data=data, headers={
+        "Content-Type": "application/json",
+        "User-Agent": "cli.py",
+        "X-Session-ID": session_id,
+    })
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             result = json.loads(resp.read().decode())
