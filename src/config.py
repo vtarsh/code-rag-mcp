@@ -231,3 +231,7 @@ FLOW_EDGE_TYPES: set[str] = {
 
 # Pre-defined business flow entry points for trace_chain.
 KNOWN_FLOWS: dict[str, list[str]] = _load_yaml("known_flows.yaml") or {}
+
+# --- Structured recipes (evidence-based implementation patterns) ---
+_recipes_data: dict = _load_yaml("recipes.yaml") or {}
+RECIPES: dict[str, dict] = _recipes_data.get("recipes", {})

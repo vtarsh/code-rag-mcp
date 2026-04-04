@@ -47,6 +47,7 @@ from .pi_analyzer import (
     section_provider_checklist,
     section_webhooks,
 )
+from .recipe_section import section_recipe
 from .shared_sections import (
     section_ci_risk,
     section_completeness,
@@ -330,6 +331,9 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
     output = ""
     if repo_refs_output:
         output += repo_refs_output + "\n"
+
+    # Recipe injection — structured patterns for known task types (early, before other sections)
+    output += _run_section("recipe", section_recipe, ctx, classification)
 
     # Domain template injection — auto-add base repos for the classified domain
     output += _run_section("domain_template", _inject_domain_template, ctx, classification)
