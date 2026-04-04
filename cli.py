@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI for pay-knowledge RAG — enables sub-agents to query RAG via Bash.
+"""CLI for code-rag-mcp RAG — enables sub-agents to query RAG via Bash.
 
 Usage:
   python3 ~/.code-rag/cli.py search "trustly webhook verification"

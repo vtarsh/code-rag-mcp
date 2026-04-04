@@ -1,41 +1,14 @@
-# Code Conventions
+# Conventions
 
-## Org Isolation
-
-- Zero hardcoded org names in `src/` — everything via `conventions.yaml`.
-- Org-specific data MUST live in `profiles/{name}/`.
-- Profile setup: `cd profiles/{name} && ./install.sh` to symlink scripts.
-
-## Git Commits
-
-- **NEVER use `--no-verify`**. Pre-commit hooks (ruff + pytest) exist for a reason. If hooks fail — fix the issue, don't skip the check.
-- **NEVER use `--force` push** without explicit user approval.
-- Always run full test suite before committing.
-
-## Secrets & Credentials
-
-- **NEVER hardcode API keys, tokens, or passwords in source code.** Use `os.getenv()`.
-- **NEVER commit secrets to git** — even in test files. GitHub Push Protection will block, and leaked keys get flagged by providers.
-- Secrets go in: `~/.zshrc` (env vars), `.secrets/` (gitignored), or `.env` files (gitignored).
-- Before committing, grep staged files: `git diff --cached | grep -iE "api.key|token|password|secret"`.
-- If a key leaks: rotate immediately, filter-branch to remove from history, force push.
-
-## Code Style
-
-- All tool functions return `str` (error strings on failure, formatted results on success).
-- Never silently drop search results — deprioritize/annotate, never exclude.
-- Search pipeline order: expand query -> FTS5 + vector -> RRF fusion -> CrossEncoder rerank -> format.
-
-## Adding New Domains
-
-- Add domain to `classifier.py`, create new analyzer file in `src/tools/analyze/`.
-- `analyze/` is a package (8 modules) — follow existing pattern.
-
-## Data Changes
-
-- After adding tasks/references: `build_vectors.py --repos=task-slug,ref-slug`.
-- Full rebuild: `extract_artifacts.py -> build_index.py -> build_graph.py -> build_vectors.py` (~30 min).
-- `build_index.py` recreates repos/chunks tables — backup task_history first.
-- FTS5 virtual tables cannot have columns added — use separate tables.
-- Incremental build: `build_index.py --incremental` re-indexes only changed repos (by SHA comparison).
-- Restart daemon after editing glossaries: they load at import time.
+- All org-specific data in profiles/{name}/, zero hardcoded org names in src/
+- Never drop search results — deprioritize or annotate, never exclude
+- Improve base recall before tuning reranker — reranker is polish, not fix
+- Ground truth = repos_changed from Jira; cross-validate with files_changed and pr_urls
+- Recall over precision: false negatives worse than false positives
+- Benchmark baselines in profiles/{profile}/RECALL-TRACKER.md — never regress
+- Parallel agents by default; never parallel on same DB/files
+- Priority: generic mechanisms (src/) > profile data > private profile repo
+- Don't report context window percentages
+- Don't create crons that only report — make them act or skip
+- Build pipeline and data constraints: see .claude/docs/data-changes.md
+- Git push: `gh auth switch --user vtarsh && git push && gh auth switch --user tarshevskiy-v`

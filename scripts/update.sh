@@ -10,7 +10,7 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 BASE_DIR="${CODE_RAG_HOME:-$HOME/.code-rag}"
 RAW_DIR="$BASE_DIR/raw"
 STATE_FILE="$BASE_DIR/repo_state.json"
-STATE_BEFORE="/tmp/pay-knowledge-state-before.json"
+STATE_BEFORE="/tmp/code-rag-state-before.json"
 
 # Cleanup on exit/interrupt
 cleanup() {

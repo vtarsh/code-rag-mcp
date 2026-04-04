@@ -75,7 +75,7 @@ Read the status mapping file imported by map-response.js:
 - Is `processorTransactionId` still extracted (from error body if available)?
 - Is `transactionStatus` set to DECLINED or ERROR (not left undefined)?
 - Does `finalize` contain the error details (issuerResponseCode, issuerResponseText)?
-- Are provider error codes mapped to gateway codes (rule 15 from provider-code-rules)?
+- Are provider error codes mapped to gateway codes (rule 16 from profiles/pay-com/docs/rules/provider-code.md)?
 
 ### 7. Conditional Spread Discipline
 - Are ALL optional fields wrapped in conditional spread: `...(value && { field: value })`?

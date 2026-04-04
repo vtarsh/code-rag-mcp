@@ -13,8 +13,6 @@ from __future__ import annotations
 import re
 import sqlite3
 
-# subprocess re-export for test mocking
-import subprocess
 import sys
 
 from src.container import db_connection, require_db
@@ -40,7 +38,6 @@ __all__ = [
     "_task_id_matches",
     "_validate_repo_name",
     "analyze_task_tool",
-    "subprocess",
 ]
 from .pi_analyzer import (
     section_bulk_providers,

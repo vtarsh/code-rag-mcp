@@ -90,7 +90,7 @@ def find_dependencies(repo_name: str) -> str:
 
 @mcp.tool()
 @tracked
-def trace_impact(repo_name: str, depth: int = 2) -> str:
+def trace_impact(repo_name: str, max_depth: int = 2) -> str:
     """Trace transitive impact: which repos are affected if this repo changes.
 
     Uses the dependency graph to find all repos that directly or transitively
@@ -98,9 +98,9 @@ def trace_impact(repo_name: str, depth: int = 2) -> str:
 
     Args:
         repo_name: Repo to trace impact from (e.g., "shared-proto", "common-types")
-        depth: How many levels deep to trace (default 2, max 4)
+        max_depth: How many levels deep to trace (default 2, max 4)
     """
-    return trace_impact_tool(repo_name, depth)
+    return trace_impact_tool(repo_name, max_depth)
 
 
 @mcp.tool()

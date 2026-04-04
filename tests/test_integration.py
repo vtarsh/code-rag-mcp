@@ -186,7 +186,7 @@ class TestGraphIntegration:
         from src.graph.service import trace_impact_tool
 
         # Use a repo known to have many dependents
-        result = trace_impact_tool("libs-types", depth=1)
+        result = trace_impact_tool("libs-types", max_depth=1)
         assert isinstance(result, str)
         assert "Impact Analysis" in result
         assert "affected repos" in result.lower()
@@ -199,7 +199,7 @@ class TestGraphIntegration:
         if repo is None:
             pytest.skip("no repos with edges found")
 
-        result = trace_impact_tool(repo, depth=99)
+        result = trace_impact_tool(repo, max_depth=99)
         assert isinstance(result, str)
         assert "Impact Analysis" in result
 

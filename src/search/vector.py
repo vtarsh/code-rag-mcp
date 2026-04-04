@@ -53,10 +53,13 @@ def vector_search(
     try:
         results = table.search(embedding).where(where).limit(limit).to_list()
         return results, None
-    except Exception:
-        # If filter fails, try without
+    except Exception as e:
+        # If filter fails, try without — log the filter error
+        import logging
+
+        logging.getLogger(__name__).warning(f"Vector filter failed ({where}): {e}, retrying without filter")
         try:
             results = table.search(embedding).limit(limit).to_list()
-            return results, None
+            return results, f"Filter failed, showing unfiltered results: {e}"
         except Exception as e2:
             return [], str(e2)

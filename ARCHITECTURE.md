@@ -37,7 +37,7 @@ dependency tracing, and task analysis tools via Model Context Protocol.
 Two repos, one private:
 
 ```
-vtarsh/code-rag-mcp (PUBLIC)        vtarsh/pay-knowledge-profile (PRIVATE)
+vtarsh/code-rag-mcp (PUBLIC)        vtarsh/code-rag-mcp-profile (PRIVATE)
 ├── src/                            ├── config.json
 ├── scripts/                        ├── conventions.yaml    ← org prefixes, domains
 ├── tests/                          ├── glossary.yaml

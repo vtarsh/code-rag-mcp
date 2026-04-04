@@ -34,9 +34,16 @@ LATEST_LOG="$LOG_DIR/latest.log"
 exec > >(tee "$LOG_FILE") 2>&1
 ln -sf "$LOG_FILE" "$LATEST_LOG"
 
-FULL_FLAG="${1:-}"
+FULL_FLAG=""
+SKIP_VECTORS="0"
+for arg in "$@"; do
+  case "$arg" in
+    --full) FULL_FLAG="--full" ;;
+    --skip-vectors) SKIP_VECTORS="1" ;;
+  esac
+done
 STATE_FILE="$BASE_DIR/repo_state.json"
-STATE_BEFORE="/tmp/pay-knowledge-state-before.json"
+STATE_BEFORE="/tmp/code-rag-state-before.json"
 
 echo "=========================================="
 echo "Knowledge Base — Full Update"
@@ -114,13 +121,37 @@ print(','.join(changed))
   echo "[4/5] Building dependency graph..."
   python3 "$SCRIPTS_DIR/build_graph.py" 2>&1 | tail -3
 
-  # Step 5: Build vector embeddings
-  echo ""
-  echo "[5/5] Building vector embeddings..."
-  if [[ -n "$REPOS_FLAG" ]]; then
-    python3 "$SCRIPTS_DIR/build_vectors.py" --model="$MODEL_KEY" $REPOS_FLAG 2>&1 | tail -3
+  # Step 5: Build vector embeddings (batched to limit memory)
+  # Skip vectors during daytime runs (--skip-vectors flag)
+  if [[ "${SKIP_VECTORS:-}" == "1" ]]; then
+    echo ""
+    echo "[5/5] Skipping vector embeddings (daytime mode)"
   else
-    python3 "$SCRIPTS_DIR/build_vectors.py" --model="$MODEL_KEY" --force 2>&1 | tail -3
+    BATCH_SIZE=30
+    echo ""
+    echo "[5/5] Building vector embeddings..."
+    if [[ -n "$REPOS_FLAG" ]]; then
+      # Split repos into batches to avoid OOM — each batch is a separate process
+      REPO_LIST="${REPOS_FLAG#--repos=}"
+      IFS=',' read -ra ALL_REPOS <<< "$REPO_LIST"
+      TOTAL_REPOS=${#ALL_REPOS[@]}
+      BATCH_NUM=0
+      BATCH_TOTAL=$(( (TOTAL_REPOS + BATCH_SIZE - 1) / BATCH_SIZE ))
+      for ((i=0; i<TOTAL_REPOS; i+=BATCH_SIZE)); do
+        BATCH=("${ALL_REPOS[@]:i:BATCH_SIZE}")
+        BATCH_STR=$(IFS=','; echo "${BATCH[*]}")
+        BATCH_NUM=$((BATCH_NUM + 1))
+        # Skip ANN reindex for all batches except the last one
+        REINDEX_FLAG=""
+        if [[ "$BATCH_NUM" -lt "$BATCH_TOTAL" ]]; then
+          REINDEX_FLAG="--no-reindex"
+        fi
+        echo "  Batch $BATCH_NUM/$BATCH_TOTAL (${#BATCH[@]} repos)..."
+        python3 "$SCRIPTS_DIR/build_vectors.py" --model="$MODEL_KEY" --repos="$BATCH_STR" $REINDEX_FLAG 2>&1 | tail -3
+      done
+    else
+      python3 "$SCRIPTS_DIR/build_vectors.py" --model="$MODEL_KEY" --force 2>&1 | tail -3
+    fi
   fi
 
   # Step 6: Post-build diagnostics

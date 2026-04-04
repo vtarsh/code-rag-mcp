@@ -81,7 +81,8 @@ class TestHealthEndpoint:
     def test_health_returns_200(self):
         responses, data = _make_handler("GET", "/health")
         assert responses[0]["status"] == 200
-        assert data["status"] == "ok"
+        assert data["status"] in ("ok", "warming")
+        assert "models_ready" in data
         assert "uptime" in data
         assert "pid" in data
 

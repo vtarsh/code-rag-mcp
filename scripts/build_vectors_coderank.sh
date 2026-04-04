@@ -6,7 +6,7 @@
 # After build: compare benchmarks, then swap if better.
 
 set -euo pipefail
-cd ~/.pay-knowledge
+cd ~/.code-rag-mcp
 
 LOG="build_coderank_$(date +%Y%m%d_%H%M%S).log"
 

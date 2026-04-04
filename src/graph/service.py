@@ -65,12 +65,12 @@ def find_dependencies_tool(repo_name: str) -> str:
 
 
 @require_db
-def trace_impact_tool(repo_name: str, depth: int = 2) -> str:
+def trace_impact_tool(repo_name: str, max_depth: int = 2) -> str:
     """Trace transitive impact: which repos are affected if this repo changes.
 
     Args:
         repo_name: Repo to trace impact from (e.g., "providers-proto")
-        depth: How many levels deep to trace (default 2, max 4)
+        max_depth: How many levels deep to trace (default 2, max 4)
     """
     with db_connection() as conn:
         resolved, err = resolve_repo_name(conn, repo_name)
@@ -78,13 +78,13 @@ def trace_impact_tool(repo_name: str, depth: int = 2) -> str:
             return err
         repo_name = resolved  # type: ignore[assignment]
 
-        depth = min(max(1, depth), 4)
-        levels = bfs_dependents(conn, repo_name, depth)
+        max_depth = min(max(1, max_depth), 4)
+        levels = bfs_dependents(conn, repo_name, max_depth)
 
         total_affected = sum(len(v) for v in levels.values())
         lines = [
             f"# Impact Analysis: {repo_name}\n\n",
-            f"**Total affected repos**: {total_affected} (depth={depth})\n\n",
+            f"**Total affected repos**: {total_affected} (max_depth={max_depth})\n\n",
         ]
 
         for level in sorted(levels.keys()):

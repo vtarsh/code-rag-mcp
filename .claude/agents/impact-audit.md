@@ -1,6 +1,6 @@
 # Step-Scoped Provider Audit Agent
 
-> **Path assumption**: All commands use `~/.pay-knowledge`. If `$CODE_RAG_HOME` is set, substitute it.
+> **Path assumption**: All commands use `~/.code-rag-mcp`. If `$CODE_RAG_HOME` is set, substitute it.
 
 ## Your Role
 
@@ -28,26 +28,26 @@ You will receive:
 
 ```bash
 # FTS search on chunks:
-python3 -c "import sqlite3; db=sqlite3.connect('~/.pay-knowledge/db/knowledge.db'); [print(r[0], r[1][:100]) for r in db.execute(\"SELECT repo_name, content FROM chunks WHERE chunks MATCH 'your query' LIMIT 10\")]"
+python3 -c "import sqlite3; db=sqlite3.connect('~/.code-rag-mcp/db/knowledge.db'); [print(r[0], r[1][:100]) for r in db.execute(\"SELECT repo_name, content FROM chunks WHERE chunks MATCH 'your query' LIMIT 10\")]"
 
 # Grep on raw code:
-grep -rl 'keyword' ~/.pay-knowledge/raw/*/methods/ ~/.pay-knowledge/raw/*/libs/
+grep -rl 'keyword' ~/.code-rag-mcp/raw/*/methods/ ~/.code-rag-mcp/raw/*/libs/
 
 # Provider docs (clean markdown):
-ls ~/.pay-knowledge/profiles/pay-com/docs/providers/{provider}/
-cat ~/.pay-knowledge/profiles/pay-com/docs/providers/{provider}/filename.md
+ls ~/.code-rag-mcp/profiles/pay-com/docs/providers/{provider}/
+cat ~/.code-rag-mcp/profiles/pay-com/docs/providers/{provider}/filename.md
 ```
 
 These are for VERIFICATION of specific claims, not open-ended discovery. You already have injected context — use search to confirm or deny specific hypotheses.
 
 ### Key file locations:
 
-- Provider docs: `~/.pay-knowledge/profiles/pay-com/docs/providers/{provider}/`
-- Provider code rules: `~/.pay-knowledge/.claude/rules/provider-code-rules.md`
-- Integration checklist: `~/.pay-knowledge/profiles/pay-com/docs/references/provider-integration-checklist.md`
-- PR review learnings: `~/.pay-knowledge/profiles/pay-com/docs/references/pr-review-learnings.md`
-- Raw code: `~/.pay-knowledge/raw/{repo}/`
-- DB: `~/.pay-knowledge/db/knowledge.db`
+- Provider docs: `~/.code-rag-mcp/profiles/pay-com/docs/providers/{provider}/`
+- Provider code rules: `~/.code-rag-mcp/profiles/pay-com/docs/rules/provider-code.md`
+- Integration checklist: `~/.code-rag-mcp/profiles/pay-com/docs/references/provider-integration-checklist.md`
+- PR review learnings: `~/.code-rag-mcp/profiles/pay-com/docs/references/pr-review-learnings.md`
+- Raw code: `~/.code-rag-mcp/raw/{repo}/`
+- DB: `~/.code-rag-mcp/db/knowledge.db`
 
 ## Methodology
 
@@ -57,13 +57,13 @@ This step is MANDATORY. No finding rated HIGH or above may be emitted without pa
 
 **Before recommending "use method X" or "add field Y":**
 
-1. `grep -r "X" ~/.pay-knowledge/raw/{repo}/` — does it exist in the repo under audit?
-2. `grep -r "Y" ~/.pay-knowledge/raw/{consuming_repo}/` — does the consumer actually read it?
+1. `grep -r "X" ~/.code-rag-mcp/raw/{repo}/` — does it exist in the repo under audit?
+2. `grep -r "Y" ~/.code-rag-mcp/raw/{consuming_repo}/` — does the consumer actually read it?
 3. If grep returns nothing for both — finding is INVALID, remove it entirely.
 
 **Before recommending any behavior change:**
 
-1. Check the reference provider: `grep -r "pattern" ~/.pay-knowledge/raw/grpc-apm-volt/` or `raw/grpc-apm-paysafe/`
+1. Check the reference provider: `grep -r "pattern" ~/.code-rag-mcp/raw/grpc-apm-volt/` or `raw/grpc-apm-paysafe/`
 2. Does the reference provider actually do this? If not — reconsider the finding.
 3. Check if a reviewer confirmed the current behavior (from injected Reviewer Constraints) — if yes, do NOT flag it.
 
@@ -77,7 +77,7 @@ This step is MANDATORY. No finding rated HIGH or above may be emitted without pa
 Use injected context first. Supplement with DB lookup only if needed:
 
 ```bash
-cd ~/.pay-knowledge && python3 -c "
+cd ~/.code-rag-mcp && python3 -c "
 import sqlite3, json
 db = sqlite3.connect('db/knowledge.db')
 db.row_factory = sqlite3.Row
@@ -92,7 +92,7 @@ print('Files:', files[:30])
 ### Step 2: Check Provider Docs (for PI tasks)
 
 ```bash
-ls ~/.pay-knowledge/profiles/pay-com/docs/providers/{provider}/ 2>/dev/null
+ls ~/.code-rag-mcp/profiles/pay-com/docs/providers/{provider}/ 2>/dev/null
 ```
 
 If docs exist, READ them before making any claims about API formats.

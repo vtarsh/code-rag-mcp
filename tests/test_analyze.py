@@ -293,7 +293,7 @@ class TestCheckMethodExists:
 
 
 class TestGhApi:
-    @patch("src.tools.analyze.subprocess.run")
+    @patch("src.tools.analyze.github_helpers.subprocess.run")
     def test_success(self, mock_run):
         from src.tools.analyze import _gh_api
 
@@ -301,7 +301,7 @@ class TestGhApi:
         result = _gh_api("repos/org/repo/branches")
         assert result == [{"name": "main"}]
 
-    @patch("src.tools.analyze.subprocess.run", side_effect=Exception("timeout"))
+    @patch("src.tools.analyze.github_helpers.subprocess.run", side_effect=Exception("timeout"))
     def test_failure(self, mock_run):
         from src.tools.analyze import _clear_gh_cache, _gh_api
 

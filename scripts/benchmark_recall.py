@@ -18,7 +18,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-_BASE_DIR = Path(os.getenv("CODE_RAG_HOME", str(Path.home() / ".pay-knowledge")))
+_BASE_DIR = Path(os.getenv("CODE_RAG_HOME", str(Path.home() / ".code-rag-mcp")))
 DB_PATH = _BASE_DIR / "db" / "knowledge.db"
 
 # Patch out GitHub API to avoid timeouts during benchmarking
@@ -223,7 +223,13 @@ def main() -> None:
     parser.add_argument(
         "--filter-pkg-bumps",
         action="store_true",
-        help="Exclude repos whose only changes are package.json/package-lock.json/yarn.lock",
+        default=True,
+        help="Exclude repos whose only changes are package.json/package-lock.json/yarn.lock (default: on)",
+    )
+    parser.add_argument(
+        "--no-filter-pkg-bumps",
+        action="store_true",
+        help="Include pkg-bump-only repos in ground truth",
     )
     parser.add_argument(
         "--rerank", action="store_true", help="Enable Gemini re-ranking and measure from re-ranked section"
@@ -235,7 +241,7 @@ def main() -> None:
         groups=groups,
         single_task=args.task,
         filter_phantoms=args.filter_phantoms,
-        filter_pkg_bumps=args.filter_pkg_bumps,
+        filter_pkg_bumps=not args.no_filter_pkg_bumps,
         rerank=args.rerank,
     )
 

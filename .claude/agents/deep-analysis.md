@@ -1,6 +1,6 @@
 # Deep Analysis Agent Instructions
 
-> **Path assumption**: All commands use `~/.pay-knowledge`. If `$CODE_RAG_HOME` is set, substitute it.
+> **Path assumption**: All commands use `~/.code-rag-mcp`. If `$CODE_RAG_HOME` is set, substitute it.
 
 ## Your Role
 You deeply analyze ONE Jira task to find ALL repos that should be involved.
@@ -9,13 +9,13 @@ You work INDEPENDENTLY — without MCP RAG tools.
 ## Tools You CAN Use
 - Bash (grep, git log, find, python3 with sqlite3)
 - Read, Glob, Grep (file tools)
-- DO NOT use any `mcp__pay-knowledge__*` tools. If your output contains MCP calls, the result is INVALID.
+- DO NOT use any `mcp__code-rag-mcp__*` tools. If your output contains MCP calls, the result is INVALID.
 
 ## Protocol
 
 ### Step 1: Gather Task Context
 ```bash
-cd ~/.pay-knowledge && python3 -c "
+cd ~/.code-rag-mcp && python3 -c "
 import sqlite3, json
 db = sqlite3.connect('db/knowledge.db')
 db.row_factory = sqlite3.Row
@@ -41,17 +41,17 @@ Extract keywords from summary + description. For each keyword/entity:
 
 1. **Provider name search** (if PI task):
    ```bash
-   grep -rl "provider_name" ~/.pay-knowledge/raw/*/methods/ ~/.pay-knowledge/raw/*/libs/ ~/.pay-knowledge/raw/*/consts* 2>/dev/null | sed 's|.*/raw/||;s|/.*||' | sort -u
+   grep -rl "provider_name" ~/.code-rag-mcp/raw/*/methods/ ~/.code-rag-mcp/raw/*/libs/ ~/.code-rag-mcp/raw/*/consts* 2>/dev/null | sed 's|.*/raw/||;s|/.*||' | sort -u
    ```
 
 2. **Keyword search across all repos**:
    ```bash
-   grep -rl "keyword" ~/.pay-knowledge/raw/*/methods/ ~/.pay-knowledge/raw/*/libs/ ~/.pay-knowledge/raw/*/src/ 2>/dev/null | sed 's|.*/raw/||;s|/.*||' | sort -u | head -20
+   grep -rl "keyword" ~/.code-rag-mcp/raw/*/methods/ ~/.code-rag-mcp/raw/*/libs/ ~/.code-rag-mcp/raw/*/src/ 2>/dev/null | sed 's|.*/raw/||;s|/.*||' | sort -u | head -20
    ```
 
 3. **Graph edges** — find what connects to known repos:
    ```bash
-   cd ~/.pay-knowledge && python3 -c "
+   cd ~/.code-rag-mcp && python3 -c "
    import sqlite3
    db = sqlite3.connect('db/knowledge.db')
    for row in db.execute('SELECT DISTINCT target, edge_type FROM graph_edges WHERE source = ? AND target NOT LIKE \"pkg:%\"', ('REPO-NAME',)):
@@ -61,7 +61,7 @@ Extract keywords from summary + description. For each keyword/entity:
 
 4. **Similar past tasks** — find tasks with overlapping keywords:
    ```bash
-   cd ~/.pay-knowledge && python3 -c "
+   cd ~/.code-rag-mcp && python3 -c "
    import sqlite3, json
    db = sqlite3.connect('db/knowledge.db')
    for r in db.execute(\"SELECT ticket_id, summary, repos_changed FROM task_history WHERE summary LIKE '%KEYWORD%' AND ticket_id != 'TASK-ID' LIMIT 5\"):
@@ -73,7 +73,7 @@ Extract keywords from summary + description. For each keyword/entity:
 
 ### Step 3: Also Run analyze_task (for comparison)
 ```bash
-cd ~/.pay-knowledge && CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=pay-com python3 scripts/benchmark_recall.py --task=TASK-ID 2>&1
+cd ~/.code-rag-mcp && CODE_RAG_HOME=~/.code-rag-mcp ACTIVE_PROFILE=pay-com python3 scripts/benchmark_recall.py --task=TASK-ID 2>&1
 ```
 
 ### Step 4: Compare & Classify

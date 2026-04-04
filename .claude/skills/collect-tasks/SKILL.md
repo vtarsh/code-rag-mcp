@@ -17,18 +17,18 @@ Primary tool: `profiles/pay-com/scripts/auto_collect.py`
 
 ```bash
 # Bulk collection
-JIRA_EMAIL="vyacheslav.t@pay.com" CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=pay-com \
+JIRA_EMAIL="vyacheslav.t@pay.com" CODE_RAG_HOME=~/.code-rag-mcp ACTIVE_PROFILE=pay-com \
   python3 profiles/pay-com/scripts/auto_collect.py --projects=PI,CORE,BO,HS --days=365
 
 # Single task
-cd ~/.pay-knowledge && python3 scripts/collect_task.py PI-54
+cd ~/.code-rag-mcp && python3 scripts/collect_task.py PI-54
 ```
 
 - Uses Jira REST API v3 `/search/jql` with cursor-based pagination (`nextPageToken`)
 - Enriches each task with GitHub PR data (repos_changed, files_changed)
 - JIRA_EMAIL fallback: hardcoded `vyacheslav.t@pay.com` in collect_task.py
 - JIRA_API_TOKEN: from env or ~/.zshrc fallback
-- Runs hourly via launchd (`com.pay-knowledge.auto-collect.plist`)
+- Runs hourly via launchd (`com.code-rag-mcp.auto-collect.plist`)
 
 ## Post-Collection Verification
 

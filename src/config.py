@@ -13,6 +13,7 @@ Profile resolution order:
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -94,6 +95,13 @@ PHRASE_GLOSSARY: list[tuple[frozenset[str], str]] = [
 
 # --- Conventions (org-specific repo naming & infrastructure) ---
 _conventions: dict = _load_yaml("conventions.yaml") or {}
+
+# Validate conventions — warn on missing keys so new profiles get early feedback
+if ACTIVE_PROFILE not in ("example", "__legacy__") and _conventions:
+    _EXPECTED_KEYS = {"provider_prefixes", "gateway_repo", "webhook_repos", "provider_type_map"}
+    _missing = _EXPECTED_KEYS - set(_conventions)
+    if _missing:
+        logging.warning(f"Profile '{ACTIVE_PROFILE}' conventions.yaml missing keys: {', '.join(sorted(_missing))}")
 
 # Provider repo prefixes — repos matching {prefix}{provider_name}
 PROVIDER_PREFIXES: list[str] = _conventions.get("provider_prefixes", [])

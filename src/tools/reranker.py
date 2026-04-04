@@ -14,12 +14,10 @@ import json
 import os
 import re
 import sqlite3
-from pathlib import Path
 
-_BASE_DIR = Path(os.getenv("CODE_RAG_HOME", str(Path.home() / ".pay-knowledge")))
-_TEMPLATE_PATH = (
-    _BASE_DIR / "profiles" / os.getenv("ACTIVE_PROFILE", "pay-com") / "docs" / "flows" / "pi-generic-apm-integration.md"
-)
+from src.config import PROFILE_DIR
+
+_TEMPLATE_PATH = PROFILE_DIR / "docs" / "flows" / "pi-generic-apm-integration.md"
 
 # Gemini API key — loaded from env or profile
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")

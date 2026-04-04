@@ -10,7 +10,7 @@ paths:
 # Line Trace: Provider Request Construction
 
 Agent prompt for line-by-line auditing of methods/*.js and payload-builders/*.js.
-Goal: catch every field that violates provider-code-rules or diverges from provider API docs.
+Goal: catch every field that violates provider-code rules (profiles/pay-com/docs/rules/provider-code.md) or diverges from provider API docs.
 
 ## Before Starting
 
@@ -166,7 +166,7 @@ For each finding:
 ```
 FIELD:     {field name in API request or response}
 FILE:      {file path}:{line number}
-RULE:      #{number} — {rule title from provider-code-rules.md}
+RULE:      #{number} — {rule title from provider-code.md}
 EXPECTED:  {what provider docs or field-contracts.yaml require}
 ACTUAL:    {what the code does}
 REFERENCE: {how volt/paysafe does it, if applicable}

@@ -32,7 +32,7 @@ if "CODE_RAG_HOME" not in os.environ:
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.container import start_preload
+from src.container import is_model_loaded, is_reranker_loaded, start_preload
 from src.graph.service import (
     find_dependencies_tool,
     trace_chain_tool,
@@ -89,7 +89,7 @@ TOOLS: dict[str, Callable[[dict[str, Any]], str]] = {
         args.get("limit", 10),
     ),
     "find_dependencies": lambda args: find_dependencies_tool(args["repo_name"]),
-    "trace_impact": lambda args: trace_impact_tool(args["repo_name"], args.get("depth", 2)),
+    "trace_impact": lambda args: trace_impact_tool(args["repo_name"], args.get("max_depth", 2)),
     "trace_flow": lambda args: trace_flow_tool(args["source"], args["target"], args.get("max_depth", 5)),
     "trace_chain": lambda args: trace_chain_tool(
         args["start"], args.get("direction", "both"), args.get("max_depth", 4)
@@ -119,7 +119,13 @@ class DaemonHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if self.path == "/health":
-            self._json_response(200, {"status": "ok", "uptime": time.time() - _start_time, "pid": os.getpid()})
+            models_ready = is_model_loaded() and is_reranker_loaded()
+            self._json_response(200, {
+                "status": "ok" if models_ready else "warming",
+                "models_ready": models_ready,
+                "uptime": time.time() - _start_time,
+                "pid": os.getpid(),
+            })
         else:
             self._json_response(404, {"error": "not found"})
 

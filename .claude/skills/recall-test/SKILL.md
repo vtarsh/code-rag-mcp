@@ -14,11 +14,11 @@ Run the full recall/precision benchmark suite and report results.
 
 1. **Run benchmarks** in sequence:
    ```bash
-   cd ~/.pay-knowledge
-   CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=pay-com python3 scripts/benchmark_queries.py
-   CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=pay-com python3 scripts/benchmark_realworld.py
-   CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=pay-com python3 scripts/benchmark_flows.py
-   CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=pay-com python3 scripts/benchmark_recall.py
+   cd ~/.code-rag-mcp
+   CODE_RAG_HOME=~/.code-rag-mcp ACTIVE_PROFILE=pay-com python3 scripts/benchmark_queries.py
+   CODE_RAG_HOME=~/.code-rag-mcp ACTIVE_PROFILE=pay-com python3 scripts/benchmark_realworld.py
+   CODE_RAG_HOME=~/.code-rag-mcp ACTIVE_PROFILE=pay-com python3 scripts/benchmark_flows.py
+   CODE_RAG_HOME=~/.code-rag-mcp ACTIVE_PROFILE=pay-com python3 scripts/benchmark_recall.py
    ```
 
 2. **Compare against baselines** (do not regress):

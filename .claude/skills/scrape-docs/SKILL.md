@@ -13,15 +13,15 @@ Fetch and index provider API documentation for use in audits and analysis.
 
 For publicly accessible API docs:
 ```bash
-cd ~/.pay-knowledge && python3 profiles/pay-com/scripts/tavily-docs-crawler.py \
+cd ~/.code-rag-mcp && python3 profiles/pay-com/scripts/tavily-docs-crawler.py \
   <DOCS_URL> <provider_name> \
   --limit 100 --max-depth 3
 ```
 
-Output: `~/.pay-knowledge/.secrets/provider-docs/{provider}/`
+Output: `~/.code-rag-mcp/.secrets/provider-docs/{provider}/`
 Then copy to: `profiles/pay-com/docs/providers/{provider}/`
 
-Tavily API key: `~/.pay-knowledge/.secrets/tavily-keys.json` or `TAVILY_API_KEY` env var.
+Tavily API key: `~/.code-rag-mcp/.secrets/tavily-keys.json` or `TAVILY_API_KEY` env var.
 
 ## Option B: Closed Documentation (Browser Extension)
 
@@ -45,7 +45,7 @@ For docs behind auth (login required, Notion, Confluence):
 
 ```bash
 # Index for search
-cd ~/.pay-knowledge && python3 scripts/build_index.py
+cd ~/.code-rag-mcp && python3 scripts/build_index.py
 # Or incremental: python3 scripts/build_vectors.py --repos=provider-docs
 ```
 

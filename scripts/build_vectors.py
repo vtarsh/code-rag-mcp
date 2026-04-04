@@ -41,6 +41,7 @@ def parse_args():
     model_key = DEFAULT_MODEL
     force = False
     only_repos = None
+    no_reindex = False
 
     for arg in sys.argv[1:]:
         if arg.startswith("--model="):
@@ -49,6 +50,8 @@ def parse_args():
             force = True
         elif arg.startswith("--repos="):
             only_repos = set(arg.split("=", 1)[1].split(","))
+        elif arg == "--no-reindex":
+            no_reindex = True
         elif arg == "--list-models":
             print("Available embedding models:")
             for key, m in EMBEDDING_MODELS.items():
@@ -61,7 +64,7 @@ def parse_args():
         print(f"Available: {', '.join(EMBEDDING_MODELS.keys())}")
         sys.exit(1)
 
-    return model_key, force, only_repos
+    return model_key, force, only_repos, no_reindex
 
 
 def get_all_chunks(conn):
@@ -204,23 +207,26 @@ def embed_adaptive(model, rows, mcfg, checkpoint_path):
 
 def embed_simple(model, rows, mcfg):
     """Embed all chunks in simple batches (for models without long/short split)."""
-    all_embeddings = []
-    texts = [prepare_text(r[1], r[2], r[4], r[5], mcfg.short_limit) for r in rows]
+    all_data = []
     start = time.time()
+    total = len(rows)
 
-    for i in range(0, len(texts), mcfg.batch_size):
-        batch = texts[i : i + mcfg.batch_size]
-        embeddings = model.encode(batch, batch_size=mcfg.batch_size, show_progress_bar=False)
-        all_embeddings.extend(embeddings.tolist())
-        done = min(i + mcfg.batch_size, len(texts))
+    for i in range(0, total, mcfg.batch_size):
+        batch_rows = rows[i : i + mcfg.batch_size]
+        texts = [prepare_text(r[1], r[2], r[4], r[5], mcfg.short_limit) for r in batch_rows]
+        embeddings = model.encode(texts, batch_size=mcfg.batch_size, show_progress_bar=False)
+
+        for idx, row in enumerate(batch_rows):
+            all_data.append(make_record(row, embeddings[idx].tolist()))
+
+        done = min(i + mcfg.batch_size, total)
         elapsed = time.time() - start
         rate = done / elapsed if elapsed > 0 else 0
-        eta = (len(texts) - done) / rate if rate > 0 else 0
-        print(f"  {done}/{len(texts)} ({done * 100 // len(texts)}%) — {rate:.0f} emb/s — ETA {eta:.0f}s", end="\r")
+        eta = (total - done) / rate if rate > 0 else 0
+        print(f"  {done}/{total} ({done * 100 // total}%) — {rate:.0f} emb/s — ETA {eta:.0f}s", end="\r")
 
-    print(f"\n  Done! {len(all_embeddings)} embeddings in {time.time() - start:.1f}s")
-
-    return [make_record(row, all_embeddings[idx]) for idx, row in enumerate(rows)]
+    print(f"\n  Done! {len(all_data)} embeddings in {time.time() - start:.1f}s")
+    return all_data
 
 
 def store_vectors(data, lance_path, mcfg):
@@ -262,7 +268,7 @@ def store_vectors(data, lance_path, mcfg):
 
 
 def main():
-    model_key, force, only_repos = parse_args()
+    model_key, force, only_repos, no_reindex = parse_args()
     mcfg = get_model_config(model_key)
     lance_path = BASE_DIR / "db" / mcfg.lance_dir
     checkpoint_path = BASE_DIR / "db" / f"{mcfg.key}_checkpoint.json"
@@ -315,7 +321,9 @@ def main():
         print(f"  Added {len(data)} new vectors")
 
         total_vectors = table.count_rows()
-        if total_vectors < 256:
+        if no_reindex:
+            print(f"  Skipping ANN reindex (--no-reindex). Total vectors: {total_vectors}")
+        elif total_vectors < 256:
             print(f"  Skipping ANN index ({total_vectors} vectors < 256 — brute-force search is fine)")
         else:
             num_partitions = min(64 if mcfg.dim >= 512 else 32, total_vectors // 4)

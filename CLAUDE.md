@@ -6,7 +6,9 @@ Python 3.12, FastMCP, SQLite FTS5, LanceDB, CrossEncoder reranker.
 
 **Key docs** (read for full context):
 - `ARCHITECTURE.md` — system design, analyze_task package, 20 mechanisms, conventions.yaml
-- `.claude/rules/` — conventions, impact-audit, lessons-active, provider-code-rules, provider-docs-first, testing, workflow
+- `.claude/rules/conventions.md` — always-loaded generic rules (12 lines)
+- `.claude/docs/` — data-changes, workflow-cycles (on-demand generic reference)
+- `profiles/pay-com/docs/rules/` — provider-code, impact-audit, audit-orchestration, provider-docs-first, rag-tuning
 - `TESTING.md` — recall methodology, how to measure/improve, validation without MCP
 - `profiles/pay-com/RECALL-TRACKER.md` — current scores, improvement log
 - `profiles/pay-com/NEXT-SESSION-PROMPT.md` — context for new sessions
@@ -15,7 +17,7 @@ Python 3.12, FastMCP, SQLite FTS5, LanceDB, CrossEncoder reranker.
 
 ```bash
 # Tests
-cd ~/.pay-knowledge && python -m pytest tests/ -q
+cd ~/.code-rag-mcp && python -m pytest tests/ -q
 
 # Benchmarks (run after search pipeline changes)
 python scripts/benchmark_queries.py && python scripts/benchmark_realworld.py
@@ -41,7 +43,7 @@ python mcp_server.py
 
 Org-specific data lives in `profiles/{name}/` (git-ignored except `profiles/example/`).
 Active profile: `ACTIVE_PROFILE` env var or `.active_profile` file.
-Structure: see `ARCHITECTURE.md`. Setup: see `.claude/rules/conventions.md` (Org Isolation).
+Structure: see `ARCHITECTURE.md`. Setup: `cd profiles/{name} && ./install.sh`.
 
 ## Architecture
 
@@ -52,11 +54,24 @@ All sessions share one daemon process. Proxy auto-starts daemon if not running.
 
 ## Tools (12 total)
 
-Single source of truth for tool list: `~/.claude/CLAUDE.md` (Available MCP Tools section).
+Single source of truth for tool list: `~/.claude/CLAUDE.md` (MCP Pay-Knowledge Tools section).
 Key tools: `search`, `analyze_task`, `context_builder`, `trace_flow`, `find_dependencies`.
+
+## MCP Call Tracker
+
+Every MCP tool call is logged to `logs/mcp_calls.jsonl` (tool name, args, duration, result preview, session ID).
+Use this data to understand which tools the LLM actually picks, which it ignores, and what queries trigger calls.
+
+```bash
+python scripts/analyze_calls.py              # usage summary
+python scripts/analyze_calls.py --last 20    # recent calls
+python scripts/analyze_calls.py --sessions   # per-session breakdown
+```
+
+**When starting a new session**: if `logs/mcp_calls.jsonl` has data, run `analyze_calls.py` first to see tool usage patterns before making UX/tool changes.
 
 ## Gotchas (critical)
 
 - `analyze/` is a package (8 modules) -- add new domains via classifier.py + new analyzer file
-- Daemon restart: `kill -9 $(lsof -ti:8742); sleep 2; CODE_RAG_HOME=~/.pay-knowledge ACTIVE_PROFILE=pay-com python3 daemon.py &disown`
-- See `.claude/rules/conventions.md` (Data Changes) for build pipeline and FTS5/glossary constraints.
+- Daemon restart: `kill -9 $(lsof -ti:8742); sleep 2; CODE_RAG_HOME=~/.code-rag-mcp ACTIVE_PROFILE=pay-com python3 daemon.py &disown`
+- See `.claude/docs/data-changes.md` for build pipeline and FTS5/glossary constraints.

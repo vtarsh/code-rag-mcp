@@ -13,7 +13,7 @@ from src.config import (
 class TestPaths:
     def test_base_dir_exists(self):
         # BASE_DIR defaults to ~/.code-rag, overridable via CODE_RAG_HOME
-        assert BASE_DIR.is_dir() or BASE_DIR.name in (".code-rag", ".pay-knowledge")
+        assert BASE_DIR.is_dir() or BASE_DIR.name in (".code-rag", ".code-rag-mcp")
 
     def test_db_path_under_base(self):
         assert str(DB_PATH).startswith(str(BASE_DIR))
