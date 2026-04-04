@@ -32,7 +32,7 @@ if "CODE_RAG_HOME" not in os.environ:
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.container import is_model_loaded, is_reranker_loaded, start_preload
+from src.container import is_model_loaded, is_reranker_loaded
 from src.graph.service import (
     find_dependencies_tool,
     trace_chain_tool,
@@ -119,10 +119,17 @@ class DaemonHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if self.path == "/health":
-            models_ready = is_model_loaded() and is_reranker_loaded()
+            from src.embedding_provider import _embedding_provider, _reranker_provider
+            from src.api_costs import get_daily_cost
+
+            providers_ready = is_model_loaded() and is_reranker_loaded()
+            emb_name = _embedding_provider.provider_name if _embedding_provider else "not initialized"
+            rer_name = _reranker_provider.provider_name if _reranker_provider else "not initialized"
             self._json_response(200, {
-                "status": "ok" if models_ready else "warming",
-                "models_ready": models_ready,
+                "status": "ok" if providers_ready else "ready",
+                "embedding_provider": emb_name,
+                "reranker_provider": rer_name,
+                "daily_api_cost_usd": round(get_daily_cost(), 4),
                 "uptime": time.time() - _start_time,
                 "pid": os.getpid(),
             })
@@ -221,8 +228,8 @@ def cleanup_pid() -> None:
 def main() -> None:
     log.info(f"Starting daemon on port {PORT} (pid={os.getpid()})")
 
-    # Preload ML models in background thread
-    start_preload()
+    # No model preloading — providers initialize lazily on first query
+    # API providers (Gemini) need no preload; local fallback loads on demand
     write_pid()
 
     server = ThreadingHTTPServer(("127.0.0.1", PORT), DaemonHandler)

@@ -11,31 +11,12 @@ Previous conservative prompt: (52% recall, 70% precision, F1=55% macro).
 from __future__ import annotations
 
 import json
-import os
 import re
 import sqlite3
 
-from src.config import PROFILE_DIR
+from src.config import GEMINI_API_KEY, PROFILE_DIR
 
 _TEMPLATE_PATH = PROFILE_DIR / "docs" / "flows" / "pi-generic-apm-integration.md"
-
-# Gemini API key — loaded from env or profile
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-
-# Fallback: read from .env files
-if not GEMINI_API_KEY:
-    for env_path in [
-        Path.home() / "telegram-claude-bot" / ".env",
-        _BASE_DIR / ".env",
-    ]:
-        if env_path.exists():
-            for line in env_path.read_text().splitlines():
-                if line.startswith("GEMINI_API_KEYS="):
-                    keys = line.split("=", 1)[1].strip().strip("'\"")
-                    GEMINI_API_KEY = keys.split(",")[0]
-                    break
-            if GEMINI_API_KEY:
-                break
 
 MODEL = "gemini-3.1-pro-preview"
 

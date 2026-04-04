@@ -22,28 +22,34 @@ from src.search.vector import vector_search
 
 
 def rerank(query: str, results: list[dict], limit: int = 10) -> list[dict]:
-    """Rerank search results using cross-encoder for better relevance.
+    """Rerank search results using provider (Gemini API or local cross-encoder).
 
-    Takes RRF-fused results and reranks by comparing each snippet
-    directly against the query (pairwise scoring).
-
-    Combines: 70% reranker score + 30% normalized RRF score.
+    Takes RRF-fused results and reranks by scoring each snippet
+    against the query. Combines: 70% reranker score + 30% normalized RRF score.
     """
     if not results or len(results) <= 1:
         return results
 
-    reranker_model, err = get_reranker()
-    if err or reranker_model is None:
+    reranker, err = get_reranker()
+    if err or reranker is None:
         return results  # Fallback: return original order
 
-    # Build query-document pairs for cross-encoder
-    pairs: list[tuple[str, str]] = []
+    # Build document strings for reranker
+    documents: list[str] = []
     for r in results:
         doc = re.sub(r">>>|<<<|\.\.\.|\[Repo: [^\]]+\]", "", r.get("snippet", ""))
         doc = f"{r['repo_name']} {r['file_path']} {doc}"
-        pairs.append((query, doc))
+        documents.append(doc)
 
-    scores = reranker_model.predict(pairs)
+    scores = reranker.rerank(query, documents, limit=limit)
+
+    if not scores:
+        return results[:limit]
+
+    # Normalize reranker scores to [0, 1]
+    max_score = max(scores) if scores else 1
+    min_score = min(scores) if scores else 0
+    score_range = max_score - min_score if max_score != min_score else 1
 
     # Combine: reranker score (70%) + original RRF score (30%)
     max_rrf = max(r["score"] for r in results) if results else 1
@@ -52,8 +58,9 @@ def rerank(query: str, results: list[dict], limit: int = 10) -> list[dict]:
 
     for i, r in enumerate(results):
         rrf_norm = (r["score"] - min_rrf) / rrf_range
-        r["rerank_score"] = float(scores[i])
-        r["combined_score"] = 0.7 * float(scores[i]) + 0.3 * rrf_norm
+        rerank_norm = (scores[i] - min_score) / score_range if i < len(scores) else 0
+        r["rerank_score"] = float(scores[i]) if i < len(scores) else 0
+        r["combined_score"] = 0.7 * rerank_norm + 0.3 * rrf_norm
 
     results.sort(key=lambda x: x["combined_score"], reverse=True)
     return results[:limit]

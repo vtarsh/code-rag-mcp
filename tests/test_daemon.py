@@ -12,8 +12,7 @@ def _make_handler(method, path, body=None, tools=None):
     that captures what the handler wrote back.
     """
     # Import here to avoid side effects at module level
-    with patch("daemon.start_preload"):
-        from daemon import DaemonHandler
+    from daemon import DaemonHandler
 
     # Build raw HTTP request
     if body is not None:
@@ -81,8 +80,7 @@ class TestHealthEndpoint:
     def test_health_returns_200(self):
         responses, data = _make_handler("GET", "/health")
         assert responses[0]["status"] == 200
-        assert data["status"] in ("ok", "warming")
-        assert "models_ready" in data
+        assert data["status"] in ("ok", "warming", "ready")
         assert "uptime" in data
         assert "pid" in data
 
@@ -121,8 +119,7 @@ class TestToolEndpoint:
         mock_tools = {"search": lambda args: "ok"}
 
         # Create handler manually with invalid JSON body
-        with patch("daemon.start_preload"):
-            from daemon import DaemonHandler
+        from daemon import DaemonHandler
 
         rfile = BytesIO(b"not json at all{{{")
         wfile = BytesIO()
@@ -177,8 +174,7 @@ class TestToolEndpoint:
         """A tool that needs no args should work with Content-Length: 0."""
         mock_tools = {"health_check": lambda args: "ok"}
 
-        with patch("daemon.start_preload"):
-            from daemon import DaemonHandler
+        from daemon import DaemonHandler
 
         rfile = BytesIO(b"")
         wfile = BytesIO()

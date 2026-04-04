@@ -132,9 +132,9 @@ class TestRerank:
 
     @patch("src.search.hybrid.get_reranker")
     def test_reranker_scores_combined(self, mock_get_reranker):
-        mock_model = MagicMock()
-        mock_model.predict.return_value = [0.9, 0.1]
-        mock_get_reranker.return_value = (mock_model, None)
+        mock_provider = MagicMock()
+        mock_provider.rerank.return_value = [0.9, 0.1]
+        mock_get_reranker.return_value = (mock_provider, None)
         items = [
             {"score": 0.3, "snippet": "low rrf high rerank", "repo_name": "r1", "file_path": "f1"},
             {"score": 0.5, "snippet": "high rrf low rerank", "repo_name": "r2", "file_path": "f2"},

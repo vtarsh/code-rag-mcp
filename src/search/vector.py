@@ -1,13 +1,16 @@
 """LanceDB vector similarity search.
 
 Handles embedding generation and vector search with optional filters.
+Uses embedding provider (API or local) from container.
 """
 
 from __future__ import annotations
 
-from src.config import EMBEDDING_MODEL_KEY
+import logging
+
 from src.container import get_vector_search
-from src.models import get_model_config
+
+log = logging.getLogger(__name__)
 
 
 def vector_search(
@@ -22,16 +25,18 @@ def vector_search(
     Returns (results_list, error_string | None).
     Results are raw dicts from LanceDB (not yet converted to SearchResult).
     """
-    model, table, err = get_vector_search()
-    if err:
-        return [], f"Vector search unavailable: {err}"
-    if model is None or table is None:
-        return [], "Vector search unavailable: model or table not loaded"
+    provider, table, err = get_vector_search()
+    if err and table is None:
+        return [], err
+    if provider is None or table is None:
+        return [], "Vector search unavailable: provider or table not loaded"
 
-    # Apply model-specific query prefix (e.g. CodeRankEmbed needs one)
-    _mcfg = get_model_config(EMBEDDING_MODEL_KEY)
-    prefixed_query = f"{_mcfg.query_prefix}{query}" if _mcfg.query_prefix else query
-    embedding = model.encode([prefixed_query])[0].tolist()
+    # Embed query using provider (handles prefixing and API calls internally)
+    try:
+        vectors = provider.embed([query], task_type="query")
+        embedding = vectors[0]
+    except Exception as e:
+        return [], f"Embedding failed: {e}"
 
     # Build filter — sanitize inputs to prevent injection in LanceDB WHERE clause
     filters: list[str] = []
@@ -52,12 +57,10 @@ def vector_search(
 
     try:
         results = table.search(embedding).where(where).limit(limit).to_list()
-        return results, None
+        return results, err  # pass through provider warning if any
     except Exception as e:
         # If filter fails, try without — log the filter error
-        import logging
-
-        logging.getLogger(__name__).warning(f"Vector filter failed ({where}): {e}, retrying without filter")
+        log.warning(f"Vector filter failed ({where}): {e}, retrying without filter")
         try:
             results = table.search(embedding).limit(limit).to_list()
             return results, f"Filter failed, showing unfiltered results: {e}"

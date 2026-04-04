@@ -1,12 +1,13 @@
-"""Dependency injection container — DB connections, ML models, preload.
+"""Dependency injection container — DB connections, embedding/reranker providers.
 
-Provides lazy-loaded singletons for:
-- SQLite database connections
-- SentenceTransformer embedding model
-- CrossEncoder reranker model
+Provides:
+- SQLite database connections (lazy, per-call)
+- Embedding provider (API-first with local fallback)
+- Reranker provider (API-first with local fallback)
 - LanceDB vector table
 
-Thread-safe model preloading at startup.
+Models are NOT preloaded at startup. The daemon starts light (~200 MB).
+Local models are only loaded as fallback when API is unavailable.
 """
 
 from __future__ import annotations
@@ -20,12 +21,9 @@ from collections.abc import Callable, Generator
 from typing import Any, ParamSpec, TypeVar
 
 from src.config import CACHE_SIZE, DB_PATH, EMBEDDING_MODEL_KEY, LANCE_PATH, MMAP_SIZE
-from src.models import get_model_config
 
 # --- Lazy-loaded singletons ---
-_model: Any = None
 _lance_table: Any = None
-_reranker: Any = None
 _wal_set: bool = False
 _lock = threading.Lock()
 
@@ -85,47 +83,64 @@ def check_db_health() -> str | None:
 
 
 def get_vector_search() -> tuple[Any, Any, str | None]:
-    """Lazy-load embedding model and LanceDB table.
+    """Get embedding provider and LanceDB table.
 
-    Returns (model, table, error_string | None).
+    Returns (embedding_provider, lance_table, error_string | None).
+    The provider has .embed(texts, task_type) method.
     """
-    global _model, _lance_table
-    if _model is not None:
-        return _model, _lance_table, None
+    global _lance_table
+    from src.embedding_provider import get_embedding_provider
+
+    provider, warning = get_embedding_provider()
+
+    if _lance_table is not None:
+        return provider, _lance_table, warning
+
     with _lock:
-        if _model is not None:  # double-check after acquiring lock
-            return _model, _lance_table, None
+        if _lance_table is not None:
+            return provider, _lance_table, warning
         try:
             import lancedb
-            from sentence_transformers import SentenceTransformer
 
-            _mcfg = get_model_config(EMBEDDING_MODEL_KEY)
-            _model = SentenceTransformer(_mcfg.name, trust_remote_code=_mcfg.trust_remote_code)
-            db = lancedb.connect(str(LANCE_PATH))
+            # Determine correct LanceDB path based on active provider
+            from src.models import get_model_config
+
+            if "gemini" in provider.provider_name:
+                mcfg = get_model_config("gemini")
+            else:
+                mcfg = get_model_config(EMBEDDING_MODEL_KEY)
+
+            lance_path = DB_PATH.parent / mcfg.lance_dir
+            if not lance_path.exists():
+                # Gemini vectors not built yet — try local fallback
+                local_mcfg = get_model_config(EMBEDDING_MODEL_KEY)
+                fallback_path = DB_PATH.parent / local_mcfg.lance_dir
+                if fallback_path.exists() and "gemini" in provider.provider_name:
+                    logging.warning(
+                        f"Gemini vectors not built yet ({lance_path}). "
+                        f"Run: python3 scripts/build_vectors.py --model=gemini"
+                    )
+                    return provider, None, f"Gemini vectors not built. Run: python3 scripts/build_vectors.py --model=gemini"
+                lance_path = fallback_path
+
+            db = lancedb.connect(str(lance_path))
             _lance_table = db.open_table("chunks")
         except Exception as e:
-            return None, None, str(e)
-    return _model, _lance_table, None
+            return provider, None, str(e)
+
+    return provider, _lance_table, warning
 
 
 def get_reranker() -> tuple[Any, str | None]:
-    """Lazy-load cross-encoder reranker model.
+    """Get reranker provider.
 
-    Returns (reranker, error_string | None).
+    Returns (reranker_provider, error_string | None).
+    The provider has .rerank(query, documents) method.
     """
-    global _reranker
-    if _reranker is not None:
-        return _reranker, None
-    with _lock:
-        if _reranker is not None:  # double-check after acquiring lock
-            return _reranker, None
-        try:
-            from sentence_transformers import CrossEncoder
+    from src.embedding_provider import get_reranker_provider
 
-            _reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
-        except Exception as e:
-            return None, str(e)
-    return _reranker, None
+    provider, warning = get_reranker_provider()
+    return provider, warning
 
 
 P = ParamSpec("P")
@@ -146,25 +161,12 @@ def require_db(func: Callable[P, T]) -> Callable[P, T]:
 
 
 def is_model_loaded() -> bool:
-    """Check if embedding model is loaded."""
-    return _model is not None
+    """Check if embedding provider is ready."""
+    from src.embedding_provider import _embedding_provider
+    return _embedding_provider is not None
 
 
 def is_reranker_loaded() -> bool:
-    """Check if reranker model is loaded."""
-    return _reranker is not None
-
-
-def preload_models() -> None:
-    """Preload embedding model and reranker. Called from background thread."""
-    try:
-        get_vector_search()
-        get_reranker()
-        logging.info("Models preloaded successfully")
-    except Exception as e:
-        logging.warning(f"Model preload failed (will retry on first query): {e}")
-
-
-def start_preload() -> None:
-    """Start model preloading in a daemon thread."""
-    threading.Thread(target=preload_models, daemon=True).start()
+    """Check if reranker provider is ready."""
+    from src.embedding_provider import _reranker_provider
+    return _reranker_provider is not None

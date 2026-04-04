@@ -23,7 +23,6 @@ import time
 from pathlib import Path
 
 import lancedb
-from sentence_transformers import SentenceTransformer
 
 # --- Resolve paths from environment or defaults ---
 BASE_DIR = Path(os.getenv("CODE_RAG_HOME", Path.home() / ".code-rag"))
@@ -129,6 +128,19 @@ def load_checkpoint(checkpoint_path):
         return set(), []
 
 
+def _encode(model, texts, mcfg, batch_size=None):
+    """Encode texts using either SentenceTransformer or API provider."""
+    if hasattr(model, "embed"):
+        # API provider (GeminiEmbeddingProvider)
+        vectors = model.embed(texts, task_type="document")
+        return vectors
+    else:
+        # Local SentenceTransformer
+        bs = batch_size or mcfg.batch_size
+        embeddings = model.encode(texts, batch_size=bs, show_progress_bar=False)
+        return [e.tolist() for e in embeddings]
+
+
 def embed_adaptive(model, rows, mcfg, checkpoint_path):
     """Embed chunks using adaptive batching with checkpoints."""
     done_rowids, all_data = load_checkpoint(checkpoint_path)
@@ -159,10 +171,11 @@ def embed_adaptive(model, rows, mcfg, checkpoint_path):
         for i in range(0, len(short_rows), mcfg.batch_size):
             batch_rows = short_rows[i : i + mcfg.batch_size]
             texts = [prepare_text(r[1], r[2], r[4], r[5], mcfg.short_limit) for r in batch_rows]
-            embeddings = model.encode(texts, batch_size=mcfg.batch_size, show_progress_bar=False)
+            embeddings = _encode(model, texts, mcfg)
 
             for idx, row in enumerate(batch_rows):
-                all_data.append(make_record(row, embeddings[idx].tolist()))
+                vec = embeddings[idx] if isinstance(embeddings[idx], list) else embeddings[idx].tolist()
+                all_data.append(make_record(row, vec))
                 done_rowids.add(row[0])
 
             done += len(batch_rows)
@@ -183,8 +196,9 @@ def embed_adaptive(model, rows, mcfg, checkpoint_path):
         print(f"\n  --- Long chunks ({len(long_rows)}) ---")
         for row in long_rows:
             text = prepare_text(row[1], row[2], row[4], row[5], mcfg.long_limit)
-            embedding = model.encode([text], show_progress_bar=False)
-            all_data.append(make_record(row, embedding[0].tolist()))
+            embeddings = _encode(model, [text], mcfg)
+            vec = embeddings[0] if isinstance(embeddings[0], list) else embeddings[0].tolist()
+            all_data.append(make_record(row, vec))
             done_rowids.add(row[0])
 
             done += 1
@@ -214,10 +228,11 @@ def embed_simple(model, rows, mcfg):
     for i in range(0, total, mcfg.batch_size):
         batch_rows = rows[i : i + mcfg.batch_size]
         texts = [prepare_text(r[1], r[2], r[4], r[5], mcfg.short_limit) for r in batch_rows]
-        embeddings = model.encode(texts, batch_size=mcfg.batch_size, show_progress_bar=False)
+        embeddings = _encode(model, texts, mcfg)
 
         for idx, row in enumerate(batch_rows):
-            all_data.append(make_record(row, embeddings[idx].tolist()))
+            vec = embeddings[idx] if isinstance(embeddings[idx], list) else embeddings[idx].tolist()
+            all_data.append(make_record(row, vec))
 
         done = min(i + mcfg.batch_size, total)
         elapsed = time.time() - start
@@ -281,11 +296,23 @@ def main():
         print(f"Mode: incremental ({len(only_repos)} repos)")
     print("=" * 60)
 
-    # Load model
+    # Load model or API provider
     print(f"\n[1/4] Loading {mcfg.key} model...")
     start = time.time()
-    model = SentenceTransformer(mcfg.name, trust_remote_code=mcfg.trust_remote_code)
-    print(f"  Model loaded in {time.time() - start:.1f}s")
+    if mcfg.key == "gemini":
+        from src.config import GEMINI_API_KEY
+        from src.embedding_provider import GeminiEmbeddingProvider
+
+        if not GEMINI_API_KEY:
+            print("  ERROR: GEMINI_API_KEY not set. Cannot build Gemini vectors.")
+            sys.exit(1)
+        model = GeminiEmbeddingProvider(GEMINI_API_KEY, dim=mcfg.dim)
+        print(f"  Gemini API provider ready in {time.time() - start:.1f}s")
+    else:
+        from sentence_transformers import SentenceTransformer
+
+        model = SentenceTransformer(mcfg.name, trust_remote_code=mcfg.trust_remote_code)
+        print(f"  Model loaded in {time.time() - start:.1f}s")
 
     # Read chunks
     print("\n[2/4] Reading chunks from SQLite...")
@@ -352,9 +379,9 @@ def main():
         except Exception:
             print("\n  LanceDB exists but can't read. Rebuilding...")
 
-    # Use adaptive batching for models with long_limit > short_limit
+    # Use adaptive batching for models with long_limit > short_limit, or API models
     print(f"\n[3/4] Embedding {len(rows)} chunks...")
-    if mcfg.long_limit > mcfg.short_limit:
+    if mcfg.long_limit > mcfg.short_limit or mcfg.key == "gemini":
         data = embed_adaptive(model, rows, mcfg, checkpoint_path)
     else:
         data = embed_simple(model, rows, mcfg)

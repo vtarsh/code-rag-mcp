@@ -67,6 +67,30 @@ GRPC_DOMAIN_SUFFIX: str = CONFIG.get("grpc_domain_suffix", "")
 # --- Embedding model ---
 EMBEDDING_MODEL_KEY: str = CONFIG.get("embedding_model", os.getenv("CODE_RAG_MODEL", "coderank"))
 
+# --- Embedding/reranking provider: "gemini", "local", "auto" (default) ---
+EMBEDDING_PROVIDER: str = CONFIG.get("embedding_provider", os.getenv("CODE_RAG_PROVIDER", "auto"))
+RERANKER_MODEL: str = CONFIG.get("reranker_model", os.getenv("CODE_RAG_RERANKER", "gemini-2.5-flash"))
+
+# --- Gemini API key (centralized, used by embedding provider + reranker + analyze_task) ---
+def _load_gemini_key() -> str:
+    """Load Gemini API key from env or .env files."""
+    key = os.getenv("GEMINI_API_KEY", "")
+    if key:
+        return key
+    for env_path in [
+        Path.home() / "telegram-claude-bot" / ".env",
+        BASE_DIR / ".env",
+    ]:
+        if env_path.exists():
+            for line in env_path.read_text().splitlines():
+                if line.startswith("GEMINI_API_KEYS="):
+                    keys = line.split("=", 1)[1].strip().strip("'\"")
+                    return keys.split(",")[0]
+    return ""
+
+
+GEMINI_API_KEY: str = _load_gemini_key()
+
 # --- DB paths (derived from model config) ---
 from src.models import get_model_config  # noqa: E402
 
