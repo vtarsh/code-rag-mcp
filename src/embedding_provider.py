@@ -328,15 +328,28 @@ def get_embedding_provider() -> tuple[EmbeddingProvider, str | None]:
     global _embedding_provider, _fallback_warning
 
     if _embedding_provider is not None:
-        # If on local fallback, periodically retry API
+        # If on local fallback, periodically check if API recovered
         if (
             _fallback_warning
             and _fallback_since > 0
             and time.time() - _fallback_since > _RETRY_API_AFTER
         ):
-            log.info("Retrying Gemini API after fallback period...")
-            reset_providers()
-            return get_embedding_provider()
+            from src.config import GEMINI_API_KEY
+            if GEMINI_API_KEY:
+                try:
+                    from google import genai
+                    client = genai.Client(api_key=GEMINI_API_KEY)
+                    client.models.embed_content(
+                        model="gemini-embedding-001",
+                        contents=["test"],
+                        config={"output_dimensionality": 768},
+                    )
+                    # API works again — restart daemon to free local model RAM
+                    log.info("Gemini API recovered. Restarting daemon to free RAM...")
+                    import os, sys
+                    os.execv(sys.executable, [sys.executable] + sys.argv)
+                except Exception:
+                    _fallback_since = time.time()  # retry in another 5 min
         return _embedding_provider, _fallback_warning
 
     from src.config import EMBEDDING_PROVIDER, GEMINI_API_KEY
@@ -398,14 +411,20 @@ def reset_providers() -> None:
     """Reset cached providers. Unloads local models to free RAM."""
     global _embedding_provider, _reranker_provider, _fallback_warning, _api_error_count
     # Unload local models if they were loaded as fallback
+    import gc
+    need_gc = False
     if isinstance(_embedding_provider, LocalEmbeddingProvider) and _embedding_provider._model is not None:
         log.info("Unloading local embedding model to free RAM")
         del _embedding_provider._model
         _embedding_provider._model = None
+        need_gc = True
     if isinstance(_reranker_provider, LocalRerankerProvider) and _reranker_provider._model is not None:
         log.info("Unloading local reranker model to free RAM")
         del _reranker_provider._model
         _reranker_provider._model = None
+        need_gc = True
+    if need_gc:
+        gc.collect()
     _embedding_provider = None
     _reranker_provider = None
     _api_error_count = 0
