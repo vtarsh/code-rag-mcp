@@ -25,7 +25,7 @@ def call_tool(tool_name: str, args: dict) -> str:
     """Call RAG daemon tool and return result text."""
     url = f"{DAEMON_URL}/{tool_name}"
     data = json.dumps(args).encode()
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json", "User-Agent": "cli.py"})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             result = json.loads(resp.read().decode())
@@ -100,7 +100,7 @@ def main() -> None:
         if "--depth" in sys.argv:
             idx = sys.argv.index("--depth")
             if idx + 1 < len(sys.argv):
-                args["depth"] = int(sys.argv[idx + 1])
+                args["max_depth"] = int(sys.argv[idx + 1])
         print(call_tool("trace_impact", args))
 
     elif cmd == "trace-flow":

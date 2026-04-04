@@ -59,8 +59,8 @@ Key tools: `search`, `analyze_task`, `context_builder`, `trace_flow`, `find_depe
 
 ## MCP Call Tracker
 
-Every MCP tool call is logged to `logs/mcp_calls.jsonl` (tool name, args, duration, result preview, session ID).
-Use this data to understand which tools the LLM actually picks, which it ignores, and what queries trigger calls.
+Every tool call is logged to `logs/tool_calls.jsonl` by the daemon (tool name, args, duration, result preview, source).
+Captures both MCP calls and CLI calls (subagents). Source field: `mcp`, `cli`, or `direct`.
 
 ```bash
 python scripts/analyze_calls.py              # usage summary

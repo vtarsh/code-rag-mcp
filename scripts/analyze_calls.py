@@ -14,7 +14,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-LOG_PATH = Path(__file__).parent.parent / "logs" / "mcp_calls.jsonl"
+LOG_PATH = Path(__file__).parent.parent / "logs" / "tool_calls.jsonl"
 
 
 def load_calls() -> list[dict]:
@@ -37,7 +37,8 @@ def summary(calls: list[dict]) -> None:
         return
 
     print(f"Total calls: {len(calls)}")
-    print(f"Sessions: {len(set(c['session'] for c in calls))}")
+    sources = set(c.get("source", "unknown") for c in calls)
+    print(f"Sources: {', '.join(sources)}")
     print(f"Period: {calls[0]['ts'][:10]} — {calls[-1]['ts'][:10]}")
     print()
 
@@ -49,6 +50,14 @@ def summary(calls: list[dict]) -> None:
         avg_ms = sum(durations) / len(durations)
         print(f"  {tool:25s}  {count:4d} calls  avg {avg_ms:6.0f}ms")
     print()
+
+    # Source breakdown
+    source_counts = Counter(c.get("source", "unknown") for c in calls)
+    if source_counts:
+        print("## By Source")
+        for src, count in source_counts.most_common():
+            print(f"  {src:10s}  {count:4d} calls")
+        print()
 
     # Never used tools (from known set)
     all_tools = {
@@ -82,14 +91,15 @@ def show_last(calls: list[dict], n: int) -> None:
 
 
 def show_sessions(calls: list[dict]) -> None:
-    sessions: dict[str, list[dict]] = {}
+    """Group calls by source (mcp/cli/direct)."""
+    by_source: dict[str, list[dict]] = {}
     for c in calls:
-        sessions.setdefault(c["session"], []).append(c)
+        by_source.setdefault(c.get("source", "unknown"), []).append(c)
 
-    for sid, session_calls in sessions.items():
-        tools = Counter(c["tool"] for c in session_calls)
+    for source, source_calls in by_source.items():
+        tools = Counter(c["tool"] for c in source_calls)
         top = ", ".join(f"{t}({n})" for t, n in tools.most_common(5))
-        print(f"Session {sid[:12]}…  {len(session_calls)} calls  [{session_calls[0]['ts'][:16]}]  {top}")
+        print(f"[{source}]  {len(source_calls)} calls  {top}")
 
 
 def main() -> None:

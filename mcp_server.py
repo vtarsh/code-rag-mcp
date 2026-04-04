@@ -16,7 +16,6 @@ import signal
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
@@ -33,30 +32,6 @@ PROJECT_DIR = Path(__file__).parent
 PID_FILE = PROJECT_DIR / "daemon.pid"
 
 mcp = FastMCP("code-rag")
-
-# --- Call tracker ---
-_LOG_DIR = PROJECT_DIR / "logs"
-_CALLS_LOG = _LOG_DIR / "mcp_calls.jsonl"
-_SESSION_ID = f"{os.getpid()}-{int(time.time())}"
-
-
-def _log_call(tool_name: str, args: dict, result: str, duration_ms: float) -> None:
-    """Append tool call record to JSONL log. Never raises."""
-    try:
-        _LOG_DIR.mkdir(exist_ok=True)
-        record = {
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "session": _SESSION_ID,
-            "tool": tool_name,
-            "args": args,
-            "duration_ms": round(duration_ms),
-            "result_len": len(result),
-            "result_preview": result[:300].replace("\n", " "),
-        }
-        with open(_CALLS_LOG, "a") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    except Exception:
-        pass  # logging must never break tool calls
 
 
 def _daemon_healthy() -> bool:
@@ -115,28 +90,23 @@ def _call_daemon(tool_name: str, args: dict) -> str:
     if err:
         return err
 
-    t0 = time.time()
     body = json.dumps(args).encode()
     req = Request(
         f"{DAEMON_URL}/tool/{tool_name}",
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "User-Agent": "mcp_server"},
         method="POST",
     )
     try:
         with urlopen(req, timeout=120) as resp:
             data = json.loads(resp.read())
             if "error" in data:
-                result = f"Error: {data['error']}"
-            else:
-                result = data.get("result", "")
+                return f"Error: {data['error']}"
+            return data.get("result", "")
     except URLError as e:
-        result = f"Daemon connection error: {e}"
+        return f"Daemon connection error: {e}"
     except TimeoutError:
-        result = "Daemon request timed out (120s)"
-
-    _log_call(tool_name, args, result, (time.time() - t0) * 1000)
-    return result
+        return "Daemon request timed out (120s)"
 
 
 # --- MCP Tools (all proxy to daemon) ---
