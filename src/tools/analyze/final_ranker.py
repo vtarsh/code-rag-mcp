@@ -27,11 +27,13 @@ Design principles:
 from __future__ import annotations
 
 import json
+import os
 import re
 import sqlite3
 import sys
 
 from .base import AnalysisContext, Finding
+from .flows_loader import summary_for_prompt
 
 # ------------------------------------------------------------------
 # Evidence classification — tells the LLM how much to trust each source.
@@ -251,6 +253,78 @@ def _distill_recurring_repos(similar_tasks: list[dict]) -> list[dict]:
     return distilled
 
 
+def _flows_evidence_enabled() -> bool:
+    """Env flag for A/B testing archetype evidence in the ranker.
+
+    Set FLOWS_EVIDENCE=0 to disable (baseline). Any other value (or unset)
+    keeps it enabled.
+    """
+    return os.getenv("FLOWS_EVIDENCE", "1") != "0"
+
+
+# Keyword → archetype hints. Ordered by specificity (first match wins
+# within each branch).
+_NEW_PROVIDER_HINTS = (
+    "new provider", "integrate new", "add new provider", "integration of",
+    "integrate ", "new apm", "new payment provider",
+)
+_CARD_PROVIDER_HINTS = (
+    "card provider", "3ds", "3-d secure", "direct-api", "direct api",
+    "card brand", "card network", "eci", "acquirer",
+)
+_ADD_METHOD_HINTS = (
+    "add payment method", "new payment method", "add method",
+    "pay by bank", "pbba", "bizum", "pix ", "interac", "etransfer",
+    "new apm method", "enable method", "add support for",
+)
+_WEBHOOK_HINTS = (
+    "webhook handler", "webhook handling", "webhook event", "timeout webhook",
+    "handle webhook", "webhook reason", "dmn ", "notification handling",
+)
+
+
+def _infer_archetype(
+    description: str, domain: str, provider: str
+) -> str:
+    """Heuristic archetype classifier from task description + domain.
+
+    Returns one of: new_apm_provider, add_apm_method, webhook_event,
+    schema_change, new_card_provider, other.
+    """
+    desc_lc = (description or "").lower()
+    dom_lc = (domain or "").lower()
+
+    # CORE-prefixed or core-* domain → schema/migration work.
+    if dom_lc.startswith("core-") or dom_lc == "core":
+        return "schema_change"
+    if re.search(r"\bcore-\d+", description or "", re.IGNORECASE):
+        return "schema_change"
+
+    # Non-PI domain (BO/HS/unknown) → other.
+    if not dom_lc.startswith("pi"):
+        return "other"
+
+    has_provider = bool(provider)
+    has_new_hint = any(h in desc_lc for h in _NEW_PROVIDER_HINTS)
+    has_card_hint = any(h in desc_lc for h in _CARD_PROVIDER_HINTS)
+    has_add_method_hint = any(h in desc_lc for h in _ADD_METHOD_HINTS)
+    has_webhook_hint = any(h in desc_lc for h in _WEBHOOK_HINTS)
+
+    # Priority chain — more specific archetypes first.
+    if has_provider and has_new_hint and has_card_hint:
+        return "new_card_provider"
+    if has_provider and has_new_hint:
+        return "new_apm_provider"
+    if has_webhook_hint and has_provider and not has_new_hint and not has_add_method_hint:
+        return "webhook_event"
+    if has_provider and has_add_method_hint:
+        return "add_apm_method"
+    if has_provider:
+        # Provider is known but no strong specialisation → assume incremental change.
+        return "add_apm_method"
+    return "other"
+
+
 def _task_prefix_from_domain(domain: str) -> str:
     """Map classifier domain to task_history ticket_id prefix."""
     d = (domain or "").split("+")[0].lower()
@@ -265,15 +339,65 @@ def _task_prefix_from_domain(domain: str) -> str:
     return ""
 
 
+def _format_archetype_section(archetype_summary: dict | None) -> str:
+    """Format the archetype frequency block for the prompt, or "" if absent."""
+    if not archetype_summary:
+        return ""
+    sample_size = archetype_summary.get("sample_size", 0)
+    if sample_size < 2:
+        # Not enough corpus evidence to be useful.
+        return ""
+
+    def _fmt_list(label: str, repos: list[str]) -> str:
+        if not repos:
+            return ""
+        return f"  {label} ({len(repos)}): {repos}\n"
+
+    edges_lines = ""
+    for edge in archetype_summary.get("top_edges", []):
+        pct_str = f"{edge['pct']:.0%}"
+        edges_lines += f"    - {edge['pattern']}  [{edge['count']}x, {pct_str}]\n"
+
+    section = (
+        f"\n## Historical archetype pattern ({archetype_summary['archetype']})\n"
+        f"_Sample: {sample_size} past tasks of this type._\n\n"
+        "Repos that changed in past tasks of this archetype (grouped by frequency):\n"
+    )
+    section += _fmt_list("always_changed [100%]", archetype_summary["always_changed"])
+    section += _fmt_list("common_changed [≥67%]", archetype_summary["common_changed"])
+    section += _fmt_list("sometimes_changed [33-66%]", archetype_summary["sometimes_changed"])
+    # rarely tier intentionally omitted — too noisy to bias the LLM.
+    if edges_lines:
+        section += "\nTop runtime edges from this archetype:\n" + edges_lines
+    section += (
+        "\nArchetype guidance (apply AFTER provider-mismatch rule; per-task evidence always wins):\n"
+        "  - Repos in `always_changed` are strong signals for tier=high, but\n"
+        "    concrete task evidence (description, PR data, reviewer flags) overrides.\n"
+        "  - Repos in `common_changed` favour tier=high/medium when the task\n"
+        "    touches that layer.\n"
+        "  - Repos in `sometimes_changed` are neutral — judge on task specifics.\n"
+        "  - Repos NOT in any archetype tier are still VALID if task evidence\n"
+        "    (keywords, PR urls, co-change rules, reviewer mentions) supports them.\n"
+        "    Do NOT drop them merely for missing from archetype tiers.\n"
+        "  - IMPORTANT: repos named `grpc-apm-<provider>`, `grpc-providers-<provider>`,\n"
+        "    or `workflow-<provider>-*` are ALWAYS candidates for tier=high when the\n"
+        "    task description or evidence mentions that provider, regardless of\n"
+        "    archetype tier membership.\n"
+    )
+    return section
+
+
 def _build_prompt(
     description: str,
     classification_info: dict,
     candidates: list[dict],
     similar_tasks: list[dict],
+    archetype_summary: dict | None = None,
 ) -> str:
     """Build the ranker prompt. Returns full text for Gemini."""
     similar_json = json.dumps(similar_tasks, indent=2) if similar_tasks else "(none)"
     cand_json = json.dumps(candidates, indent=2)
+    archetype_section = _format_archetype_section(archetype_summary)
 
     return f"""You are pruning a noisy candidate repo list for a software engineering task on a payment platform. The candidate list was generated by ~20 heuristic analyzers; many of them over-include. Your job is precision: keep repos that actually need code changes, drop the rest.
 
@@ -330,7 +454,7 @@ NOT sufficient reasons — drop those.
 
 ## Similar past tasks (ground-truth repos_changed)
 {similar_json}
-
+{archetype_section}
 ## Candidates ({len(candidates)})
 {cand_json}
 
@@ -445,7 +569,21 @@ def section_final_ranker(ctx: AnalysisContext, classification: object) -> str:
     # Single-occurrence repos are one-off noise from loosely-matched tasks.
     similar = _distill_recurring_repos(similar_raw)
 
-    prompt = _build_prompt(ctx.description, classification_info, candidates, similar)
+    # Archetype evidence from flows corpus (gated by FLOWS_EVIDENCE env var).
+    archetype_summary: dict | None = None
+    archetype_name = ""
+    if _flows_evidence_enabled():
+        archetype_name = _infer_archetype(
+            ctx.description,
+            classification_info["domain"],
+            classification_info["provider"],
+        )
+        archetype_summary = summary_for_prompt(archetype_name)
+
+    prompt = _build_prompt(
+        ctx.description, classification_info, candidates, similar,
+        archetype_summary=archetype_summary,
+    )
     ranking = _call_gemini(prompt)
     if not ranking:
         return ""
@@ -495,6 +633,11 @@ def section_final_ranker(ctx: AnalysisContext, classification: object) -> str:
     output += f"_Pruned {total_dropped}/{total} candidates based on evidence + historical similarity._\n\n"
     if prefiltered:
         output += f"_Pre-filtered {len(prefiltered)} other-provider repo(s) (not scoped to `{ctx.provider or '?'}`)._\n\n"
+    if archetype_summary and archetype_summary.get("sample_size", 0) >= 2:
+        output += (
+            f"_Archetype evidence: `{archetype_name}` "
+            f"(n={archetype_summary['sample_size']})._\n\n"
+        )
 
     if kept_core:
         output += "**Core (top 5):**\n"

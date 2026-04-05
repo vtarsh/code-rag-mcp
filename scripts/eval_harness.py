@@ -267,6 +267,26 @@ def extract_final_ranked_repos(output: str) -> tuple[list[str], list[str]]:
     return core, related
 
 
+def extract_dropped_repos(output: str) -> list[str]:
+    """Parse repos listed in the 'Dropped' section of the Final LLM Ranking."""
+    dropped: list[str] = []
+    in_dropped = False
+    for raw in output.split("\n"):
+        line = raw.strip()
+        if line.startswith("**Dropped"):
+            in_dropped = True
+            continue
+        if not in_dropped:
+            continue
+        if line.startswith("## ") or line.startswith("---") or line.startswith("**"):
+            break
+        # Format: "- ~~repo-name~~ [TIER] — reason"
+        m = re.match(r"-\s+~~([a-z0-9][a-z0-9-]+)~~", line)
+        if m:
+            dropped.append(m.group(1))
+    return dropped
+
+
 def detect_provider(task_id: str, ground_truth_repos: set[str]) -> str:
     """Detect provider from ground truth repos (for PI tasks)."""
     for repo in ground_truth_repos:
@@ -283,8 +303,8 @@ def detect_provider(task_id: str, ground_truth_repos: set[str]) -> str:
 def evaluate_task(conn: sqlite3.Connection, task_id: str, *, verbose: bool = False, final_rank: bool = False) -> dict:
     """Evaluate one task. Returns metrics dict."""
     summary, description = load_task_description(conn, task_id)
-    if not description:
-        return {"task_id": task_id, "error": "no description in task_history"}
+    if not description and not summary:
+        return {"task_id": task_id, "error": "no summary/description in task_history"}
 
     gt_repos, gt_high_churn, gt_all_files = load_ground_truth(task_id)
     if not gt_repos:
@@ -366,6 +386,13 @@ def evaluate_task(conn: sqlite3.Connection, task_id: str, *, verbose: bool = Fal
     churn_hit = len(churn_warned_basenames & gt_churn_basenames)
     churn_total_gt = len(gt_churn_basenames)
 
+    # Dropped-list quality (only meaningful with final_rank).
+    dropped_repos: list[str] = []
+    false_drops: list[str] = []
+    if final_rank:
+        dropped_repos = extract_dropped_repos(output)
+        false_drops = sorted(gt_repos & set(dropped_repos))
+
     metrics = {
         "task_id": task_id,
         "provider": provider,
@@ -385,6 +412,8 @@ def evaluate_task(conn: sqlite3.Connection, task_id: str, *, verbose: bool = Fal
         "churn_total_gt": churn_total_gt,
         "missed_repos": sorted(gt_repos - all_predicted),
         "extra_repos": sorted(all_predicted - gt_repos),
+        "dropped_repos": dropped_repos,
+        "false_drops": false_drops,
     }
 
     if verbose:
@@ -400,6 +429,8 @@ def evaluate_task(conn: sqlite3.Connection, task_id: str, *, verbose: bool = Fal
             print(f"  MISSED: {', '.join(metrics['missed_repos'][:5])}")
         if metrics["extra_repos"]:
             print(f"  Extra:  {', '.join(metrics['extra_repos'][:5])}")
+        if final_rank and metrics["false_drops"]:
+            print(f"  FALSE DROPS (GT in dropped list): {', '.join(metrics['false_drops'])}")
 
     return metrics
 
@@ -444,6 +475,54 @@ def main():
         avg_hit = avg("churn_hit")
         avg_gt = avg("churn_total_gt")
         print(f"  Avg churn hits:        {avg_hit}/{avg_gt}")
+
+        # Per-task summary table
+        print("\n=== PER-TASK TABLE ===")
+        print(f"  {'Task':11} {'GT':3} {'Pred':4} {'Rec':6} {'Rec++':6} {'Prec':6} {'T5':6} {'T10':6} {'FD':3}")
+        for r in valid:
+            fd = len(r.get("false_drops", []))
+            print(
+                f"  {r['task_id']:11} {r['gt_repos']:3d} {r['predicted_total']:4d} "
+                f"{r['recall_all']:5.1f}% {r['recall_core_common']:5.1f}% "
+                f"{r['precision']:5.1f}% {r['top5_recall']:5.1f}% {r['top10_recall']:5.1f}% {fd:3d}"
+            )
+
+        # False-drop / false-keep analysis (only in final-rank mode)
+        if args.final_rank:
+            all_false_drops: list[str] = []
+            all_kept: set[str] = set()
+            all_gt: set[str] = set()
+            total_gt_count = 0
+            total_kept_count = 0
+            # Stable-drop histogram: how many tasks dropped each repo
+            from collections import Counter
+            drop_counter: Counter[str] = Counter()
+            for r in valid:
+                all_false_drops.extend(r["false_drops"])
+                for repo in r["dropped_repos"]:
+                    drop_counter[repo] += 1
+                total_gt_count += r["gt_repos"]
+                total_kept_count += r["predicted_total"]
+                # Note: we can reconstruct kept/gt only per-task for rate calc
+
+            # Rates
+            total_false_drop = sum(len(r["false_drops"]) for r in valid)
+            total_false_keep = sum(len(r["extra_repos"]) for r in valid)
+            false_drop_rate = (total_false_drop / total_gt_count * 100) if total_gt_count else 0
+            false_keep_rate = (total_false_keep / total_kept_count * 100) if total_kept_count else 0
+
+            print("\n=== DROPPED-LIST QUALITY ===")
+            print(f"  False drops (GT in dropped):  {total_false_drop}/{total_gt_count} = {false_drop_rate:.1f}%  (target <5%)")
+            print(f"  False keeps (kept not in GT): {total_false_keep}/{total_kept_count} = {false_keep_rate:.1f}%  (target <50%)")
+
+            # Stable drops — repos dropped in >= 50% of tasks
+            threshold = max(2, len(valid) // 2)
+            stable_drops = [(r, n) for r, n in drop_counter.most_common() if n >= threshold]
+            print(f"\n=== STABLE DROPS (≥{threshold}/{len(valid)} tasks) ===")
+            for repo, n in stable_drops[:30]:
+                print(f"  {n:2d}×  {repo}")
+            if len(stable_drops) > 30:
+                print(f"  ... {len(stable_drops) - 30} more")
 
 
 if __name__ == "__main__":
