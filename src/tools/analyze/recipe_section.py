@@ -62,9 +62,20 @@ def _match_recipe(
     classification: object,
     recipes: dict[str, dict],
 ) -> tuple[str, dict | None]:
-    """Find the best matching recipe for the current task."""
+    """Find the best matching recipe for the current task using keyword scoring.
+
+    Scoring rules:
+      - Domain must match (trigger.domains contains classification domain)
+      - Condition must pass (_evaluate_condition)
+      - Score = number of trigger.keywords matched in description
+      - Ties broken by: longer matched phrases win (specificity) then recipe name length desc
+      - At least 1 keyword match is required (no implicit match via provider detection)
+    """
     domain = getattr(classification, "domain", "").split("+")[0]
     provider = ctx.provider
+    desc_lower = ctx.description.lower()
+
+    candidates: list[tuple[int, int, str, str, dict]] = []  # (score, specificity, name_priority, name, recipe)
 
     for name, recipe in recipes.items():
         trigger = recipe.get("trigger", {})
@@ -74,45 +85,78 @@ def _match_recipe(
             continue
 
         condition = trigger.get("condition", "")
-        if not _evaluate_condition(ctx, condition, provider):
+        if not _evaluate_condition(ctx, condition, provider, ctx.conn):
             continue
 
-        # Check keyword match (optional — if keywords specified, at least one must match)
         trigger_keywords = trigger.get("keywords", [])
-        if trigger_keywords:
-            desc_lower = ctx.description.lower()
-            if not any(kw in desc_lower for kw in trigger_keywords):
-                # No keyword match, but domain + condition matched —
-                # still apply if provider is detected (common for PI tasks)
-                if not provider:
-                    continue
+        matched = [kw for kw in trigger_keywords if kw.lower() in desc_lower]
+        if not matched:
+            continue  # must have at least one keyword match
 
-        return name, recipe
+        score = len(matched)
+        specificity = sum(len(kw) for kw in matched)  # longer phrases = more specific
+        candidates.append((score, specificity, -len(name), name, recipe))
 
-    return "", None
+    if not candidates:
+        return "", None
+
+    # Highest score wins; ties broken by specificity then name
+    candidates.sort(key=lambda x: (-x[0], -x[1], x[2]))
+    _, _, _, name, recipe = candidates[0]
+    return name, recipe
 
 
-def _evaluate_condition(ctx: AnalysisContext, condition: str, provider: str) -> bool:
-    """Evaluate a simple condition string against current context."""
+def _evaluate_condition(ctx: AnalysisContext, condition: str, provider: str, conn) -> bool:
+    """Evaluate a simple condition string against current context.
+
+    Supported predicates:
+      - provider_detected / NOT provider_detected
+      - provider_repo_exists / NOT provider_repo_exists
+      - new_provider / NOT new_provider  (alias for NOT provider_repo_exists)
+      - webhook_handler_target_detected / core_schemas_or_libs_types_target (domain-derived, always True here)
+    """
     if not condition:
         return True
 
-    # Simple condition evaluation
-    if "provider_detected" in condition and not provider:
-        return False
-
-    if "NOT provider_repo_exists" in condition:
-        # Check if grpc-apm-{provider} already exists in repos table
-        if provider:
-            repo_name = f"grpc-apm-{provider}"
-            exists = ctx.conn.execute(
-                "SELECT 1 FROM repos WHERE name = ?", (repo_name,)
+    # Check provider detection
+    has_provider = bool(provider)
+    repo_exists = False
+    if has_provider:
+        repo_name = f"grpc-apm-{provider}"
+        row = conn.execute("SELECT 1 FROM repos WHERE name = ?", (repo_name,)).fetchone()
+        if not row:
+            row = conn.execute(
+                "SELECT 1 FROM repos WHERE name = ?", (f"grpc-providers-{provider}",)
             ).fetchone()
-            # For new provider recipe, we want repo to NOT exist yet
-            # But if it exists, the provider was recently created — still apply recipe
-            # (provider may have just been scaffolded from boilerplate)
-            # So we always return True when provider is detected
-            return True
+        repo_exists = bool(row)
+
+    # Parse AND-joined predicates (supports NOT prefix)
+    # Split on " AND " (case-insensitive)
+    import re
+    predicates = [p.strip() for p in re.split(r"\s+AND\s+", condition, flags=re.IGNORECASE)]
+
+    for pred in predicates:
+        negated = False
+        pred_lower = pred.lower()
+        if pred_lower.startswith("not "):
+            negated = True
+            pred_lower = pred_lower[4:].strip()
+
+        result: bool
+        if pred_lower == "provider_detected":
+            result = has_provider
+        elif pred_lower == "provider_repo_exists":
+            result = repo_exists
+        elif pred_lower == "new_provider":
+            result = has_provider and not repo_exists
+        else:
+            # Unknown predicate (e.g. domain-derived) — treat as True
+            result = True
+
+        if negated:
+            result = not result
+        if not result:
+            return False
 
     return True
 
