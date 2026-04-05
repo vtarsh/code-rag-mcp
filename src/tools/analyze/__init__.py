@@ -47,6 +47,7 @@ from .pi_analyzer import (
     section_provider_checklist,
     section_webhooks,
 )
+from .meta_guard import section_meta_guard
 from .recipe_section import section_recipe
 from .shared_sections import (
     section_ci_risk,
@@ -331,6 +332,10 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
     header += "SUMMARY_PLACEHOLDER\n"
 
     output = ""
+
+    # Meta-guard: warn if query overlaps heavily with a stored task (first section).
+    output += _run_section("meta_guard", section_meta_guard, ctx)
+
     if repo_refs_output:
         output += repo_refs_output + "\n"
 
