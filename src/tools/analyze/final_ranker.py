@@ -476,12 +476,19 @@ Quotas (HARD):
     you can name a specific file/function that will be touched. Be strict.
   - tier="drop": everything else.
 
-Target total kept: 9-12. Do not exceed. Do not put "shared infrastructure"
-repos in medium just because they could conceivably be involved
-(e.g. backoffice-web, express-api-callbacks, e2e-tests, graphql,
-kafka-cdc-sink, grpc-graphql-authorization). These are called by MANY
-tasks but rarely contain new code. Drop unless there is a concrete
-change required.
+Target total kept: 9-12. Do not exceed. Do not put generic "shared
+infrastructure" repos in medium just because they could conceivably be
+involved (e.g. backoffice-web, e2e-tests, graphql, kafka-cdc-sink,
+grpc-graphql-authorization). These are called by MANY tasks but rarely
+contain new code. Drop unless there is a concrete change required.
+
+EXCEPTION — runtime payment/webhook hops are NOT generic infra:
+  grpc-payment-gateway, workflow-provider-webhooks, express-webhooks,
+  grpc-webhooks-paycom, express-api-internal, express-api-callbacks,
+  grpc-providers-credentials, grpc-providers-features.
+These repos ARE runtime hops in the provider integration flow and
+appear in ground-truth changes frequently. Keep them when the task
+touches payment/webhook/provider flows, even if they look "shared".
 
 "Possibly related", "potentially involved", "might need updates" are
 NOT sufficient reasons — drop those.
