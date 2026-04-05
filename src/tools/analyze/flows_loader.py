@@ -81,6 +81,47 @@ def extract_top_edges(pattern: dict, limit: int = 5) -> list[dict]:
     return out
 
 
+@lru_cache(maxsize=32)
+def load_provider_pattern(provider: str) -> dict | None:
+    """Return parsed YAML dict for provider, or None if missing."""
+    if not provider:
+        return None
+    path: Path = PROFILE_DIR / "flows" / "providers" / f"{provider}.yaml"
+    if not path.exists():
+        return None
+    try:
+        data = yaml.safe_load(path.read_text())
+    except yaml.YAMLError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def provider_summary_for_prompt(provider: str) -> dict | None:
+    """Return compact provider summary for the LLM prompt, or None if unavailable.
+
+    Output shape:
+      {
+        "provider": <name>,
+        "task_count": N,
+        "tasks": [task_ids],
+        "changed_repos": [...],       # union across all tasks
+        "checklist_repos": [...],     # repos flagged to verify
+        "features_supported": [...],
+      }
+    """
+    pattern = load_provider_pattern(provider)
+    if not pattern:
+        return None
+    return {
+        "provider": provider,
+        "task_count": int(pattern.get("task_count", 0)),
+        "tasks": list(pattern.get("tasks", []) or []),
+        "changed_repos": list(pattern.get("changed_repos", []) or []),
+        "checklist_repos": list(pattern.get("checklist_repos", []) or []),
+        "features_supported": list(pattern.get("features_supported", []) or []),
+    }
+
+
 def summary_for_prompt(archetype: str) -> dict | None:
     """Return a compact summary for the LLM prompt, or None if unavailable.
 

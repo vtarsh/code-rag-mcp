@@ -96,7 +96,11 @@ TOOLS: dict[str, Callable[[dict[str, Any]], str]] = {
     ),
     "repo_overview": lambda args: repo_overview_tool(args["repo_name"]),
     "list_repos": lambda args: list_repos_tool(args.get("type", ""), args.get("has_dep", ""), args.get("limit", 30)),
-    "analyze_task": lambda args: analyze_task_tool(args["description"], args.get("provider", "")),
+    "analyze_task": lambda args: analyze_task_tool(
+        args["description"],
+        args.get("provider", ""),
+        final_rank=args.get("final_rank", False),
+    ),
     "context_builder": lambda args: context_builder_tool(
         args["query"],
         args.get("repo", ""),

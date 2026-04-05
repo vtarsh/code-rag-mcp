@@ -233,7 +233,7 @@ def list_repos(type: str = "", has_dep: str = "", limit: int = 30) -> str:
 
 
 @mcp.tool()
-def analyze_task(description: str, provider: str = "") -> str:
+def analyze_task(description: str, provider: str = "", final_rank: bool = True) -> str:
     """Analyze a development task and find ALL relevant repos, files, and dependencies.
 
     Takes a task description (e.g., "add verification flow to Trustly") and automatically:
@@ -242,12 +242,21 @@ def analyze_task(description: str, provider: str = "") -> str:
     3. Traces the dependency graph for affected repos
     4. Searches GitHub for existing PRs/branches related to this task
     5. Generates a completeness report and change checklist
+    6. Runs precision-oriented LLM pruner (when final_rank=True) using
+       archetype + provider historical patterns from flows corpus
 
     Args:
         description: Task description (e.g., "implement DirectDebitMandate verification for Trustly")
         provider: Optional provider name to focus on (e.g., "trustly", "paypal")
+        final_rank: Run precision pass via Gemini LLM ranker using flows corpus
+            evidence (archetype + provider historical patterns). Default True —
+            improves precision by dropping noise via evidence-based ranking.
     """
-    return _call_daemon("analyze_task", {"description": description, "provider": provider})
+    return _call_daemon("analyze_task", {
+        "description": description,
+        "provider": provider,
+        "final_rank": final_rank,
+    })
 
 
 @mcp.tool()
