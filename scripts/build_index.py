@@ -54,6 +54,7 @@ REFERENCES_DIR = (
     if (_PROFILE_DIR / "docs" / "references").is_dir()
     else _BASE_DIR / "docs" / "references"
 )
+PROVIDERS_DIR = _PROFILE_DIR / "docs" / "providers"
 _profile_domain_reg = _PROFILE_DIR / "docs" / "domain_registry.yaml"
 DOMAIN_REGISTRY_FILE = (
     _profile_domain_reg if _profile_domain_reg.exists() else _BASE_DIR / "docs" / "domain_registry.yaml"
@@ -1381,6 +1382,66 @@ def index_references(conn: sqlite3.Connection) -> tuple[int, int]:
     return files, chunks
 
 
+def index_providers(conn: sqlite3.Connection) -> tuple[int, int]:
+    """Index provider docs from profiles/{profile}/docs/providers/{provider}/*.md.
+
+    Each provider gets repo_name='{provider}-docs', file_type='provider_doc'.
+    Chunks get content prefix '[{Provider Title} Docs: {slug}]' for search boost.
+    Idempotent: deletes existing chunks for each provider before re-inserting.
+    """
+    if not PROVIDERS_DIR.is_dir():
+        return 0, 0
+
+    total_files = 0
+    total_chunks = 0
+
+    for provider_dir in sorted(PROVIDERS_DIR.iterdir()):
+        if not provider_dir.is_dir():
+            continue
+        provider = provider_dir.name
+        repo_name = f"{provider}-docs"
+        provider_title = provider.replace("-", " ").replace("_", " ").title()
+
+        # Remove existing chunks for this provider (idempotent)
+        conn.execute("DELETE FROM chunks WHERE repo_name = ?", (repo_name,))
+
+        files_count = 0
+        chunks_count = 0
+
+        for md_file in sorted(provider_dir.glob("*.md")):
+            try:
+                content = md_file.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                continue
+            if len(content.strip()) < MIN_CHUNK:
+                continue
+
+            slug = md_file.stem
+            rel_path = f"docs/providers/{provider}/{md_file.name}"
+            file_chunks = chunk_markdown(content, slug)
+
+            for chunk in file_chunks:
+                chunk_content = chunk["content"]
+                if not chunk_content.startswith(f"[{provider_title} Docs:"):
+                    chunk_content = f"[{provider_title} Docs: {slug}] {chunk_content}"
+                conn.execute(
+                    "INSERT INTO chunks(content, repo_name, file_path, file_type, chunk_type, language) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (chunk_content, repo_name, rel_path, "provider_doc", "provider_doc", "markdown"),
+                )
+                chunks_count += 1
+            files_count += 1
+
+        if files_count > 0:
+            total_files += files_count
+            total_chunks += chunks_count
+
+    if total_files:
+        print(f"  Provider docs: {total_files} files, {total_chunks} chunks")
+
+    return total_files, total_chunks
+
+
 def chunk_cql_seeds(content: str, repo_name: str) -> list[dict]:
     """Chunk seeds.cql — each INSERT becomes a separate chunk with provider config metadata.
 
@@ -1834,7 +1895,16 @@ def main():
         changed, removed = detect_changed_repos(repo_meta, existing_shas)
 
         if not changed and not removed:
-            print("All repos up to date. Nothing to re-index.")
+            # Even when no repos changed, profile docs (providers/tasks/references) may have
+            # updated — re-index those cheaply before returning
+            conn_docs = sqlite3.connect(str(DB_PATH))
+            conn_docs.execute("BEGIN")
+            pd_files, pd_chunks = index_providers(conn_docs)
+            conn_docs.commit()
+            conn_docs.close()
+            if pd_chunks:
+                print(f"Provider docs: {pd_files} files, {pd_chunks} chunks re-indexed")
+            print("All repos up to date. Nothing else to re-index.")
             return
 
         only_repos = changed
@@ -1968,6 +2038,11 @@ def main():
             total_files += rf_files
             total_chunks += rf_chunks
 
+            # Re-index provider docs (function is idempotent — deletes per-provider first)
+            pd_files, pd_chunks = index_providers(conn)
+            total_files += pd_files
+            total_chunks += pd_chunks
+
             # Clean old package_usage chunks (rebuilt by build_graph.py)
             deleted_pu = conn.execute("SELECT rowid FROM chunks WHERE file_type = 'package_usage'").fetchall()
             for (rowid,) in deleted_pu:
@@ -2043,6 +2118,11 @@ def main():
         rf_files, rf_chunks = index_references(conn)
         total_files += rf_files
         total_chunks += rf_chunks
+
+        # Index provider docs
+        pd_files, pd_chunks = index_providers(conn)
+        total_files += pd_files
+        total_chunks += pd_chunks
 
         total_chunks_global = total_chunks
         total_repos_global = len(repo_meta)

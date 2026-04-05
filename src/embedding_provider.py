@@ -95,7 +95,14 @@ class GeminiEmbeddingProvider:
             if i > 0:
                 time.sleep(0.05)
 
-            for attempt in range(3):
+            MAX_RL_RETRIES = 3  # rate-limit retries (quota resets per minute)
+            MAX_OTHER_RETRIES = 2  # other errors (transient network/5xx)
+            RL_WAIT_SECONDS = 61  # Gemini quota resets every 60s; 61s covers edge cases
+            rl_attempts = 0
+            other_attempts = 0
+            batch_succeeded = False
+            last_exc = None
+            while not batch_succeeded:
                 try:
                     result = self._client.models.embed_content(
                         model=self._model,
@@ -110,25 +117,35 @@ class GeminiEmbeddingProvider:
                             vec = (np.array(vec) / norm).tolist()
                         all_vectors.append(vec)
                     notify_api_success()
-                    break
+                    batch_succeeded = True
                 except Exception as e:
                     notify_api_error()
-                    if attempt < 2:
-                        # Longer wait for rate limits (429)
-                        is_rate_limit = "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e)
-                        wait = 15 if is_rate_limit else (attempt + 1) * 2
-                        log.warning(f"Gemini embed batch failed (attempt {attempt + 1}): {e}, retrying in {wait}s")
-                        time.sleep(wait)
-                    else:
-                        # All retries exhausted
-                        if task_type == "query":
-                            # Search-time: fallback to local transparently
-                            log.error(f"Gemini embedding failed after 3 attempts: {e}. Falling back to local.")
-                            local = LocalEmbeddingProvider()
-                            return local.embed(texts, task_type)
-                        else:
-                            # Build-time: don't mix vector spaces, let build script handle it
-                            raise
+                    last_exc = e
+                    err_str = str(e)
+                    is_rate_limit = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str
+
+                    if is_rate_limit:
+                        rl_attempts += 1
+                        if rl_attempts > MAX_RL_RETRIES:
+                            log.error(f"Gemini rate-limit exhausted after {MAX_RL_RETRIES} retries. Giving up.")
+                            break
+                        log.warning(f"Gemini rate limit (RL retry {rl_attempts}/{MAX_RL_RETRIES}), waiting {RL_WAIT_SECONDS}s for quota reset")
+                        time.sleep(RL_WAIT_SECONDS)
+                        continue
+
+                    # Non-rate-limit: exponential backoff up to MAX_OTHER_RETRIES
+                    other_attempts += 1
+                    if other_attempts > MAX_OTHER_RETRIES:
+                        log.error(f"Gemini embed failed after {MAX_OTHER_RETRIES} non-RL retries.")
+                        break
+                    wait = 2 ** other_attempts
+                    log.warning(f"Gemini embed error (retry {other_attempts}/{MAX_OTHER_RETRIES}): {e.__class__.__name__}, waiting {wait}s")
+                    time.sleep(wait)
+
+            if not batch_succeeded:
+                # Raise — do NOT fall back to local during the day. Caller decides what to do.
+                # (Local model fallback should only happen in the nightly cron job, not interactively.)
+                raise last_exc
 
         duration_ms = (time.time() - t0) * 1000
         input_tokens = sum(len(t) // 4 for t in texts)  # rough estimate
@@ -373,12 +390,16 @@ def get_embedding_provider() -> tuple[EmbeddingProvider, str | None]:
             return _embedding_provider, None
         except Exception as e:
             if EMBEDDING_PROVIDER == "gemini":
-                # Explicitly requested gemini but it failed
-                log.error(f"Gemini embedding failed: {e}")
+                # Strict gemini mode — do NOT fall back to local. Keep provider so per-query
+                # failures raise cleanly; local model is only for nightly cron.
+                log.error(f"Gemini embedding initial test failed: {e}. Keeping Gemini provider (no local fallback in strict mode).")
+                _embedding_provider = GeminiEmbeddingProvider(GEMINI_API_KEY)
+                _fallback_warning = f"Gemini API test failed: {e}"
+                return _embedding_provider, _fallback_warning
             else:
                 log.warning(f"Gemini embedding unavailable ({e}), falling back to local")
 
-    # Fallback to local
+    # Fallback to local (only when EMBEDDING_PROVIDER == "auto" and Gemini failed)
     _embedding_provider = LocalEmbeddingProvider()
     _fallback_warning = "Gemini API unavailable, using local models"
     _fallback_since = time.time()
