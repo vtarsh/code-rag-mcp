@@ -25,9 +25,27 @@ DB_PATH = ROOT / "db" / "knowledge.db"
 
 
 def load_recipes():
+    """Load recipes from recipes/ dir (preferred) or legacy recipes.yaml."""
+    merged = {}
+    recipes_dir = PROFILE / "recipes"
+    if recipes_dir.is_dir():
+        for yaml_file in sorted(recipes_dir.glob("*.yaml")):
+            if yaml_file.name.startswith("_"):
+                continue
+            with open(yaml_file) as f:
+                data = yaml.safe_load(f)
+            if not isinstance(data, dict):
+                continue
+            if "recipes" in data and isinstance(data["recipes"], dict):
+                merged.update(data["recipes"])
+            else:
+                merged.update(data)
+        if merged:
+            return merged
+    # Legacy fallback
     path = PROFILE / "recipes.yaml"
     if not path.exists():
-        print(f"ERROR: {path} not found")
+        print(f"ERROR: neither {recipes_dir}/ nor {path} found")
         sys.exit(1)
     with open(path) as f:
         data = yaml.safe_load(f)

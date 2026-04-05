@@ -233,5 +233,35 @@ FLOW_EDGE_TYPES: set[str] = {
 KNOWN_FLOWS: dict[str, list[str]] = _load_yaml("known_flows.yaml") or {}
 
 # --- Structured recipes (evidence-based implementation patterns) ---
-_recipes_data: dict = _load_yaml("recipes.yaml") or {}
-RECIPES: dict[str, dict] = _recipes_data.get("recipes", {})
+def _load_recipes() -> dict[str, dict]:
+    """Load recipes from per-recipe YAMLs in recipes/ dir, with fallback to legacy recipes.yaml.
+
+    Preferred layout: profiles/{profile}/recipes/{name}.yaml — one recipe per file.
+    Each file may contain either a single recipe (top-level = recipe name) or
+    {recipes: {name: ...}} format.
+    """
+    merged: dict[str, dict] = {}
+    recipes_dir = PROFILE_DIR / "recipes"
+    if recipes_dir.is_dir():
+        for yaml_file in sorted(recipes_dir.glob("*.yaml")):
+            if yaml_file.name.startswith("_"):
+                continue  # reserved for index/meta files
+            try:
+                data = yaml.safe_load(yaml_file.read_text())
+                if not isinstance(data, dict):
+                    continue
+                # Accept either {recipes: {...}} or {recipe_name: {...}}
+                if "recipes" in data and isinstance(data["recipes"], dict):
+                    merged.update(data["recipes"])
+                else:
+                    merged.update(data)
+            except Exception:
+                continue
+    # Legacy fallback: single recipes.yaml
+    if not merged:
+        legacy = _load_yaml("recipes.yaml") or {}
+        merged = legacy.get("recipes", {})
+    return merged
+
+
+RECIPES: dict[str, dict] = _load_recipes()
