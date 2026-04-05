@@ -55,18 +55,29 @@ def extract_recipe_repos(recipe, provider=None):
     for tier in ["core", "common", "conditional"]:
         for entry in recipe.get("repos", {}).get(tier, []):
             repo = entry["repo"]
-            if provider and "{provider}" in repo:
-                repo = repo.replace("{provider}", provider)
-            repos[tier].add(repo)
+            # Split "repo1 OR repo2" syntax into separate alternatives
+            alternatives = [r.strip() for r in repo.split(" OR ")]
+            for alt in alternatives:
+                r = alt
+                if provider and "{provider}" in r:
+                    r = r.replace("{provider}", provider)
+                # Skip entries with unexpanded template placeholders ({domain}, {all}, etc.)
+                # These are documentation notes, not literal repo predictions.
+                if "{" in r and "}" in r:
+                    continue
+                repos[tier].add(r)
 
     return repos
 
 
 def detect_provider(task_repos):
-    """Detect provider name from grpc-apm-* repo."""
+    """Detect provider name from grpc-apm-* or grpc-providers-* repo."""
     for repo in task_repos:
         if repo.startswith("grpc-apm-"):
             return repo.replace("grpc-apm-", "")
+    for repo in task_repos:
+        if repo.startswith("grpc-providers-") and repo not in ("grpc-providers-credentials", "grpc-providers-features", "grpc-providers-proto"):
+            return repo.replace("grpc-providers-", "")
     return None
 
 
