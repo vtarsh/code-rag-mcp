@@ -234,6 +234,13 @@ Return JSON array of {len(documents)} float scores, e.g. [0.95, 0.2, 0.8, ...]. 
 
         except Exception as e:
             notify_api_error()
+            # In strict mode (EMBEDDING_PROVIDER=gemini), do NOT load local CrossEncoder
+            # (it pulls in torch + sentence_transformers = ~400MB RAM and can freeze the PC).
+            # Instead, return uniform neutral scores so search falls back to its RRF ordering.
+            from src.config import EMBEDDING_PROVIDER
+            if EMBEDDING_PROVIDER == "gemini":
+                log.warning(f"Gemini reranker failed: {e}. Returning neutral scores (no local fallback in strict mode).")
+                return [0.5] * len(documents)
             log.warning(f"Gemini reranker failed: {e}, falling back to local")
             local = LocalRerankerProvider()
             return local.rerank(query, documents, limit)
@@ -427,6 +434,12 @@ def get_reranker_provider() -> tuple[RerankerProvider, str | None]:
             log.info(f"Reranker provider: {provider.provider_name}")
             return _reranker_provider, None
         except Exception as e:
+            if EMBEDDING_PROVIDER == "gemini":
+                # Strict: keep Gemini reranker even if init fails — per-call failures
+                # return neutral scores rather than loading CrossEncoder (~400MB RAM)
+                log.error(f"Gemini reranker init failed: {e}. Keeping Gemini (no local fallback in strict mode).")
+                _reranker_provider = GeminiRerankerProvider(GEMINI_API_KEY, model=RERANKER_MODEL)
+                return _reranker_provider, f"Gemini reranker init failed: {e}"
             log.warning(f"Gemini reranker unavailable ({e}), falling back to local")
 
     _reranker_provider = LocalRerankerProvider()
