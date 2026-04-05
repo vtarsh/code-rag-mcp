@@ -45,6 +45,14 @@ def load_task_description(conn: sqlite3.Connection, task_id: str) -> tuple[str, 
 def load_ground_truth(task_id: str) -> tuple[set[str], set[str], set[str]]:
     """Load (repos_changed, high_churn_files, all_files) from implementation_traces.
 
+    Rules:
+      - If top-level `repos_changed` list is non-empty, use it as AUTHORITATIVE
+        repo set (ignore repo names from `repos` dict/list — they may contain
+        noise from issue linking or cross-repo scanning).
+      - Otherwise, extract repos from `repos` dict/list, skipping entries with
+        no actual data (empty prs + commits + files_changed + branches).
+      - File-level data (for churn) is always extracted from `repos` regardless.
+
     Handles multiple schemas:
       - v1: {repos_changed: [...], repos: {name: {...}}}
       - v2: {repos: [{repo: name, files_changed: [...]}]}
@@ -56,14 +64,26 @@ def load_ground_truth(task_id: str) -> tuple[set[str], set[str], set[str]]:
     with open(path) as f:
         data = json.load(f)
 
-    repos: set[str] = set(data.get("repos_changed", []) or [])
+    repos_changed_list = data.get("repos_changed") or []
+    use_authoritative = bool(repos_changed_list)
+    repos: set[str] = set(repos_changed_list) if use_authoritative else set()
     all_files: set[str] = set()
     file_touch_count: dict[str, int] = {}
+
+    def _has_data(entry: dict) -> bool:
+        return bool(
+            entry.get("prs")
+            or entry.get("commits")
+            or entry.get("files_changed")
+            or entry.get("branches")
+            or entry.get("branch")
+        )
 
     repos_data = data.get("repos", {})
     if isinstance(repos_data, dict):
         for name, rd in repos_data.items():
-            repos.add(name)
+            if not use_authoritative and _has_data(rd):
+                repos.add(name)
             for pr in (rd.get("prs", []) or []):
                 for f in (pr.get("files", []) or []):
                     p = f.get("path") if isinstance(f, dict) else f
@@ -74,9 +94,10 @@ def load_ground_truth(task_id: str) -> tuple[set[str], set[str], set[str]]:
     elif isinstance(repos_data, list):
         for item in repos_data:
             if isinstance(item, str):
-                repos.add(item)
+                if not use_authoritative:
+                    repos.add(item)
             elif isinstance(item, dict):
-                if "repo" in item:
+                if not use_authoritative and "repo" in item and _has_data(item):
                     repos.add(item["repo"])
                 # Aggregate files from either files_changed or prs[].files
                 file_sources = []
