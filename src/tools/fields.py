@@ -11,9 +11,57 @@ Data sources (priority):
 
 from __future__ import annotations
 
+import re
 import subprocess
 
 from src.config import BASE_DIR, PROFILE_DIR
+
+# Shared provider-scoped repos that are NOT tied to any single provider.
+_SHARED_PROVIDER_REPOS = frozenset({"credentials", "features", "proto"})
+
+
+def _hop_provider_tag(hop: dict) -> str:
+    """Return provider name if hop is scoped to a single provider, else "".
+
+    Detects provider scope from:
+      - service name: "grpc-apm-<provider>", "grpc-providers-<provider>"
+      - service parens: "workflow-provider-webhooks (<provider>)"
+      - file path: "activities/<provider>/..."
+    """
+    svc = (hop.get("service", "") or "")
+    file = (hop.get("file", "") or "")
+    blob = f"{svc} {file}"
+    m = re.search(r"grpc-apm-([a-z0-9-]+?)(?:/|\s|$)", blob, re.IGNORECASE)
+    if m:
+        return m.group(1).lower()
+    m = re.search(r"grpc-providers-([a-z0-9-]+?)(?:/|\s|$)", blob, re.IGNORECASE)
+    if m and m.group(1).lower() not in _SHARED_PROVIDER_REPOS:
+        return m.group(1).lower()
+    m = re.search(r"\(([a-z0-9-]+)\)", svc)
+    if m:
+        return m.group(1).lower()
+    # Provider-scoped subfolder under shared repos:
+    # activities/<provider>/... (workflow-provider-webhooks)
+    # libs/<provider>/...       (grpc-providers-credentials, etc.)
+    m = re.search(r"(?:activities|libs)/([a-z0-9-]+)/", file)
+    if m and m.group(1).lower() not in _SHARED_PROVIDER_REPOS:
+        return m.group(1).lower()
+    return ""
+
+
+def _filter_hops_by_provider(hops: list, provider: str) -> list:
+    """Keep hops that are provider-neutral OR tagged to the requested provider."""
+    if not provider:
+        return hops
+    result = []
+    for hop in hops:
+        if not isinstance(hop, dict):
+            result.append(hop)
+            continue
+        tag = _hop_provider_tag(hop)
+        if tag == "" or tag == provider:
+            result.append(hop)
+    return result
 
 # --- Lazy-loaded YAML cache ---
 _cache: dict[str, dict | list | None] = {}
@@ -190,7 +238,11 @@ def _mode_trace(field: str, provider: str) -> str:
     chain = _find_chain(field)
     if chain:
         hops = chain.get("hops", chain.get("links", chain.get("chain", [])))
-        lines.append(f"## Chain ({len(hops)} hops)\n")
+        hops = _filter_hops_by_provider(hops, provider)
+        header = f"## Chain ({len(hops)} hops"
+        header += f", filtered to `{provider}`" if provider else ""
+        header += ")\n"
+        lines.append(header)
         for i, hop in enumerate(hops, 1):
             if isinstance(hop, dict):
                 service = hop.get("service", hop.get("target", "?"))
@@ -249,6 +301,7 @@ def _mode_consumers(field: str, provider: str) -> str:
     chain = _find_chain(field)
     if chain:
         hops = chain.get("hops", chain.get("links", chain.get("chain", [])))
+        hops = _filter_hops_by_provider(hops, provider)
         consumer_hops = [
             h for h in hops if isinstance(h, dict) and h.get("role") in ("consumer", "transformer", "stores")
         ]
