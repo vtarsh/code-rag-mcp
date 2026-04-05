@@ -100,6 +100,7 @@ TOOLS: dict[str, Callable[[dict[str, Any]], str]] = {
         args["description"],
         args.get("provider", ""),
         final_rank=args.get("final_rank", False),
+        exclude_task_id=args.get("exclude_task_id", ""),
     ),
     "context_builder": lambda args: context_builder_tool(
         args["query"],
