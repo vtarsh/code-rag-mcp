@@ -62,15 +62,16 @@ def _extract_query_tokens(description: str) -> set[str]:
     return tokens - _STOP_WORDS
 
 
+def _extract_jira_ids(description: str) -> list[str]:
+    """Extract Jira-style ticket IDs (e.g. PI-60, CORE-2408) from the raw query."""
+    return [m.upper() for m in re.findall(r"\b([A-Z]+-\d+)\b", description)]
+
+
 def section_meta_guard(ctx: AnalysisContext) -> str:
     """Emit warning if query overlaps heavily with a single stored task.
 
     Returns markdown section or empty string.
     """
-    query_tokens = _extract_query_tokens(ctx.description)
-    if not query_tokens:
-        return ""
-
     # Fetch all tasks (id + normalized searchable text)
     try:
         rows = ctx.conn.execute(
@@ -83,6 +84,25 @@ def section_meta_guard(ctx: AnalysisContext) -> str:
         return ""
 
     exclude_id = (ctx.exclude_task_id or "").upper()
+
+    # Jira-ID short-circuit: if the query literally names a task that exists
+    # in task_history, this is a direct lookup — warn immediately regardless
+    # of rare-token analysis. Handles "PI-60" / "Related to CORE-2408" cases.
+    known_ids = {row[0].upper() for row in rows}
+    query_ids = [tid for tid in _extract_jira_ids(ctx.description)
+                 if tid in known_ids and tid != exclude_id]
+    if query_ids:
+        ids_list = ", ".join(f"`{t}`" for t in query_ids)
+        return (
+            "## :warning: Memoization Warning\n\n"
+            f"**Query directly references stored task(s): {ids_list}.**\n\n"
+            "Results are a retrospective lookup of these tasks, not a prediction. "
+            "For proactive planning, describe the task without citing ticket IDs.\n\n"
+        )
+
+    query_tokens = _extract_query_tokens(ctx.description)
+    if not query_tokens:
+        return ""
 
     # Normalize all task texts once and compute DF per query token.
     token_df: dict[str, int] = dict.fromkeys(query_tokens, 0)
