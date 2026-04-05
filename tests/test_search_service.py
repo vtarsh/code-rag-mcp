@@ -5,10 +5,9 @@ from unittest.mock import patch
 
 class TestSearchTool:
     @patch("src.container.check_db_health", return_value=None)
-    @patch("src.search.service.cache_get", return_value=None)
-    @patch("src.search.service.cache_set")
+    @patch("src.search.service.cache_or_compute", side_effect=lambda _k, fn: fn())
     @patch("src.search.service.hybrid_search")
-    def test_header_shows_candidates_format(self, mock_hybrid, mock_cset, mock_cget, mock_health):
+    def test_header_shows_candidates_format(self, mock_hybrid, mock_cache, mock_health):
         from src.search.service import search_tool
 
         mock_hybrid.return_value = (
@@ -37,10 +36,9 @@ class TestSearchTool:
         assert "2 of 15 candidates" in result
 
     @patch("src.container.check_db_health", return_value=None)
-    @patch("src.search.service.cache_get", return_value=None)
-    @patch("src.search.service.cache_set")
+    @patch("src.search.service.cache_or_compute", side_effect=lambda _k, fn: fn())
     @patch("src.search.service.hybrid_search")
-    def test_keyword_only_label(self, mock_hybrid, mock_cset, mock_cget, mock_health):
+    def test_keyword_only_label(self, mock_hybrid, mock_cache, mock_health):
         from src.search.service import search_tool
 
         mock_hybrid.return_value = (
@@ -84,20 +82,18 @@ class TestSearchTool:
         assert "Knowledge base not built" in result
 
     @patch("src.container.check_db_health", return_value=None)
-    @patch("src.search.service.cache_get")
-    def test_cache_hit(self, mock_cget, mock_health):
+    @patch("src.search.service.cache_or_compute", return_value="cached result content")
+    def test_cache_hit(self, mock_cache, mock_health):
         from src.search.service import search_tool
 
-        mock_cget.return_value = "cached result content"
         result = search_tool("payment")
         assert result == "cached result content"
 
     @patch("src.container.check_db_health", return_value=None)
-    @patch("src.search.service.cache_get", return_value=None)
-    @patch("src.search.service.cache_set")
+    @patch("src.search.service.cache_or_compute", side_effect=lambda _k, fn: fn())
     @patch("src.search.service.hybrid_search")
     @patch("src.search.service.format_no_results", return_value="No results found")
-    def test_no_results(self, mock_fmt, mock_hybrid, mock_cset, mock_cget, mock_health):
+    def test_no_results(self, mock_fmt, mock_hybrid, mock_cache, mock_health):
         from src.search.service import search_tool
 
         mock_hybrid.return_value = ([], None, 0)
@@ -105,10 +101,9 @@ class TestSearchTool:
         assert result == "No results found"
 
     @patch("src.container.check_db_health", return_value=None)
-    @patch("src.search.service.cache_get", return_value=None)
-    @patch("src.search.service.cache_set")
+    @patch("src.search.service.cache_or_compute", side_effect=lambda _k, fn: fn())
     @patch("src.search.service.hybrid_search")
-    def test_repo_filter_in_header(self, mock_hybrid, mock_cset, mock_cget, mock_health):
+    def test_repo_filter_in_header(self, mock_hybrid, mock_cache, mock_health):
         from src.search.service import search_tool
 
         mock_hybrid.return_value = (

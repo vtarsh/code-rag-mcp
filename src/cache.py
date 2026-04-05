@@ -9,6 +9,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import json
+import threading
 import time
 from collections.abc import Callable
 from typing import ParamSpec, TypeVar
@@ -20,6 +21,15 @@ from src.types import RuntimeStats, ToolCallStat
 _query_cache: dict[str, tuple[float, str]] = {}  # key → (timestamp, result)
 _CACHE_TTL = CACHE_TTL
 _CACHE_MAX = CACHE_MAX
+
+# --- Singleflight dedup: prevents N parallel threads from all running the same
+#     expensive computation (e.g., Gemini embed) when they miss the cache
+#     simultaneously. One thread becomes leader and computes; the rest wait. ---
+_inflight_lock = threading.Lock()
+_inflight_events: dict[str, threading.Event] = {}
+# Max wait for follower threads when leader is computing.
+# Should be >= slowest expected search path (Gemini retry = up to ~3*61s = 183s).
+_SINGLEFLIGHT_TIMEOUT = 200.0
 
 # --- Runtime stats ---
 _stats = {
@@ -60,6 +70,50 @@ def cache_set(key: str, result: str) -> None:
         oldest_key = min(_query_cache, key=lambda k: _query_cache[k][0])
         del _query_cache[oldest_key]
     _query_cache[key] = (time.time(), result)
+
+
+def cache_or_compute(key: str, compute_fn: Callable[[], str]) -> str:
+    """Return cached value, or compute once and cache (with singleflight dedup).
+
+    If another thread is already computing this key, wait for it and reuse
+    its result instead of running a duplicate expensive computation (Gemini
+    embed, LanceDB vector search). Prevents request amplification when N
+    identical concurrent queries all miss the cache.
+
+    If the leader thread fails or its result expires before we wake, we
+    fall through and compute ourselves.
+    """
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
+
+    # Claim leadership (or join as follower).
+    with _inflight_lock:
+        evt = _inflight_events.get(key)
+        is_leader = evt is None
+        if is_leader:
+            evt = threading.Event()
+            _inflight_events[key] = evt
+
+    if not is_leader:
+        # Wait for leader; they will populate the cache and signal the event.
+        evt.wait(timeout=_SINGLEFLIGHT_TIMEOUT)
+        cached = cache_get(key)
+        if cached is not None:
+            return cached
+        # Leader failed or didn't cache — compute fresh as fallback.
+
+    try:
+        result = compute_fn()
+        cache_set(key, result)
+        return result
+    finally:
+        if is_leader:
+            with _inflight_lock:
+                # Only clear if we still own the event slot.
+                if _inflight_events.get(key) is evt:
+                    del _inflight_events[key]
+            evt.set()
 
 
 def _track_tool(func_name: str, duration: float) -> None:
