@@ -366,12 +366,17 @@ def _section_co_occurrence(ctx: AnalysisContext) -> str:
 
     task_id = extract_task_id(ctx.description)
     task_prefix = task_id.split("-")[0].upper() if task_id else ""
+    # Exclude this task's own row when running blind eval
+    exclude = ctx.exclude_task_id or ""
     if task_prefix and task_prefix in ("CORE", "BO", "HS", "PI"):
         rows = ctx.conn.execute(
-            "SELECT repos_changed FROM task_history WHERE ticket_id LIKE ?", (f"{task_prefix}-%",)
+            "SELECT repos_changed FROM task_history WHERE ticket_id LIKE ? AND ticket_id != ?",
+            (f"{task_prefix}-%", exclude),
         ).fetchall()
     else:
-        rows = ctx.conn.execute("SELECT repos_changed FROM task_history").fetchall()
+        rows = ctx.conn.execute(
+            "SELECT repos_changed FROM task_history WHERE ticket_id != ?", (exclude,)
+        ).fetchall()
     if len(rows) < 5:
         return ""
 

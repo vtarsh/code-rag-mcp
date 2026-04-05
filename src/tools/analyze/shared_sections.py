@@ -132,6 +132,9 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
                     # Skip self-match (same ticket ID)
                     if current_task_id and r[0].lower() == current_task_id:
                         continue
+                    # Skip explicitly excluded task (for blind eval)
+                    if ctx.exclude_task_id and r[0].lower() == ctx.exclude_task_id.lower():
+                        continue
                     # Extract repo names from PR URLs
                     pr_repos: list[str] = []
                     if r[4]:

@@ -273,19 +273,20 @@ def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
 
 
 @require_db
-def analyze_task_tool(description: str, provider: str = "", rerank: bool = False) -> str:
+def analyze_task_tool(description: str, provider: str = "", rerank: bool = False, exclude_task_id: str = "") -> str:
     """Analyze a development task and find ALL relevant repos, files, and dependencies.
 
     Args:
         description: Task description (e.g., "implement DirectDebitMandate verification for Trustly")
         provider: Optional provider name to focus on (e.g., "trustly", "paypal")
         rerank: Set to true to filter predictions via Gemini 3.1 Pro (requires GEMINI_API_KEY)
+        exclude_task_id: Optional task ID to exclude from task_history lookups (for blind eval)
     """
     with db_connection() as conn:
-        return _analyze_task_impl(conn, description, provider, rerank=rerank)
+        return _analyze_task_impl(conn, description, provider, rerank=rerank, exclude_task_id=exclude_task_id)
 
 
-def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str, *, rerank: bool = False) -> str:
+def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str, *, rerank: bool = False, exclude_task_id: str = "") -> str:
     """Orchestrate task analysis. Dispatches to shared + domain-specific sections."""
     import sys
 
@@ -303,6 +304,7 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
         description=description,
         words=words,
         provider=provider,
+        exclude_task_id=exclude_task_id,
     )
 
     # Track section failures for end-of-output warning

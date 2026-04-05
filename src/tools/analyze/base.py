@@ -43,6 +43,9 @@ class AnalysisContext:
     words: set[str]
     provider: str
     findings: list[Finding] = field(default_factory=list)
+    # When set, exclude this task's own data from task_history lookups
+    # (used by eval harness to prevent hint leakage during blind scoring)
+    exclude_task_id: str = ""
 
     _CONF_RANK: ClassVar[dict[str, int]] = {"high": 0, "medium": 1, "low": 2}
 

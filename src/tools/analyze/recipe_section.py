@@ -85,7 +85,7 @@ def _match_recipe(
             continue
 
         condition = trigger.get("condition", "")
-        if not _evaluate_condition(ctx, condition, provider, ctx.conn):
+        if not _evaluate_condition(ctx, condition, provider, ctx.conn, bool(ctx.exclude_task_id)):
             continue
 
         trigger_keywords = trigger.get("keywords", [])
@@ -106,7 +106,7 @@ def _match_recipe(
     return name, recipe
 
 
-def _evaluate_condition(ctx: AnalysisContext, condition: str, provider: str, conn) -> bool:
+def _evaluate_condition(ctx: AnalysisContext, condition: str, provider: str, conn, blind_eval: bool = False) -> bool:
     """Evaluate a simple condition string against current context.
 
     Supported predicates:
@@ -114,6 +114,10 @@ def _evaluate_condition(ctx: AnalysisContext, condition: str, provider: str, con
       - provider_repo_exists / NOT provider_repo_exists
       - new_provider / NOT new_provider  (alias for NOT provider_repo_exists)
       - webhook_handler_target_detected / core_schemas_or_libs_types_target (domain-derived, always True here)
+
+    In blind_eval mode: provider_repo_exists checks are skipped (treated as True
+    for both sides) so recipes can fire for historical tasks where the repo now
+    exists but didn't when the task was implemented.
     """
     if not condition:
         return True
@@ -121,7 +125,7 @@ def _evaluate_condition(ctx: AnalysisContext, condition: str, provider: str, con
     # Check provider detection
     has_provider = bool(provider)
     repo_exists = False
-    if has_provider:
+    if has_provider and not blind_eval:
         repo_name = f"grpc-apm-{provider}"
         row = conn.execute("SELECT 1 FROM repos WHERE name = ?", (repo_name,)).fetchone()
         if not row:
@@ -141,6 +145,12 @@ def _evaluate_condition(ctx: AnalysisContext, condition: str, provider: str, con
         if pred_lower.startswith("not "):
             negated = True
             pred_lower = pred_lower[4:].strip()
+
+        # In blind_eval, skip repo-state predicates entirely (historical tasks: repo
+        # may now exist but didn't when task was implemented). Both the predicate and
+        # its negation are treated as satisfied so it doesn't block the AND chain.
+        if blind_eval and pred_lower in ("provider_repo_exists", "new_provider"):
+            continue
 
         result: bool
         if pred_lower == "provider_detected":
