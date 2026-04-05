@@ -72,13 +72,15 @@ def main() -> None:
 
     elif cmd == "analyze-task":
         if len(sys.argv) < 3:
-            print("Usage: cli.py analyze-task <description> [--provider NAME]")
+            print("Usage: cli.py analyze-task <description> [--provider NAME] [--final-rank]")
             sys.exit(1)
         args = {"description": sys.argv[2]}
         if "--provider" in sys.argv:
             idx = sys.argv.index("--provider")
             if idx + 1 < len(sys.argv):
                 args["provider"] = sys.argv[idx + 1]
+        if "--final-rank" in sys.argv:
+            args["final_rank"] = True
         print(call_tool("analyze_task", args))
 
     elif cmd == "context":

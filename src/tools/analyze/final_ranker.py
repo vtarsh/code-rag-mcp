@@ -506,24 +506,40 @@ Ordering: return sorted by rank ascending; put drops at the end."""
 
 
 def _call_gemini(prompt: str) -> list[dict] | None:
-    """Call Gemini 2.5 Flash, return parsed JSON or None on failure."""
-    from src.config import GEMINI_API_KEY
-    if not GEMINI_API_KEY:
+    """Call Gemini 2.5 Flash, return parsed JSON or None on failure.
+
+    Tries each key in GEMINI_API_KEYS in turn on quota (429) errors.
+    """
+    from src.config import GEMINI_API_KEYS
+    if not GEMINI_API_KEYS:
         return None
     try:
         from google import genai
     except ImportError:
         return None
 
-    client = genai.Client(api_key=GEMINI_API_KEY)
-    try:
-        response = client.models.generate_content(
-            model=MODEL,
-            contents=[{"role": "user", "parts": [{"text": prompt}]}],
-            config={"temperature": 0.0},
-        )
-    except Exception as e:
-        print(f"[final_ranker] Gemini call failed: {e}", file=sys.stderr)
+    response = None
+    last_err = None
+    for idx, api_key in enumerate(GEMINI_API_KEYS):
+        try:
+            client = genai.Client(api_key=api_key)
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=[{"role": "user", "parts": [{"text": prompt}]}],
+                config={"temperature": 0.0},
+            )
+            break
+        except Exception as e:
+            last_err = e
+            err_str = str(e)
+            # Rotate key on quota/rate-limit errors; abort on other errors.
+            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
+                print(f"[final_ranker] key #{idx+1} quota exceeded, trying next", file=sys.stderr)
+                continue
+            print(f"[final_ranker] Gemini call failed: {e}", file=sys.stderr)
+            return None
+    if response is None:
+        print(f"[final_ranker] all keys exhausted, last error: {last_err}", file=sys.stderr)
         return None
 
     text = (response.text or "").strip()

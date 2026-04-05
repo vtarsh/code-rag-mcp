@@ -72,11 +72,20 @@ EMBEDDING_PROVIDER: str = CONFIG.get("embedding_provider", os.getenv("CODE_RAG_P
 RERANKER_MODEL: str = CONFIG.get("reranker_model", os.getenv("CODE_RAG_RERANKER", "gemini-2.5-flash"))
 
 # --- Gemini API key (centralized, used by embedding provider + reranker + analyze_task) ---
-def _load_gemini_key() -> str:
-    """Load Gemini API key from env or .env files."""
-    key = os.getenv("GEMINI_API_KEY", "")
-    if key:
-        return key
+def _load_gemini_keys() -> list[str]:
+    """Load all Gemini API keys from env + .env files for rotation on 429.
+
+    Aggregates keys from all sources (env GEMINI_API_KEY + GEMINI_API_KEYS +
+    .env files), deduplicates, preserves order so single key is tried first.
+    """
+    keys: list[str] = []
+    single = os.getenv("GEMINI_API_KEY", "").strip()
+    if single:
+        keys.append(single)
+    multi = os.getenv("GEMINI_API_KEYS", "").strip()
+    if multi:
+        keys.extend([k.strip() for k in multi.split(",") if k.strip()])
+    # Always scan .env files too — rotation needs all available keys.
     for env_path in [
         Path.home() / "telegram-claude-bot" / ".env",
         BASE_DIR / ".env",
@@ -84,12 +93,24 @@ def _load_gemini_key() -> str:
         if env_path.exists():
             for line in env_path.read_text().splitlines():
                 if line.startswith("GEMINI_API_KEYS="):
-                    keys = line.split("=", 1)[1].strip().strip("'\"")
-                    return keys.split(",")[0]
-    return ""
+                    raw = line.split("=", 1)[1].strip().strip("'\"")
+                    keys.extend([k.strip() for k in raw.split(",") if k.strip()])
+                elif line.startswith("GEMINI_API_KEY=") and not line.startswith("GEMINI_API_KEYS="):
+                    val = line.split("=", 1)[1].strip().strip("'\"")
+                    if val:
+                        keys.append(val)
+    # Deduplicate while preserving order
+    seen = set()
+    deduped: list[str] = []
+    for k in keys:
+        if k not in seen:
+            seen.add(k)
+            deduped.append(k)
+    return deduped
 
 
-GEMINI_API_KEY: str = _load_gemini_key()
+GEMINI_API_KEYS: list[str] = _load_gemini_keys()
+GEMINI_API_KEY: str = GEMINI_API_KEYS[0] if GEMINI_API_KEYS else ""
 
 # --- DB paths (derived from model config) ---
 from src.models import get_model_config  # noqa: E402
