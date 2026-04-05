@@ -222,11 +222,49 @@ def _normalize_file_set(files: set[str]) -> set[str]:
     return {f.split("/")[-1] for f in files}
 
 
-def run_analyze(description: str, provider: str, exclude_task_id: str) -> str:
+def run_analyze(description: str, provider: str, exclude_task_id: str, final_rank: bool = False) -> str:
     """Run analyze_task and return the output markdown."""
     sys.path.insert(0, str(BASE))
     from src.tools.analyze import analyze_task_tool
-    return analyze_task_tool(description, provider=provider, exclude_task_id=exclude_task_id)
+    return analyze_task_tool(
+        description, provider=provider, exclude_task_id=exclude_task_id, final_rank=final_rank,
+    )
+
+
+def extract_final_ranked_repos(output: str) -> tuple[list[str], list[str]]:
+    """Parse the 'Final LLM Ranking' section. Returns (core, related)."""
+    core: list[str] = []
+    related: list[str] = []
+    in_section = False
+    current: list[str] | None = None
+
+    for raw in output.split("\n"):
+        line = raw.strip()
+        if line.startswith("## Final LLM Ranking"):
+            in_section = True
+            continue
+        if not in_section:
+            continue
+        if line.startswith("## ") or line.startswith("---"):
+            break
+        if line.startswith("**Core"):
+            current = core
+            continue
+        if line.startswith("**Related"):
+            current = related
+            continue
+        if line.startswith("**Dropped"):
+            current = None
+            continue
+        if current is not None:
+            m = re.match(r"-\s+\*\*([a-z0-9][a-z0-9-]+)\*\*", line)
+            if m:
+                current.append(m.group(1))
+                continue
+            m = re.match(r"-\s+([a-z0-9][a-z0-9-]+)\s", line)
+            if m:
+                current.append(m.group(1))
+    return core, related
 
 
 def detect_provider(task_id: str, ground_truth_repos: set[str]) -> str:
@@ -242,7 +280,7 @@ def detect_provider(task_id: str, ground_truth_repos: set[str]) -> str:
     return ""
 
 
-def evaluate_task(conn: sqlite3.Connection, task_id: str, *, verbose: bool = False) -> dict:
+def evaluate_task(conn: sqlite3.Connection, task_id: str, *, verbose: bool = False, final_rank: bool = False) -> dict:
     """Evaluate one task. Returns metrics dict."""
     summary, description = load_task_description(conn, task_id)
     if not description:
@@ -258,11 +296,9 @@ def evaluate_task(conn: sqlite3.Connection, task_id: str, *, verbose: bool = Fal
     clean_desc = strip_hints(f"{summary}\n{description}")
 
     # Run analyze with task excluded from task_history
-    output = run_analyze(clean_desc, provider, exclude_task_id=task_id)
+    output = run_analyze(clean_desc, provider, exclude_task_id=task_id, final_rank=final_rank)
 
     # Extract predictions
-    core, common, conditional = extract_predicted_repos(output)
-    high_conf_repos = set(extract_high_repos(output))
     churn_files = extract_churn_warnings(output)
 
     # Template expansion for recipe repos
@@ -275,10 +311,34 @@ def evaluate_task(conn: sqlite3.Connection, task_id: str, *, verbose: bool = Fal
                 r = r.replace("{provider}", provider)
             result.append(r)
         return result
-    core_e = set(expand(core))
-    common_e = set(expand(common))
-    cond_e = set(expand(conditional))
-    all_predicted = core_e | common_e | cond_e
+
+    if final_rank:
+        # Prefer the LLM ranker's output (core=top 5, related=next).
+        ranked_core, ranked_related = extract_final_ranked_repos(output)
+        if not ranked_core and not ranked_related:
+            # Ranker failed (API error, parse failure). Fall back to recipe tiers
+            # so we don't report spurious zero-recall for a Gemini outage.
+            print(f"  (final-rank fallback to recipe tiers)")
+            core, common, conditional = extract_predicted_repos(output)
+            core_e = set(expand(core))
+            common_e = set(expand(common))
+            cond_e = set(expand(conditional))
+            all_predicted = core_e | common_e | cond_e
+            ordered_source = expand(core) + expand(common) + expand(conditional)
+        else:
+            core_e = set(expand(ranked_core))
+            common_e = set(expand(ranked_related))
+            cond_e = set()
+            all_predicted = core_e | common_e
+            # Ordering: core first, then related, preserving ranker order.
+            ordered_source = expand(ranked_core) + expand(ranked_related)
+    else:
+        core, common, conditional = extract_predicted_repos(output)
+        core_e = set(expand(core))
+        common_e = set(expand(common))
+        cond_e = set(expand(conditional))
+        all_predicted = core_e | common_e | cond_e
+        ordered_source = expand(core) + expand(common) + expand(conditional)
 
     # Metrics
     def pct(a, b):
@@ -291,7 +351,7 @@ def evaluate_task(conn: sqlite3.Connection, task_id: str, *, verbose: bool = Fal
     # Top-K accuracy: ordered predictions (core → common → conditional, recipe order preserved)
     ordered_predictions: list[str] = []
     seen: set[str] = set()
-    for r in expand(core) + expand(common) + expand(conditional):
+    for r in ordered_source:
         if r not in seen:
             ordered_predictions.append(r)
             seen.add(r)
@@ -348,6 +408,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--tasks", default=",".join(DEFAULT_TASKS))
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--final-rank", action="store_true",
+                        help="Use the final LLM ranker's output (precision mode)")
     args = parser.parse_args()
 
     tasks = [t.strip().upper() for t in args.tasks.split(",")]
@@ -355,9 +417,12 @@ def main():
     conn = sqlite3.connect(str(DB))
     conn.row_factory = sqlite3.Row
 
+    mode = "FINAL-RANK" if args.final_rank else "RECIPE"
+    print(f"=== Eval mode: {mode} ===")
+
     results = []
     for tid in tasks:
-        m = evaluate_task(conn, tid, verbose=args.verbose)
+        m = evaluate_task(conn, tid, verbose=args.verbose, final_rank=args.final_rank)
         results.append(m)
         if "error" in m:
             print(f"{tid}: ERROR {m['error']}")

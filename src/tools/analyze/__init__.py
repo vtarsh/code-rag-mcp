@@ -47,6 +47,7 @@ from .pi_analyzer import (
     section_provider_checklist,
     section_webhooks,
 )
+from .final_ranker import section_final_ranker
 from .meta_guard import section_meta_guard
 from .recipe_section import section_recipe
 from .shared_sections import (
@@ -274,7 +275,7 @@ def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
 
 
 @require_db
-def analyze_task_tool(description: str, provider: str = "", rerank: bool = False, exclude_task_id: str = "") -> str:
+def analyze_task_tool(description: str, provider: str = "", rerank: bool = False, exclude_task_id: str = "", final_rank: bool = False) -> str:
     """Analyze a development task and find ALL relevant repos, files, and dependencies.
 
     Args:
@@ -282,12 +283,14 @@ def analyze_task_tool(description: str, provider: str = "", rerank: bool = False
         provider: Optional provider name to focus on (e.g., "trustly", "paypal")
         rerank: Set to true to filter predictions via Gemini 3.1 Pro (requires GEMINI_API_KEY)
         exclude_task_id: Optional task ID to exclude from task_history lookups (for blind eval)
+        final_rank: Set to true to run precision-oriented LLM pruner on the final
+            candidate set (requires GEMINI_API_KEY). Default False until validated.
     """
     with db_connection() as conn:
-        return _analyze_task_impl(conn, description, provider, rerank=rerank, exclude_task_id=exclude_task_id)
+        return _analyze_task_impl(conn, description, provider, rerank=rerank, exclude_task_id=exclude_task_id, final_rank=final_rank)
 
 
-def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str, *, rerank: bool = False, exclude_task_id: str = "") -> str:
+def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str, *, rerank: bool = False, exclude_task_id: str = "", final_rank: bool = False) -> str:
     """Orchestrate task analysis. Dispatches to shared + domain-specific sections."""
     import sys
 
@@ -410,6 +413,12 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
     # Optional Gemini re-ranking
     if rerank:
         output += _run_section("rerank", _section_rerank, ctx, description, output)
+
+    # Optional precision-oriented LLM pruner: runs AFTER all other sections,
+    # rewrites ctx.findings based on evidence + similar-task ground truth.
+    # Must run before the summary header is built (summary reads findings).
+    if final_rank:
+        output += _run_section("final_ranker", section_final_ranker, ctx, classification)
 
     # Append warning if any sections failed
     if failed_sections:
