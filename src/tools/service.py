@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 
 from src.cache import get_runtime_stats
@@ -444,7 +445,7 @@ def visualize_graph_tool(repo: str = "", edge_type: str = "") -> str:
         edge_type: Optional — show only a specific edge type
     """
     scripts_dir = BASE_DIR / "scripts"
-    cmd = ["python3", str(scripts_dir / "visualize_graph.py"), "--open"]
+    cmd = [sys.executable, str(scripts_dir / "visualize_graph.py"), "--open"]
     if repo:
         cmd.append(f"--repo={repo}")
     if edge_type:
