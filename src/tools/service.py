@@ -462,6 +462,77 @@ def visualize_graph_tool(repo: str = "", edge_type: str = "") -> str:
 
 
 @require_db
+def trace_internal_tool(repo_name: str, method: str = "") -> str:
+    """Trace intra-service require() call chain within a provider repo.
+
+    Shows the file-level execution path: methods/sale.js → libs/map-request.js → libs/statuses-map.js.
+    Unlike trace_chain (repo-to-repo), this traces file-to-file WITHIN a single service.
+
+    Args:
+        repo_name: Provider repo name (e.g., "grpc-apm-payper", "grpc-providers-nuvei")
+        method: Optional — specific method to trace (e.g., "sale", "refund"). If empty, shows all methods.
+    """
+    import json as _json
+
+    with db_connection() as conn:
+        # Check if internal_traces table exists
+        table_check = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='internal_traces'"
+        ).fetchone()
+        if not table_check:
+            return (
+                "Error: internal_traces table not found. "
+                "Run: python3 scripts/build_internal_traces.py"
+            )
+
+        if method:
+            rows = conn.execute(
+                "SELECT method_name, entry_file, trace_json FROM internal_traces "
+                "WHERE repo_name = ? AND method_name = ?",
+                (repo_name, method),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT method_name, entry_file, trace_json FROM internal_traces "
+                "WHERE repo_name = ? ORDER BY method_name",
+                (repo_name,),
+            ).fetchall()
+
+        if not rows:
+            return f"No internal traces found for {repo_name}" + (f" method={method}" if method else "")
+
+        lines = [f"# Internal Traces: {repo_name}\n"]
+
+        for method_name, entry_file, trace_json in rows:
+            trace = _json.loads(trace_json)
+            lines.append(f"## {method_name} ({entry_file})\n")
+            lines.append("```")
+            lines.extend(_format_trace_tree(trace, depth=0))
+            lines.append("```\n")
+
+        return "\n".join(lines)
+
+
+def _format_trace_tree(node: dict, depth: int = 0) -> list[str]:
+    """Format a trace tree node into indented lines."""
+    lines = []
+    indent = "  " * depth
+    marker = "→ " if depth > 0 else ""
+    label = node.get("file", "?")
+
+    if node.get("external"):
+        lines.append(f"{indent}{marker}{label} (external)")
+    elif node.get("circular"):
+        lines.append(f"{indent}{marker}{label} (circular)")
+    else:
+        lines.append(f"{indent}{marker}{label}")
+        for child in node.get("requires", []):
+            lines.extend(_format_trace_tree(child, depth + 1))
+
+    return lines
+
+
+@require_db
 def search_task_history_tool(query: str, developer: str = "", limit: int = 10) -> str:
     """Search past tasks by description, repos, files, or any keyword.
 

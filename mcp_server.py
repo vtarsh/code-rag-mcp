@@ -313,6 +313,20 @@ def visualize_graph(repo: str = "", edge_type: str = "") -> str:
     return _call_daemon("visualize_graph", {"repo": repo, "edge_type": edge_type})
 
 
+@mcp.tool()
+def trace_internal(repo_name: str, method: str = "") -> str:
+    """Trace intra-service require() call chain within a provider repo.
+
+    Shows the file-level execution path: methods/sale.js → libs/map-request.js → libs/statuses-map.js.
+    Unlike trace_chain (repo-to-repo), this traces file-to-file WITHIN a single service.
+
+    Args:
+        repo_name: Provider repo name (e.g., "grpc-apm-payper", "grpc-providers-nuvei")
+        method: Optional — specific method to trace (e.g., "sale", "refund"). If empty, shows all methods.
+    """
+    return _call_daemon("trace_internal", {"repo_name": repo_name, "method": method})
+
+
 def main() -> None:
     """Entry point — start thin MCP proxy (no model loading)."""
     mcp.run(transport="stdio")
