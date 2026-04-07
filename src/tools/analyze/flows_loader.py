@@ -12,12 +12,33 @@ archetype).
 
 from __future__ import annotations
 
-from functools import lru_cache
+import time
 from pathlib import Path
 
 import yaml
 
 from src.config import PROFILE_DIR
+
+# TTL-based cache: re-reads YAML files after 300s so daemon picks up
+# changes from nightly builds without a restart.
+_TTL_SECONDS = 300
+_cache: dict[str, tuple[float, object]] = {}
+
+
+def _ttl_cache_get(key: str) -> object | None:
+    """Return cached value if within TTL, else None."""
+    entry = _cache.get(key)
+    if entry is None:
+        return None
+    ts, val = entry
+    if time.monotonic() - ts > _TTL_SECONDS:
+        del _cache[key]
+        return None
+    return val
+
+
+def _ttl_cache_set(key: str, val: object) -> None:
+    _cache[key] = (time.monotonic(), val)
 
 # Known archetypes emitted by the generator/auditor pipeline.
 KNOWN_ARCHETYPES = frozenset({
@@ -30,11 +51,14 @@ KNOWN_ARCHETYPES = frozenset({
 })
 
 
-@lru_cache(maxsize=16)
 def load_archetype_pattern(archetype: str) -> dict | None:
     """Return parsed YAML dict for archetype, or None if missing/unknown."""
     if archetype not in KNOWN_ARCHETYPES:
         return None
+    key = f"archetype:{archetype}"
+    cached = _ttl_cache_get(key)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
     path: Path = PROFILE_DIR / "flows" / "archetypes" / f"{archetype}.yaml"
     if not path.exists():
         return None
@@ -42,7 +66,10 @@ def load_archetype_pattern(archetype: str) -> dict | None:
         data = yaml.safe_load(path.read_text())
     except yaml.YAMLError:
         return None
-    return data if isinstance(data, dict) else None
+    result = data if isinstance(data, dict) else None
+    if result is not None:
+        _ttl_cache_set(key, result)
+    return result
 
 
 def extract_frequency_buckets(pattern: dict) -> dict[str, list[str]]:
@@ -81,11 +108,14 @@ def extract_top_edges(pattern: dict, limit: int = 5) -> list[dict]:
     return out
 
 
-@lru_cache(maxsize=32)
 def load_provider_pattern(provider: str) -> dict | None:
     """Return parsed YAML dict for provider, or None if missing."""
     if not provider:
         return None
+    key = f"provider:{provider}"
+    cached = _ttl_cache_get(key)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
     path: Path = PROFILE_DIR / "flows" / "providers" / f"{provider}.yaml"
     if not path.exists():
         return None
@@ -93,7 +123,10 @@ def load_provider_pattern(provider: str) -> dict | None:
         data = yaml.safe_load(path.read_text())
     except yaml.YAMLError:
         return None
-    return data if isinstance(data, dict) else None
+    result = data if isinstance(data, dict) else None
+    if result is not None:
+        _ttl_cache_set(key, result)
+    return result
 
 
 def provider_summary_for_prompt(provider: str) -> dict | None:
@@ -122,11 +155,14 @@ def provider_summary_for_prompt(provider: str) -> dict | None:
     }
 
 
-@lru_cache(maxsize=32)
 def load_provider_trace_flow(provider: str) -> dict | None:
     """Load runtime trace flow for a provider from trace_flows/providers/{p}.yaml."""
     if not provider:
         return None
+    key = f"trace_flow:{provider}"
+    cached = _ttl_cache_get(key)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
     path: Path = PROFILE_DIR / "trace_flows" / "providers" / f"{provider}.yaml"
     if not path.exists():
         return None
@@ -134,7 +170,10 @@ def load_provider_trace_flow(provider: str) -> dict | None:
         data = yaml.safe_load(path.read_text())
     except yaml.YAMLError:
         return None
-    return data if isinstance(data, dict) else None
+    result = data if isinstance(data, dict) else None
+    if result is not None:
+        _ttl_cache_set(key, result)
+    return result
 
 
 def trace_flow_summary_for_prompt(provider: str) -> dict | None:

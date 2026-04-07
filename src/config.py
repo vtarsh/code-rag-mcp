@@ -75,30 +75,54 @@ RERANKER_MODEL: str = CONFIG.get("reranker_model", os.getenv("CODE_RAG_RERANKER"
 def _load_gemini_keys() -> list[str]:
     """Load all Gemini API keys from env + .env files for rotation on 429.
 
-    Aggregates keys from all sources (env GEMINI_API_KEY + GEMINI_API_KEYS +
-    .env files), deduplicates, preserves order so single key is tried first.
+    Priority order (paid/PRO tier first, then free-tier keys):
+      1. GEMINI_PRO_API_KEY (paid tier — highest quota)
+      2. GEMINI_API_KEY (single key env var)
+      3. GEMINI_API_KEYS (comma-separated, typically free tier)
+      4. Same keys scanned from .env files
+    Deduplicated, order preserved.
     """
     keys: list[str] = []
+    # 1. PRO/paid key first — highest priority
+    pro = os.getenv("GEMINI_PRO_API_KEY", "").strip()
+    if pro:
+        keys.append(pro)
+    # 2. Single free key
     single = os.getenv("GEMINI_API_KEY", "").strip()
     if single:
         keys.append(single)
+    # 3. Multi-key free tier
     multi = os.getenv("GEMINI_API_KEYS", "").strip()
     if multi:
         keys.extend([k.strip() for k in multi.split(",") if k.strip()])
-    # Always scan .env files too — rotation needs all available keys.
+    # 4. Scan .env files for same keys (same priority order)
     for env_path in [
         Path.home() / "telegram-claude-bot" / ".env",
         BASE_DIR / ".env",
     ]:
         if env_path.exists():
+            pro_line = None
+            key_line = None
+            keys_line = None
             for line in env_path.read_text().splitlines():
-                if line.startswith("GEMINI_API_KEYS="):
-                    raw = line.split("=", 1)[1].strip().strip("'\"")
-                    keys.extend([k.strip() for k in raw.split(",") if k.strip()])
+                if line.startswith("GEMINI_PRO_API_KEY="):
+                    pro_line = line
+                elif line.startswith("GEMINI_API_KEYS="):
+                    keys_line = line
                 elif line.startswith("GEMINI_API_KEY=") and not line.startswith("GEMINI_API_KEYS="):
-                    val = line.split("=", 1)[1].strip().strip("'\"")
-                    if val:
-                        keys.append(val)
+                    key_line = line
+            # Preserve priority: PRO first, then single, then multi
+            if pro_line:
+                val = pro_line.split("=", 1)[1].strip().strip("'\"")
+                if val:
+                    keys.insert(0, val)  # prepend: PRO is highest priority
+            if key_line:
+                val = key_line.split("=", 1)[1].strip().strip("'\"")
+                if val:
+                    keys.append(val)
+            if keys_line:
+                raw = keys_line.split("=", 1)[1].strip().strip("'\"")
+                keys.extend([k.strip() for k in raw.split(",") if k.strip()])
     # Deduplicate while preserving order
     seen = set()
     deduped: list[str] = []
@@ -248,6 +272,10 @@ FLOW_EDGE_TYPES: set[str] = {
     "url_reference",
     "grpc_method_call",
     "merchant_has",
+    "runtime_routing",
+    "express_route",
+    "temporal_activate",
+    "signal_handler",
 }
 
 # Pre-defined business flow entry points for trace_chain.

@@ -91,7 +91,12 @@ TOOLS: dict[str, Callable[[dict[str, Any]], str]] = {
     ),
     "find_dependencies": lambda args: find_dependencies_tool(args["repo_name"]),
     "trace_impact": lambda args: trace_impact_tool(args["repo_name"], args.get("max_depth", 2)),
-    "trace_flow": lambda args: trace_flow_tool(args["source"], args["target"], args.get("max_depth", 5)),
+    "trace_flow": lambda args: (
+        trace_flow_tool(args["source"], args["target"], args.get("max_depth", 5))
+        if "source" in args and "target" in args
+        else "Error: trace_flow requires 'source' and 'target' parameters (repo names). "
+             "Example: {\"source\": \"grpc-payment-gateway\", \"target\": \"grpc-apm-payper\"}"
+    ),
     "trace_chain": lambda args: trace_chain_tool(
         args["start"], args.get("direction", "both"), args.get("max_depth", 4)
     ),
