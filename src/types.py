@@ -93,3 +93,99 @@ class RuntimeStats(BaseModel):
     cache_hits: int = 0
     cache_misses: int = 0
     cache_hit_rate: float | None = None
+
+
+# ---------------------------------------------------------------------------
+# Shadow Type Layer — proto schema + JS field extraction types
+# ---------------------------------------------------------------------------
+
+
+class ProtoField(BaseModel):
+    """A single field inside a protobuf message."""
+
+    name: str
+    type: str
+    number: int
+    optional: bool = False
+    repeated: bool = False
+
+
+class ProtoMessage(BaseModel):
+    """A parsed protobuf message definition."""
+
+    name: str
+    fields: list[ProtoField] = Field(default_factory=list)
+    source_file: str = ""
+    source_repo: str = ""
+
+
+class ProtoRPC(BaseModel):
+    """A single RPC method inside a protobuf service."""
+
+    name: str
+    request_type: str
+    response_type: str
+
+
+class ProtoService(BaseModel):
+    """A parsed protobuf service definition."""
+
+    name: str
+    rpcs: list[ProtoRPC] = Field(default_factory=list)
+
+
+class ProtoEnum(BaseModel):
+    """A parsed protobuf enum definition."""
+
+    name: str
+    values: list[str] = Field(default_factory=list)
+
+
+class ProtoSchema(BaseModel):
+    """Complete parsed schema from one or more .proto files."""
+
+    messages: dict[str, ProtoMessage] = Field(default_factory=dict)
+    services: dict[str, ProtoService] = Field(default_factory=dict)
+    enums: dict[str, ProtoEnum] = Field(default_factory=dict)
+
+
+class FieldUsage(BaseModel):
+    """A field usage extracted from a JS source file."""
+
+    field_name: str
+    file_path: str
+    usage_type: str  # "destructure", "payload_build", "response_map", "conditional"
+    source_field: str | None = None
+    target_field: str | None = None
+    is_optional: bool = False
+
+
+class FieldMapping(BaseModel):
+    """Mapping of a field between two hops (e.g. proto request -> API payload)."""
+
+    proto_field: str
+    js_field: str
+    direction: str = "request"  # "request" or "response"
+    transform: str = ""  # e.g. "parseFloat", "sanitizeAndCutInput"
+
+
+class MethodTypeMap(BaseModel):
+    """Shadow type map for a single provider method (e.g. initialize, sale)."""
+
+    method: str
+    proto_request: str = ""
+    proto_response: str = ""
+    request_fields: list[FieldMapping] = Field(default_factory=list)
+    response_fields: list[FieldMapping] = Field(default_factory=list)
+    api_endpoint: str = ""
+    api_method: str = "POST"
+    type_gaps: list[str] = Field(default_factory=list)
+
+
+class ProviderTypeMap(BaseModel):
+    """Complete shadow type map for a provider."""
+
+    provider: str
+    proto_service: str = ""
+    methods: dict[str, MethodTypeMap] = Field(default_factory=dict)
+    field_usages: list[FieldUsage] = Field(default_factory=list)

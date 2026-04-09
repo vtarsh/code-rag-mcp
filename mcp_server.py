@@ -327,6 +327,23 @@ def trace_internal(repo_name: str, method: str = "") -> str:
     return _call_daemon("trace_internal", {"repo_name": repo_name, "method": method})
 
 
+@mcp.tool()
+def provider_type_map(provider: str, method: str = "", mode: str = "overview") -> str:
+    """Show shadow type map for a provider — proto-to-JS field mappings, API endpoints, and type gaps.
+
+    Shows how fields flow from gateway proto messages through provider JS code
+    to external API payloads and back. Identifies type gaps where fields lose typing.
+
+    Build maps first: python scripts/build_shadow_types.py --provider=payper
+
+    Args:
+        provider: Provider name (e.g., "payper")
+        method: Specific method (e.g., "initialize", "sale", "refund"). Required for "fields" mode.
+        mode: "overview" (chain summary), "fields" (field-level detail), "gaps" (type gap report)
+    """
+    return _call_daemon("provider_type_map", {"provider": provider, "method": method, "mode": mode})
+
+
 def main() -> None:
     """Entry point — start thin MCP proxy (no model loading)."""
     mcp.run(transport="stdio")

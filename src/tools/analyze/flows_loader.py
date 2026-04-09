@@ -12,6 +12,7 @@ archetype).
 
 from __future__ import annotations
 
+import threading
 import time
 from pathlib import Path
 
@@ -23,22 +24,25 @@ from src.config import PROFILE_DIR
 # changes from nightly builds without a restart.
 _TTL_SECONDS = 300
 _cache: dict[str, tuple[float, object]] = {}
+_cache_lock = threading.Lock()
 
 
 def _ttl_cache_get(key: str) -> object | None:
     """Return cached value if within TTL, else None."""
-    entry = _cache.get(key)
-    if entry is None:
-        return None
-    ts, val = entry
-    if time.monotonic() - ts > _TTL_SECONDS:
-        del _cache[key]
-        return None
-    return val
+    with _cache_lock:
+        entry = _cache.get(key)
+        if entry is None:
+            return None
+        ts, val = entry
+        if time.monotonic() - ts > _TTL_SECONDS:
+            del _cache[key]
+            return None
+        return val
 
 
 def _ttl_cache_set(key: str, val: object) -> None:
-    _cache[key] = (time.monotonic(), val)
+    with _cache_lock:
+        _cache[key] = (time.monotonic(), val)
 
 # Known archetypes emitted by the generator/auditor pipeline.
 KNOWN_ARCHETYPES = frozenset({
@@ -176,8 +180,99 @@ def load_provider_trace_flow(provider: str) -> dict | None:
     return result
 
 
+def _load_canonical_template() -> dict | None:
+    """Load canonical APM flow template (fallback for unknown providers)."""
+    key = "canonical_apm_flow"
+    cached = _ttl_cache_get(key)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+    path: Path = PROFILE_DIR / "trace_flows" / "canonical_apm_flow.yaml"
+    if not path.exists():
+        return None
+    try:
+        data = yaml.safe_load(path.read_text())
+    except yaml.YAMLError:
+        return None
+    result = data if isinstance(data, dict) else None
+    if result is not None:
+        _ttl_cache_set(key, result)
+    return result
+
+
+def _canonical_summary_for_prompt(provider: str) -> dict | None:
+    """Build trace_flow summary from canonical template for an unknown provider.
+
+    Transforms canonical_apm_flow.yaml structure into the same shape as
+    trace_flow_summary_for_prompt() so the ranker can consume it identically.
+    """
+    canonical = _load_canonical_template()
+    if not canonical:
+        return None
+
+    phases = canonical.get("phases", {})
+    svc_to_repo = canonical.get("service_to_repo", {})
+
+    def _svc_to_repo(svc: str) -> str:
+        """Map service name to repo, handling {provider} placeholders."""
+        resolved = svc.replace("{provider}", provider)
+        # Try exact match first, then resolved match
+        repo = svc_to_repo.get(resolved, "")
+        if not repo:
+            repo = svc_to_repo.get(svc, resolved)
+        # Apply repo naming convention for unresolved services
+        if repo == resolved and not repo.startswith(("grpc-", "express-", "workflow-", "loggers-")):
+            if resolved.startswith("apm-"):
+                repo = f"grpc-{resolved}"
+            elif resolved.startswith("providers-"):
+                repo = f"grpc-{resolved}"
+        return repo.replace("{provider}", provider)
+
+    # Collect participants from always + common + provider services
+    init_phase = phases.get("initialization", {})
+    participants: list[str] = []
+    for svc_list_key in ("always_services", "common_services", "provider_services"):
+        for svc in init_phase.get(svc_list_key, []):
+            repo = _svc_to_repo(svc)
+            if repo and repo not in participants:
+                participants.append(repo)
+
+    # Webhook phase participants
+    webhook_phase = phases.get("webhook_sale", {})
+    for svc_list_key in ("additional_services", "webhook_entry"):
+        for svc in webhook_phase.get(svc_list_key, []):
+            repo = _svc_to_repo(svc)
+            if repo and repo not in participants:
+                participants.append(repo)
+
+    # Phases present
+    phases_present = [name for name in phases if name != "config"]
+
+    # Key edges from always_edges
+    key_edges: dict[str, list[str]] = {}
+    init_edges = init_phase.get("always_edges", [])
+    top_init: list[str] = []
+    for edge_str in init_edges[:5]:
+        edge_str = edge_str.replace("{provider}", provider)
+        top_init.append(edge_str)
+    if top_init:
+        key_edges["initialization"] = top_init
+
+    return {
+        "provider": provider,
+        "integration_type": "canonical_apm_template",
+        "participants": participants,
+        "phases_present": phases_present,
+        "key_edges_by_phase": key_edges,
+        "is_canonical": True,
+    }
+
+
 def trace_flow_summary_for_prompt(provider: str) -> dict | None:
     """Return compact trace flow summary for the LLM prompt.
+
+    Falls back to canonical APM template when no provider-specific trace flow
+    exists. The canonical template is derived from 10 real Jaeger traces across
+    10 providers and captures the common infrastructure pattern.
 
     Output shape:
       {
@@ -189,12 +284,14 @@ def trace_flow_summary_for_prompt(provider: str) -> dict | None:
           "initialization": [<up to 3 most important edges as "from → to (op)">],
           "webhook": [...],
           ...
-        }
+        },
+        "is_canonical": bool  # True when using canonical fallback
       }
     """
     tf = load_provider_trace_flow(provider)
     if not tf:
-        return None
+        # Fallback: use canonical APM template
+        return _canonical_summary_for_prompt(provider)
 
     participants_raw = tf.get("participants", []) or []
     internal_participants = [
@@ -229,6 +326,7 @@ def trace_flow_summary_for_prompt(provider: str) -> dict | None:
         "participants": internal_participants,
         "phases_present": phases_present,
         "key_edges_by_phase": key_edges,
+        "is_canonical": False,
     }
 
 

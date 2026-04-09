@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 import time
 from typing import Protocol
 
@@ -332,21 +333,24 @@ _api_error_count: int = 0
 _API_ERROR_THRESHOLD = 3  # Reset provider after this many consecutive API errors
 _fallback_since: float = 0  # timestamp when we fell back to local
 _RETRY_API_AFTER = 300  # try Gemini again after 5 minutes on local fallback
+_provider_lock = threading.Lock()
 
 
 def notify_api_error() -> None:
     """Called when an API provider fails. After threshold, resets providers to re-evaluate."""
     global _api_error_count
-    _api_error_count += 1
-    if _api_error_count >= _API_ERROR_THRESHOLD:
-        log.warning(f"Gemini API failed {_api_error_count} times, resetting providers")
-        reset_providers()
+    with _provider_lock:
+        _api_error_count += 1
+        if _api_error_count >= _API_ERROR_THRESHOLD:
+            log.warning(f"Gemini API failed {_api_error_count} times, resetting providers")
+            _reset_providers_locked()
 
 
 def notify_api_success() -> None:
     """Called on successful API call. Resets error counter."""
     global _api_error_count
-    _api_error_count = 0
+    with _provider_lock:
+        _api_error_count = 0
 
 
 def get_embedding_provider() -> tuple[EmbeddingProvider, str | None]:
@@ -354,102 +358,120 @@ def get_embedding_provider() -> tuple[EmbeddingProvider, str | None]:
 
     Tries Gemini API first, falls back to local if unavailable.
     """
-    global _embedding_provider, _fallback_warning
+    global _embedding_provider, _fallback_warning, _fallback_since
 
-    if _embedding_provider is not None:
-        # If on local fallback, periodically check if API recovered
-        if (
-            _fallback_warning
-            and _fallback_since > 0
-            and time.time() - _fallback_since > _RETRY_API_AFTER
-        ):
-            from src.config import GEMINI_API_KEY
-            if GEMINI_API_KEY:
-                try:
-                    from google import genai
-                    client = genai.Client(api_key=GEMINI_API_KEY)
-                    client.models.embed_content(
-                        model="gemini-embedding-001",
-                        contents=["test"],
-                        config={"output_dimensionality": 768},
-                    )
-                    # API works again — restart daemon to free local model RAM
-                    log.info("Gemini API recovered. Restarting daemon to free RAM...")
-                    import os, sys
-                    os.execv(sys.executable, [sys.executable] + sys.argv)
-                except Exception:
-                    _fallback_since = time.time()  # retry in another 5 min
-        return _embedding_provider, _fallback_warning
+    with _provider_lock:
+        if _embedding_provider is not None:
+            # If on local fallback, periodically check if API recovered
+            if (
+                _fallback_warning
+                and _fallback_since > 0
+                and time.time() - _fallback_since > _RETRY_API_AFTER
+            ):
+                from src.config import GEMINI_API_KEY
+                if GEMINI_API_KEY:
+                    try:
+                        from google import genai
+                        client = genai.Client(api_key=GEMINI_API_KEY)
+                        client.models.embed_content(
+                            model="gemini-embedding-001",
+                            contents=["test"],
+                            config={"output_dimensionality": 768},
+                        )
+                        # API works again — restart daemon to free local model RAM
+                        log.info("Gemini API recovered. Restarting daemon to free RAM...")
+                        import os, sys
+                        os.execv(sys.executable, [sys.executable] + sys.argv)
+                    except Exception:
+                        _fallback_since = time.time()  # retry in another 5 min
+            return _embedding_provider, _fallback_warning
 
+    # Not yet initialized — read config outside the lock, then do API test outside lock
     from src.config import EMBEDDING_PROVIDER, GEMINI_API_KEY
 
     if EMBEDDING_PROVIDER == "local":
-        _embedding_provider = LocalEmbeddingProvider()
-        return _embedding_provider, None
+        with _provider_lock:
+            if _embedding_provider is None:
+                _embedding_provider = LocalEmbeddingProvider()
+            return _embedding_provider, None
 
     if EMBEDDING_PROVIDER in ("gemini", "auto") and GEMINI_API_KEY:
         try:
             provider = GeminiEmbeddingProvider(GEMINI_API_KEY)
-            # Quick test to verify API works
+            # Quick test to verify API works (outside lock — slow I/O)
             provider.embed(["test"], task_type="query")
-            _embedding_provider = provider
-            log.info(f"Embedding provider: {provider.provider_name}")
-            return _embedding_provider, None
+            with _provider_lock:
+                if _embedding_provider is None:
+                    _embedding_provider = provider
+                    log.info(f"Embedding provider: {provider.provider_name}")
+                return _embedding_provider, None
         except Exception as e:
             if EMBEDDING_PROVIDER == "gemini":
                 # Strict gemini mode — do NOT fall back to local. Keep provider so per-query
                 # failures raise cleanly; local model is only for nightly cron.
                 log.error(f"Gemini embedding initial test failed: {e}. Keeping Gemini provider (no local fallback in strict mode).")
-                _embedding_provider = GeminiEmbeddingProvider(GEMINI_API_KEY)
-                _fallback_warning = f"Gemini API test failed: {e}"
-                return _embedding_provider, _fallback_warning
+                with _provider_lock:
+                    if _embedding_provider is None:
+                        _embedding_provider = GeminiEmbeddingProvider(GEMINI_API_KEY)
+                        _fallback_warning = f"Gemini API test failed: {e}"
+                    return _embedding_provider, _fallback_warning
             else:
                 log.warning(f"Gemini embedding unavailable ({e}), falling back to local")
 
     # Fallback to local (only when EMBEDDING_PROVIDER == "auto" and Gemini failed)
-    _embedding_provider = LocalEmbeddingProvider()
-    _fallback_warning = "Gemini API unavailable, using local models"
-    _fallback_since = time.time()
-    log.warning(_fallback_warning)
-    return _embedding_provider, _fallback_warning
+    with _provider_lock:
+        if _embedding_provider is None:
+            _embedding_provider = LocalEmbeddingProvider()
+            _fallback_warning = "Gemini API unavailable, using local models"
+            _fallback_since = time.time()
+            log.warning(_fallback_warning)
+        return _embedding_provider, _fallback_warning
 
 
 def get_reranker_provider() -> tuple[RerankerProvider, str | None]:
     """Get the active reranker provider. Returns (provider, warning_or_None)."""
     global _reranker_provider
 
-    if _reranker_provider is not None:
-        return _reranker_provider, _fallback_warning
+    with _provider_lock:
+        if _reranker_provider is not None:
+            return _reranker_provider, _fallback_warning
 
     from src.config import EMBEDDING_PROVIDER, GEMINI_API_KEY, RERANKER_MODEL
 
     if EMBEDDING_PROVIDER == "local":
-        _reranker_provider = LocalRerankerProvider()
-        return _reranker_provider, None
+        with _provider_lock:
+            if _reranker_provider is None:
+                _reranker_provider = LocalRerankerProvider()
+            return _reranker_provider, None
 
     if EMBEDDING_PROVIDER in ("gemini", "auto") and GEMINI_API_KEY:
         try:
             provider = GeminiRerankerProvider(GEMINI_API_KEY, model=RERANKER_MODEL)
-            _reranker_provider = provider
-            log.info(f"Reranker provider: {provider.provider_name}")
-            return _reranker_provider, None
+            with _provider_lock:
+                if _reranker_provider is None:
+                    _reranker_provider = provider
+                    log.info(f"Reranker provider: {provider.provider_name}")
+                return _reranker_provider, None
         except Exception as e:
             if EMBEDDING_PROVIDER == "gemini":
                 # Strict: keep Gemini reranker even if init fails — per-call failures
                 # return neutral scores rather than loading CrossEncoder (~400MB RAM)
                 log.error(f"Gemini reranker init failed: {e}. Keeping Gemini (no local fallback in strict mode).")
-                _reranker_provider = GeminiRerankerProvider(GEMINI_API_KEY, model=RERANKER_MODEL)
-                return _reranker_provider, f"Gemini reranker init failed: {e}"
+                with _provider_lock:
+                    if _reranker_provider is None:
+                        _reranker_provider = GeminiRerankerProvider(GEMINI_API_KEY, model=RERANKER_MODEL)
+                    return _reranker_provider, f"Gemini reranker init failed: {e}"
             log.warning(f"Gemini reranker unavailable ({e}), falling back to local")
 
-    _reranker_provider = LocalRerankerProvider()
-    return _reranker_provider, _fallback_warning
+    with _provider_lock:
+        if _reranker_provider is None:
+            _reranker_provider = LocalRerankerProvider()
+        return _reranker_provider, _fallback_warning
 
 
-def reset_providers() -> None:
-    """Reset cached providers. Unloads local models to free RAM."""
+def _reset_providers_locked() -> None:
+    """Reset cached providers while _provider_lock is already held."""
     global _embedding_provider, _reranker_provider, _fallback_warning, _api_error_count
-    # Unload local models if they were loaded as fallback
     import gc
     need_gc = False
     if isinstance(_embedding_provider, LocalEmbeddingProvider) and _embedding_provider._model is not None:
@@ -468,3 +490,9 @@ def reset_providers() -> None:
     _reranker_provider = None
     _api_error_count = 0
     _fallback_warning = None
+
+
+def reset_providers() -> None:
+    """Reset cached providers. Unloads local models to free RAM."""
+    with _provider_lock:
+        _reset_providers_locked()

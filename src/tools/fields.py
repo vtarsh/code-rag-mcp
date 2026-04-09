@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import threading
 
 from src.config import BASE_DIR, PROFILE_DIR
 
@@ -65,6 +66,7 @@ def _filter_hops_by_provider(hops: list, provider: str) -> list:
 
 # --- Lazy-loaded YAML cache ---
 _cache: dict[str, dict | list | None] = {}
+_fields_lock = threading.Lock()
 
 _REFS_DIR = PROFILE_DIR / "docs" / "references"
 _RAW_DIR = BASE_DIR / "raw"
@@ -81,15 +83,16 @@ _GREP_REPO_PREFIXES = (
 
 def _load_ref_yaml(filename: str) -> dict:
     """Load a reference YAML file, cached after first call."""
-    if filename not in _cache:
-        path = _REFS_DIR / filename
-        if path.exists():
-            import yaml
+    with _fields_lock:
+        if filename not in _cache:
+            path = _REFS_DIR / filename
+            if path.exists():
+                import yaml
 
-            _cache[filename] = yaml.safe_load(path.read_text()) or {}
-        else:
-            _cache[filename] = {}
-    return _cache[filename]  # type: ignore[return-value]
+                _cache[filename] = yaml.safe_load(path.read_text()) or {}
+            else:
+                _cache[filename] = {}
+        return _cache[filename]  # type: ignore[return-value]
 
 
 def _get_contracts() -> dict:

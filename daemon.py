@@ -52,6 +52,7 @@ from src.tools.service import (
     trace_internal_tool,
     visualize_graph_tool,
 )
+from src.tools.shadow_types import provider_type_map_tool
 
 PORT = int(os.environ.get("CODE_RAG_PORT", os.environ.get("PAY_KNOWLEDGE_PORT", "8742")))
 PID_FILE = Path(__file__).parent / "daemon.pid"
@@ -123,6 +124,9 @@ TOOLS: dict[str, Callable[[dict[str, Any]], str]] = {
         args["query"], args.get("developer", ""), args.get("limit", 10)
     ),
     "trace_field": lambda args: trace_field_tool(args["field"], args.get("provider", ""), args.get("mode", "trace")),
+    "provider_type_map": lambda args: provider_type_map_tool(
+        args["provider"], args.get("method", ""), args.get("mode", "overview")
+    ),
 }
 
 

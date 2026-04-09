@@ -400,8 +400,22 @@ def _format_trace_flow_section(trace_flow: dict | None) -> str:
     provider = trace_flow["provider"]
     integration_type = trace_flow.get("integration_type", "")
 
+    is_canonical = trace_flow.get("is_canonical", False)
+    source_label = "canonical APM template (10 providers)" if is_canonical else provider
+    guidance_strength = (
+        "Canonical template guidance: these repos participate in the TYPICAL APM\n"
+        "provider flow (derived from 10 real Jaeger traces). They SHOULD be in\n"
+        "tier=high/medium when the task touches the relevant phase. This is\n"
+        "weaker than provider-specific trace flow but stronger than no evidence.\n"
+    ) if is_canonical else (
+        "Trace flow guidance: repos in `participants` above are runtime hops in\n"
+        "THIS provider's actual production flow. They SHOULD be in tier=high/medium\n"
+        "when the task touches the relevant phase (initialization, webhook, etc.).\n"
+        "This is stronger evidence than generic archetype patterns.\n"
+    )
+
     section = (
-        f"\n## Runtime trace flow ({provider})\n"
+        f"\n## Runtime trace flow ({source_label})\n"
         f"_Integration type: {integration_type}. "
         f"Phases observed: {', '.join(phases)}._\n\n"
     )
@@ -412,12 +426,7 @@ def _format_trace_flow_section(trace_flow: dict | None) -> str:
             section += f"  {phase}:\n"
             for e in edges:
                 section += f"    - {e}\n"
-    section += (
-        "\nTrace flow guidance: repos in `participants` above are runtime hops in\n"
-        "THIS provider's actual production flow. They SHOULD be in tier=high/medium\n"
-        "when the task touches the relevant phase (initialization, webhook, etc.).\n"
-        "This is stronger evidence than generic archetype patterns.\n"
-    )
+    section += f"\n{guidance_strength}"
     return section
 
 
