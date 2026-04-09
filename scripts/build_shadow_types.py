@@ -83,6 +83,8 @@ PROVIDER_CONFIGS: dict[str, dict] = {
         "initialize": ("/payment/eTransfer/", "POST"),
         "sale": ("/status/{processorTransactionId}", "GET"),
         "refund": ("/refund", "POST"),
+    }, extra_methods={
+        "payout": {"proto_request": "PayoutRequest", "proto_response": "PayoutResponse", "api_endpoint": "/payout/eTransfer/", "api_method": "POST"},
     }),
     "trustly": _apm_config("grpc-apm-trustly", {
         "initialize": ("/api/1", "POST"),
@@ -304,6 +306,79 @@ def build_field_mappings_refund(
     return request_mappings, response_mappings, type_gaps
 
 
+def build_field_mappings_payout(
+    field_usages: list[FieldUsage],
+    proto_msg_fields: list[str],
+) -> tuple[list[FieldMapping], list[FieldMapping], list[str]]:
+    """Build field mappings for the payout method."""
+    request_mappings = [
+        FieldMapping(proto_field="amount", js_field="amount", direction="request", transform="parseFloat"),
+        FieldMapping(proto_field="consumer.email", js_field="email", direction="request"),
+        FieldMapping(proto_field="consumer.firstName", js_field="first_name", direction="request", transform="sanitizeAndCutInput(255)"),
+        FieldMapping(proto_field="consumer.lastName", js_field="last_name", direction="request", transform="sanitizeAndCutInput(255)"),
+        FieldMapping(proto_field="consumer.ipAddress", js_field="ip_address", direction="request"),
+        FieldMapping(proto_field="billingDetails.addressLine", js_field="address", direction="request", transform="sanitizeAndCutInput(255)"),
+        FieldMapping(proto_field="billingDetails.city", js_field="city", direction="request", transform="sanitizeAndCutInput(255)"),
+        FieldMapping(proto_field="billingDetails.state", js_field="state", direction="request"),
+        FieldMapping(proto_field="billingDetails.countryAlpha2", js_field="country", direction="request"),
+        FieldMapping(proto_field="billingDetails.zip", js_field="zip_code", direction="request"),
+        FieldMapping(proto_field="identifiers.transactionId", js_field="udfs[0]", direction="request", transform="`${transactionId}aid1`"),
+        FieldMapping(proto_field="(env)WEBHOOKS_URL", js_field="ntf_url", direction="request"),
+        FieldMapping(proto_field="authenticationData", js_field="Bearer token (header)", direction="request"),
+    ]
+
+    response_mappings = [
+        FieldMapping(proto_field="transactionStatus", js_field="statusesMap.payout[response.status]", direction="response"),
+        FieldMapping(proto_field="processorTransactionId", js_field="body.txid", direction="response"),
+        FieldMapping(proto_field="finalize.issuerResponseCode", js_field="getProviderError(errors).issuerResponseCode", direction="response"),
+        FieldMapping(proto_field="finalize.issuerResponseText", js_field="getProviderError(errors).issuerResponseText", direction="response"),
+        FieldMapping(proto_field="finalize.resultSource", js_field="'payper' (constant)", direction="response"),
+        FieldMapping(proto_field="finalize.result", js_field="transactionStatus", direction="response"),
+        FieldMapping(proto_field="finalize.timestamp", js_field="new Date().toISOString()", direction="response"),
+        FieldMapping(proto_field="metadata.failureMessage", js_field="providerErrorMessage", direction="response", transform="conditional"),
+        FieldMapping(proto_field="metadata.failureCode", js_field="providerErrorCode", direction="response", transform="conditional"),
+    ]
+
+    type_gaps: list[str] = [
+        "CRITICAL: consumer.phone NOT in PayoutConsumerDetails proto — Payper API REQUIRES phone for payout",
+        "phone available via paymentMethod.additionalInfo.phone (common.proto field 10) — NOT read by payload builder",
+        "Payout reuses same mapResponse as sale/refund — context='payout' only changes status mapping",
+    ]
+
+    return request_mappings, response_mappings, type_gaps
+
+
+def build_field_mappings_generic(
+    field_usages: list[FieldUsage],
+    proto_msg_fields: list[str],
+    method_name: str,
+) -> tuple[list[FieldMapping], list[FieldMapping], list[str]]:
+    """Generic fallback for methods without specific builders. Extracts from JS field usages."""
+    request_mappings: list[FieldMapping] = []
+    response_mappings: list[FieldMapping] = []
+    type_gaps: list[str] = []
+
+    # Find usages that look like request destructuring
+    for usage in field_usages:
+        if usage.usage_type == "destructure" and method_name in usage.file_path.lower():
+            request_mappings.append(FieldMapping(
+                proto_field=usage.field_name,
+                js_field=usage.target_field or usage.field_name,
+                direction="request",
+            ))
+        elif usage.usage_type == "response_map" and method_name in usage.file_path.lower():
+            response_mappings.append(FieldMapping(
+                proto_field=usage.field_name,
+                js_field=usage.target_field or usage.field_name,
+                direction="response",
+            ))
+
+    if not request_mappings and not response_mappings:
+        type_gaps.append(f"No field mappings auto-extracted for '{method_name}' — manual review needed")
+
+    return request_mappings, response_mappings, type_gaps
+
+
 def build_provider_type_map(provider: str) -> ProviderTypeMap:
     """Build the complete type map for a provider."""
     if provider not in PROVIDER_CONFIGS:
@@ -353,8 +428,10 @@ def build_provider_type_map(provider: str) -> ProviderTypeMap:
             req_maps, resp_maps, gaps = build_field_mappings_sale(all_usages, proto_fields)
         elif method_name == "refund":
             req_maps, resp_maps, gaps = build_field_mappings_refund(all_usages, proto_fields)
+        elif method_name == "payout":
+            req_maps, resp_maps, gaps = build_field_mappings_payout(all_usages, proto_fields)
         else:
-            req_maps, resp_maps, gaps = [], [], [f"No mapping builder for method '{method_name}'"]
+            req_maps, resp_maps, gaps = build_field_mappings_generic(all_usages, proto_fields, method_name)
 
         methods[method_name] = MethodTypeMap(
             method=method_name,
