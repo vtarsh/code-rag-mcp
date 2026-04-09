@@ -169,9 +169,18 @@ print('ok')
     fi
   fi
 
-  # Step 6: Post-build diagnostics
+  # Step 6: Build shadow types (.d.ts for all providers)
   echo ""
-  echo "[6/6] Running diagnostics..."
+  echo "[6/7] Building shadow types..."
+  if [[ -f "$SCRIPTS_DIR/build_shadow_types.py" ]]; then
+    python3 "$SCRIPTS_DIR/build_shadow_types.py" --all-providers 2>&1 | tail -5
+  else
+    echo "  Skipping — build_shadow_types.py not found"
+  fi
+
+  # Step 7: Post-build diagnostics
+  echo ""
+  echo "[7/7] Running diagnostics..."
 
   echo "  Benchmark (synthetic):"
   python3 "$SCRIPTS_DIR/benchmark_queries.py" 2>&1 | grep "Average\|PASS"
@@ -184,7 +193,7 @@ print('ok')
 
   echo ""
   echo "=========================================="
-  echo "Update COMPLETE (${REPOS_FLAG:+incremental}${REPOS_FLAG:-full})"
+  echo "Update COMPLETE (${REPOS_FLAG:+incremental}${REPOS_FLAG:-full}, 7 steps)"
   echo "Finished: $(date)"
   echo "=========================================="
 else

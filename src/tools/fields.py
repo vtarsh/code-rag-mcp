@@ -17,6 +17,18 @@ import threading
 
 from src.config import BASE_DIR, PROFILE_DIR
 
+import logging
+
+_logger = logging.getLogger(__name__)
+
+# Warn early if PROFILE_DIR looks wrong (common when CODE_RAG_HOME is not set)
+if not PROFILE_DIR.exists():
+    _logger.warning(
+        "PROFILE_DIR %s does not exist. trace_field will return empty results. "
+        "Set CODE_RAG_HOME to the project root (e.g. ~/.code-rag-mcp).",
+        PROFILE_DIR,
+    )
+
 # Shared provider-scoped repos that are NOT tied to any single provider.
 _SHARED_PROVIDER_REPOS = frozenset({"credentials", "features", "proto"})
 
