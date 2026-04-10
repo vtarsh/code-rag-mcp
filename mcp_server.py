@@ -143,27 +143,19 @@ def search(query: str, repo: str = "", file_type: str = "", exclude_file_types: 
 
 
 @mcp.tool()
-def find_dependencies(repo_name: str) -> str:
-    """Find what a repo depends on AND what depends on it.
+def trace_impact(repo_name: str = "", max_depth: int = 2, target: str = "") -> str:
+    """Trace transitive impact: which repos depend on this one (transitively).
 
-    Args:
-        repo_name: Exact repo name
-    """
-    return _call_daemon("find_dependencies", {"repo_name": repo_name})
-
-
-@mcp.tool()
-def trace_impact(repo_name: str, max_depth: int = 2) -> str:
-    """Trace transitive impact: which repos are affected if this repo changes.
-
-    Uses the dependency graph to find all repos that directly or transitively
-    depend on the given repo. Essential for "what might I miss" analysis before PRs.
+    For "what breaks if I change repo X" analysis before PRs. Also replaces the
+    previous find_dependencies tool — use max_depth=1 for direct dependencies.
 
     Args:
         repo_name: Repo to trace impact from (e.g., "providers-proto", "node-libs-types")
-        max_depth: How many levels deep to trace (default 2, max 4)
+        max_depth: How many levels deep to trace (default 2, max 4). Use 1 for direct deps only.
+        target: Deprecated alias for repo_name (keeps old callers working).
     """
-    return _call_daemon("trace_impact", {"repo_name": repo_name, "max_depth": max_depth})
+    effective = repo_name or target
+    return _call_daemon("trace_impact", {"repo_name": effective, "max_depth": max_depth})
 
 
 @mcp.tool()
@@ -234,24 +226,14 @@ def list_repos(type: str = "", has_dep: str = "", limit: int = 30) -> str:
 
 @mcp.tool()
 def analyze_task(description: str, provider: str = "") -> str:
-    """FIRST TOOL TO CALL for any review/audit/investigation task. Analyzes a development task and finds ALL relevant repos, files, and dependencies — including a top-of-output cross-provider SHARED FILE IMPACT warning when changed files touch shared routes/protos/libs.
+    """FIRST TOOL for any review/audit/investigation task. Returns relevant repos, files, dependencies, PRs, and a top-of-output SHARED FILE IMPACT warning that names cross-provider consumers of changed files.
 
-    Takes a task description (e.g., "add verification flow to Trustly" or "review PI-60 payper payout — did we break anything") and automatically:
-    1. Emits cross-provider SHARED FILE IMPACT warning for review tasks (read this first!)
-    2. Identifies relevant provider repo, webhook activities, gateway methods
-    3. Checks proto contracts for required methods
-    4. Traces the dependency graph for affected repos
-    5. Searches GitHub for existing PRs/branches related to this task
-    6. Generates a completeness report and change checklist
-
-    Uses deterministic precision filters (recipes + co_change_rules + domain_templates +
-    flows corpus) — fast ~3-5s. No optional Gemini LLM rerank pass exposed to the MCP
-    interface, because empirical LOO showed it regresses recall (PI-40: 100% → 81.8%)
-    and adds 30-120s latency with intermittent hangs. Internal `analyze_task_tool` and
-    the daemon HTTP endpoint still expose `final_rank` for benchmarks / eval_harness.
+    Use for review ("did we break X?"), new-feature scoping, and bug investigation.
+    Fast (~3-5s). Read the SHARED FILE IMPACT / REVIEW MODE sections at the top of
+    the output before anything else.
 
     Args:
-        description: Task description (e.g., "implement DirectDebitMandate verification for Trustly")
+        description: Task description or user's review prompt, verbatim
         provider: Optional provider name to focus on (e.g., "trustly", "paypal")
     """
     return _call_daemon("analyze_task", {
@@ -261,57 +243,10 @@ def analyze_task(description: str, provider: str = "") -> str:
 
 
 @mcp.tool()
-def context_builder(
-    query: str,
-    repo: str = "",
-    include_deps: bool = True,
-    include_proto: bool = True,
-    search_limit: int = 8,
-) -> str:
-    """Build comprehensive context for a development task in one call.
-
-    Combines search results + dependency graph + proto definitions into one
-    optimized block. Use this instead of calling search → find_dependencies →
-    repo_overview separately.
-
-    Best for: "I need to understand X before making changes" or
-    "gather all context about Y for implementation planning".
-
-    Args:
-        query: What you're working on (e.g., "add refund support to Trustly", "settlement reconciliation flow")
-        repo: Optional — focus on a specific repo
-        include_deps: Include dependency graph for discovered repos (default: true)
-        include_proto: Include proto definitions if found (default: true)
-        search_limit: Max search results (default 8)
-    """
-    return _call_daemon(
-        "context_builder",
-        {
-            "query": query,
-            "repo": repo,
-            "include_deps": include_deps,
-            "include_proto": include_proto,
-            "search_limit": search_limit,
-        },
-    )
-
-
-@mcp.tool()
 def health_check() -> str:
     """Return a diagnostic report on the knowledge base: database, vector store,
     models, graph, and consistency status. Takes no arguments."""
     return _call_daemon("health_check", {})
-
-
-@mcp.tool()
-def visualize_graph(repo: str = "", edge_type: str = "") -> str:
-    """Generate an interactive D3.js graph visualization and open it in the browser.
-
-    Args:
-        repo: Optional — focus on a specific repo's neighborhood (e.g., "grpc-apm-trustly")
-        edge_type: Optional — show only a specific edge type (e.g., "grpc_call", "grpc_client_usage")
-    """
-    return _call_daemon("visualize_graph", {"repo": repo, "edge_type": edge_type})
 
 
 @mcp.tool()
