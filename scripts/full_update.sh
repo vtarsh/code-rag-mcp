@@ -62,7 +62,7 @@ fi
 
 # Step 1: Clone/fetch repos
 echo ""
-echo "[1/5] Fetching repos..."
+echo "[1/7] Fetching repos..."
 "$SCRIPTS_DIR/clone_repos.sh" 2>&1 | tail -5
 echo ""
 
@@ -108,28 +108,28 @@ print(','.join(changed))
 
   # Step 2: Extract artifacts
   echo ""
-  echo "[2/5] Extracting artifacts..."
+  echo "[2/7] Extracting artifacts..."
   python3 "$SCRIPTS_DIR/extract_artifacts.py" $REPOS_FLAG 2>&1 | tail -3
 
   # Step 3: Build FTS5 index
   echo ""
-  echo "[3/5] Building search index..."
+  echo "[3/7] Building search index..."
   python3 "$SCRIPTS_DIR/build_index.py" $REPOS_FLAG 2>&1 | tail -3
 
   # Step 4: Build dependency graph
   echo ""
-  echo "[4/5] Building dependency graph..."
+  echo "[4/7] Building dependency graph..."
   python3 "$SCRIPTS_DIR/build_graph.py" 2>&1 | tail -3
 
   # Step 5: Build vector embeddings (batched to limit memory)
   # Skip vectors during daytime runs (--skip-vectors flag)
   if [[ "${SKIP_VECTORS:-}" == "1" ]]; then
     echo ""
-    echo "[5/5] Skipping vector embeddings (daytime mode)"
+    echo "[5/7] Skipping vector embeddings (daytime mode)"
   else
     BATCH_SIZE=30
     echo ""
-    echo "[5/5] Building vector embeddings..."
+    echo "[5/7] Building vector embeddings..."
     # If model is gemini, verify API is available; fallback to coderank if not
     if [[ "$MODEL_KEY" == "gemini" ]]; then
       if python3 -c "
