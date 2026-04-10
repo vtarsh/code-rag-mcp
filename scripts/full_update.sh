@@ -169,11 +169,20 @@ print('ok')
     fi
   fi
 
-  # Step 6: Build shadow types (.d.ts for all providers)
+  # Step 6: Build shadow types (YAMLs for each known provider)
   echo ""
   echo "[6/7] Building shadow types..."
   if [[ -f "$SCRIPTS_DIR/build_shadow_types.py" ]]; then
-    python3 "$SCRIPTS_DIR/build_shadow_types.py" --all-providers 2>&1 | tail -5
+    PROFILE_PATH="$BASE_DIR/profiles/$ACTIVE_PROFILE"
+    if [[ -d "$PROFILE_PATH/provider_types" ]]; then
+      for yaml_file in "$PROFILE_PATH/provider_types"/*.yaml; do
+        [[ -f "$yaml_file" ]] || continue
+        provider=$(basename "$yaml_file" .yaml)
+        python3 "$SCRIPTS_DIR/build_shadow_types.py" --provider "$provider" 2>&1 | tail -1
+      done
+    else
+      echo "  Skipping — no provider_types/ directory in profile"
+    fi
   else
     echo "  Skipping — build_shadow_types.py not found"
   fi
