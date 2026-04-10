@@ -60,6 +60,7 @@ from .shared_sections import (
     section_gotchas,
     section_methods,
     section_proto,
+    section_shared_files_warning,
     section_task_patterns,
 )
 
@@ -338,6 +339,12 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
 
     # Meta-guard: warn if query overlaps heavily with a stored task (first section).
     output += _run_section("meta_guard", section_meta_guard, ctx)
+
+    # SHARED FILE IMPACT: top-priority cross-provider warning when changed files
+    # match shared_files patterns (from conventions.yaml). This is the action-forcing
+    # signal for review/audit tasks — appears before any data section so the agent
+    # sees sibling provider names in its own context.
+    output += _run_section("shared_files_warning", section_shared_files_warning, ctx)
 
     if repo_refs_output:
         output += repo_refs_output + "\n"

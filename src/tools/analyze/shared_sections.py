@@ -2,17 +2,195 @@
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import re
 import sys
 from pathlib import Path
 
-from src.config import GATEWAY_REPO, PROTO_REPOS
+from src.config import GATEWAY_REPO, PROTO_REPOS, SHARED_FILES
 from src.formatting import strip_repo_tag
 
 from .base import _KEYWORD_STOP_WORDS, AnalysisContext, Finding, extract_task_id, fts_queries
 from .github_helpers import find_task_branches, find_task_prs
 from .method_helpers import check_method_exists
+
+
+def _load_task_files_changed(ctx: AnalysisContext, task_id: str) -> list[str]:
+    """Read files_changed JSON array for a task from task_history."""
+    if not task_id:
+        return []
+    try:
+        row = ctx.conn.execute(
+            "SELECT files_changed FROM task_history WHERE ticket_id = ? COLLATE NOCASE",
+            (task_id.upper(),),
+        ).fetchone()
+    except Exception:
+        return []
+    if not row or not row[0]:
+        return []
+    try:
+        files = json.loads(row[0])
+    except Exception:
+        return []
+    return files if isinstance(files, list) else []
+
+
+def _match_shared_files(files: list[str]) -> list[tuple[str, dict]]:
+    """Return (matched_file, shared_file_entry) pairs for each file that matches a pattern."""
+    if not files or not SHARED_FILES:
+        return []
+    matches: list[tuple[str, dict]] = []
+    seen_patterns: set[str] = set()
+    for f in files:
+        for entry in SHARED_FILES:
+            pattern = entry.get("path_pattern", "")
+            if not pattern:
+                continue
+            if fnmatch.fnmatch(f, pattern):
+                key = f"{f}::{pattern}"
+                if key in seen_patterns:
+                    continue
+                seen_patterns.add(key)
+                matches.append((f, entry))
+                break  # one match per file is enough
+    return matches
+
+
+# Fallback list of real APM provider names — used when shared_files entries
+# have semantic markers (e.g., "all_apm_providers_payout_method") instead of
+# real provider names. Order matters — paysafe first because it has broad coverage.
+_FALLBACK_SIBLINGS = ["paysafe", "trustly", "nuvei", "volt", "ppro", "aeropay", "paynearme", "fonix"]
+
+
+def _pick_siblings(used_by: list, provider: str) -> list[str]:
+    """Pick concrete sibling provider names from used_by, or fall back to known APMs."""
+    real = [p for p in used_by if p and p != provider and p in _FALLBACK_SIBLINGS]
+    if real:
+        return real
+    # used_by had only semantic markers or was empty — use hardcoded fallback
+    return [p for p in _FALLBACK_SIBLINGS if p != provider]
+
+
+def _render_shared_file_warning(matches: list[tuple[str, dict]], provider: str) -> str:
+    """Render the SHARED FILE IMPACT warning block."""
+    out = "## ⚠️ SHARED FILE IMPACT — cross-provider check required\n\n"
+    out += "The following changed files are consumed by multiple providers or follow a shared convention. "
+    out += "Before approving the review or editing further, verify your changes do not break other consumers.\n\n"
+    for fpath, entry in matches:
+        out += f"### `{fpath}`\n"
+        used_by = entry.get("used_by", [])
+        change_risk = entry.get("change_risk", "")
+        convention = entry.get("convention", "")
+        check = entry.get("check", "")
+        if used_by:
+            # Show only real provider names (not semantic markers) in the "used by" list
+            real_used = [p for p in used_by if p in _FALLBACK_SIBLINGS and p != provider]
+            if real_used:
+                out += f"- **Also used by**: {', '.join(f'**{p}**' for p in real_used)}\n"
+        if change_risk:
+            out += f"- **Risk**: {change_risk}\n"
+        if convention:
+            out += f"- **Convention**: {convention}\n"
+        if check:
+            out += f"- **Check before edit**: {check}\n"
+
+        # Infer method from file name
+        method = ""
+        for m in ("payout", "sale", "refund", "verification", "capture"):
+            if m in fpath.lower():
+                method = m
+                break
+
+        # Emit concrete tool calls for siblings (always — use fallback list if needed)
+        siblings = _pick_siblings(used_by, provider)
+        if siblings:
+            primary = siblings[0]
+            secondary = siblings[1] if len(siblings) > 1 else ""
+            if method:
+                out += f"- **Run now**: `provider_type_map(\"{primary}\", \"{method}\", \"fields\")` — compare contract for `{method}` method\n"
+                if secondary:
+                    out += f"- **Also run**: `provider_type_map(\"{secondary}\", \"{method}\", \"fields\")`\n"
+                out += f"- **Then search**: `search(\"{primary} {method} {fpath.split('/')[-1]}\")` — see sibling implementation\n"
+            else:
+                out += f"- **Run now**: `provider_type_map(\"{primary}\", \"\", \"overview\")` — see sibling methods\n"
+                out += f"- **Then search**: `search(\"{primary} {fpath.split('/')[-1]}\")` — see sibling file\n"
+        out += "\n"
+    out += "**Do NOT ship until each sibling has been compared.** Generic review conventions like \"run linter\" do not catch cross-provider regressions — only explicit sibling comparison does.\n\n"
+    return out
+
+
+_REVIEW_KEYWORDS = (
+    "review", "check", "audit", "investigate",
+    "глянь", "перевір", "зламали", "досліди", "аудит", "ревʼю",
+    "did we break", "did i break", "чи нічого не",
+)
+
+
+def _is_review_mode(description: str) -> bool:
+    d = description.lower()
+    return any(k in d for k in _REVIEW_KEYWORDS)
+
+
+def _render_review_mode_reminder(provider: str) -> str:
+    """Top-of-output reminder for review/audit tasks — directs to git diff and sibling comparison."""
+    out = "## ⚠️ REVIEW MODE — cross-provider check required\n\n"
+    out += "This task is a review/audit. The #1 cause of review regressions is **cross-provider impact on shared files**. "
+    out += "Before trusting any analysis below, run these steps FIRST:\n\n"
+    out += "1. **List actually changed files**: `git -C <repo> diff main...HEAD --stat` for every repo on the task branch.\n"
+    out += "2. **For each changed file**: check if another provider uses the same file/route/convention.\n"
+    out += "3. **For each shared file found**: compare against 1 sibling provider via `provider_type_map` or `search`.\n\n"
+    out += "Shared file patterns to watch for (from conventions.yaml `shared_files`):\n"
+    for entry in SHARED_FILES[:8]:
+        pattern = entry.get("path_pattern", "")
+        risk = entry.get("change_risk") or entry.get("convention", "")
+        if pattern:
+            risk_short = risk[:120] + ("..." if len(risk) > 120 else "")
+            out += f"- `{pattern}` — {risk_short}\n"
+    out += "\n**Example first calls** (replace with your actual target):\n"
+    out += f"- `provider_type_map(\"paysafe\", \"payout\", \"fields\")`\n"
+    out += f"- `search(\"paysafe interac payout validation\")`\n"
+    out += f"- `search(\"other APM providers methods/payout.js paymentMethod\")`\n\n"
+    out += "**Do not rely on task_history alone** — for in-progress reviews, files_changed may be stale (historical merged PR data, not current open PR). Always verify with live `git diff`.\n\n"
+    return out
+
+
+def section_shared_files_warning(ctx: AnalysisContext) -> str:
+    """Emit a SHARED FILE IMPACT warning when changed files match shared-file patterns.
+
+    Three modes (both can fire):
+    1. Review mode (keywords detected) → emit generic reminder with git diff hint.
+    2. Task-history mode → if task_id found AND files_changed match shared_files patterns,
+       emit specific file warnings with sibling providers + tool calls.
+
+    Priority: review reminder is always first if triggered. Specific matches follow.
+    Returns empty string if neither mode fires.
+    """
+    if not SHARED_FILES:
+        return ""
+
+    out = ""
+    review_mode = _is_review_mode(ctx.description)
+
+    # Always show review reminder first when in review mode
+    if review_mode:
+        out += _render_review_mode_reminder(ctx.provider)
+
+    # Also try task_history lookup for specific file matches
+    task_id = extract_task_id(ctx.description)
+    # Skip own task when in eval mode (blind LOO)
+    if task_id and ctx.exclude_task_id and task_id.upper() == ctx.exclude_task_id.upper():
+        return out
+
+    files = _load_task_files_changed(ctx, task_id)
+    if files:
+        matches = _match_shared_files(files)
+        if matches:
+            if review_mode:
+                out += "### Historical matches from task_history (may be stale for in-progress work)\n\n"
+            out += _render_shared_file_warning(matches, ctx.provider)
+
+    return out
 
 
 def section_gotchas(ctx: AnalysisContext) -> str:

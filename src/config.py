@@ -224,6 +224,11 @@ SERVICE_REPO_PATTERNS: list[str] = _conventions.get("service_repo_patterns", [])
 # High-confidence co-change rules (trigger_repo → [companion_repos])
 CO_CHANGE_RULES: dict[str, list[str]] = _conventions.get("co_change_rules", {})
 
+# Shared files — files used by multiple providers/consumers.
+# Each entry: {path_pattern, used_by, change_risk, check, convention?}
+# Consumed by section_shared_files_warning in analyze_task.
+SHARED_FILES: list[dict] = _conventions.get("shared_files", [])
+
 # Domain templates — base repos per domain (auto-suggest)
 DOMAIN_TEMPLATES: dict[str, dict] = _conventions.get("domain_templates", {})
 
