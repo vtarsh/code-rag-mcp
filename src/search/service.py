@@ -16,7 +16,7 @@ from src.search.suggestions import format_no_results
 
 @require_db
 def search_tool(
-    query: str,
+    query: str = "",
     repo: str = "",
     file_type: str = "",
     exclude_file_types: str = "",
@@ -31,8 +31,14 @@ def search_tool(
         exclude_file_types: Optional - comma-separated file types to exclude from results (e.g. "gotchas,task")
         limit: Max results to return (default 10, max 20)
     """
-    if not query.strip():
-        return "Error: query cannot be empty"
+    # Defensive validation: callers sometimes omit `query` entirely (observed 74x
+    # KeyError('query') in logs/tool_calls.jsonl before this guard was added).
+    # Return a clear error rather than a Python traceback.
+    if query is None or not isinstance(query, str) or not query.strip():
+        return (
+            "Error: 'query' parameter is required and must be a non-empty string. "
+            "Example: search(query=\"payment provider integration\")"
+        )
 
     limit = min(max(1, limit), 20)
 

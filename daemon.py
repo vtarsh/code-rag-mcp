@@ -84,7 +84,7 @@ log = logging.getLogger(__name__)
 # --- Tool registry ---
 TOOLS: dict[str, Callable[[dict[str, Any]], str]] = {
     "search": lambda args: search_tool(
-        args["query"],
+        args.get("query", ""),
         args.get("repo", ""),
         args.get("file_type", ""),
         args.get("exclude_file_types", ""),
