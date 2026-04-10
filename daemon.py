@@ -91,7 +91,7 @@ TOOLS: dict[str, Callable[[dict[str, Any]], str]] = {
         args.get("limit", 10),
     ),
     "find_dependencies": lambda args: find_dependencies_tool(args["repo_name"]),
-    "trace_impact": lambda args: trace_impact_tool(args["repo_name"], args.get("max_depth", 2)),
+    "trace_impact": lambda args: trace_impact_tool(args.get("repo_name") or args.get("target", ""), args.get("max_depth", 2)),
     "trace_flow": lambda args: (
         trace_flow_tool(args["source"], args["target"], args.get("max_depth", 5))
         if "source" in args and "target" in args
