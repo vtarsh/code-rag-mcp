@@ -233,24 +233,25 @@ def list_repos(type: str = "", has_dep: str = "", limit: int = 30) -> str:
 
 
 @mcp.tool()
-def analyze_task(description: str, provider: str = "", final_rank: bool = True) -> str:
-    """Analyze a development task and find ALL relevant repos, files, and dependencies.
+def analyze_task(description: str, provider: str = "", final_rank: bool = False) -> str:
+    """FIRST TOOL TO CALL for any review/audit/investigation task. Analyzes a development task and finds ALL relevant repos, files, and dependencies — including a top-of-output cross-provider SHARED FILE IMPACT warning when changed files touch shared routes/protos/libs.
 
-    Takes a task description (e.g., "add verification flow to Trustly") and automatically:
-    1. Identifies relevant provider repo, webhook activities, gateway methods
-    2. Checks proto contracts for required methods
-    3. Traces the dependency graph for affected repos
-    4. Searches GitHub for existing PRs/branches related to this task
-    5. Generates a completeness report and change checklist
-    6. Runs precision-oriented LLM pruner (when final_rank=True) using
-       archetype + provider historical patterns from flows corpus
+    Takes a task description (e.g., "add verification flow to Trustly" or "review PI-60 payper payout — did we break anything") and automatically:
+    1. Emits cross-provider SHARED FILE IMPACT warning for review tasks (read this first!)
+    2. Identifies relevant provider repo, webhook activities, gateway methods
+    3. Checks proto contracts for required methods
+    4. Traces the dependency graph for affected repos
+    5. Searches GitHub for existing PRs/branches related to this task
+    6. Generates a completeness report and change checklist
+    7. (opt-in) Runs precision-oriented LLM pruner via final_rank=True
 
     Args:
         description: Task description (e.g., "implement DirectDebitMandate verification for Trustly")
         provider: Optional provider name to focus on (e.g., "trustly", "paypal")
-        final_rank: Run precision pass via Gemini LLM ranker using flows corpus
-            evidence (archetype + provider historical patterns). Default True —
-            improves precision by dropping noise via evidence-based ranking.
+        final_rank: Opt-in Gemini LLM precision pass. Default False — fast path
+            (~3-5s). Enable only when you need evidence-based precision ranking
+            and can tolerate 30-120s latency. Does NOT affect SHARED FILE IMPACT
+            warning (which runs in the fast path).
     """
     return _call_daemon("analyze_task", {
         "description": description,
