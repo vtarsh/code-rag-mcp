@@ -233,7 +233,7 @@ def list_repos(type: str = "", has_dep: str = "", limit: int = 30) -> str:
 
 
 @mcp.tool()
-def analyze_task(description: str, provider: str = "", final_rank: bool = False) -> str:
+def analyze_task(description: str, provider: str = "") -> str:
     """FIRST TOOL TO CALL for any review/audit/investigation task. Analyzes a development task and finds ALL relevant repos, files, and dependencies — including a top-of-output cross-provider SHARED FILE IMPACT warning when changed files touch shared routes/protos/libs.
 
     Takes a task description (e.g., "add verification flow to Trustly" or "review PI-60 payper payout — did we break anything") and automatically:
@@ -243,20 +243,20 @@ def analyze_task(description: str, provider: str = "", final_rank: bool = False)
     4. Traces the dependency graph for affected repos
     5. Searches GitHub for existing PRs/branches related to this task
     6. Generates a completeness report and change checklist
-    7. (opt-in) Runs precision-oriented LLM pruner via final_rank=True
+
+    Uses deterministic precision filters (recipes + co_change_rules + domain_templates +
+    flows corpus) — fast ~3-5s. No optional Gemini LLM rerank pass exposed to the MCP
+    interface, because empirical LOO showed it regresses recall (PI-40: 100% → 81.8%)
+    and adds 30-120s latency with intermittent hangs. Internal `analyze_task_tool` and
+    the daemon HTTP endpoint still expose `final_rank` for benchmarks / eval_harness.
 
     Args:
         description: Task description (e.g., "implement DirectDebitMandate verification for Trustly")
         provider: Optional provider name to focus on (e.g., "trustly", "paypal")
-        final_rank: Opt-in Gemini LLM precision pass. Default False — fast path
-            (~3-5s). Enable only when you need evidence-based precision ranking
-            and can tolerate 30-120s latency. Does NOT affect SHARED FILE IMPACT
-            warning (which runs in the fast path).
     """
     return _call_daemon("analyze_task", {
         "description": description,
         "provider": provider,
-        "final_rank": final_rank,
     })
 
 
