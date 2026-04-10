@@ -88,6 +88,13 @@ def fts_queries(provider: str, words: set[str]) -> list[str]:
 
 
 def extract_task_id(description: str) -> str:
-    """Extract task ID (e.g., PI-54, CORE-2545) from description."""
-    match = re.search(r"(PI|CORE|PAY|FE|BE|INF|BO|HS)-?\d+", description, re.IGNORECASE)
-    return match.group(0).lower().replace("_", "-") if match else ""
+    """Extract task ID (e.g., PI-54, pi_60, CORE-2545) from description.
+
+    Accepts: PI-60, pi-60, PI60, pi_60, pi 60. Returns canonical lower-case
+    hyphen form (e.g. "pi-60") for backwards compatibility with existing
+    consumers that compare against lowercased ids.
+    """
+    match = re.search(r"(PI|CORE|PAY|FE|BE|INF|BO|HS)[-_ ]?(\d+)", description, re.IGNORECASE)
+    if not match:
+        return ""
+    return f"{match.group(1).lower()}-{match.group(2)}"
