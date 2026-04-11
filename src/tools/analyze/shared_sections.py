@@ -57,6 +57,107 @@ def _match_shared_files(files: list[str]) -> list[tuple[str, dict]]:
     return matches
 
 
+# Keywords that suggest a task will touch specific shared files.
+# Used by _match_shared_files_by_keywords when no explicit file list
+# is available (e.g. clean prompt, blind LOO, feature-description query).
+# Each keyword → substrings that a shared_files.path_pattern must contain
+# for it to be flagged as relevant.
+_KEYWORD_FILE_TRIGGERS: dict[str, list[str]] = {
+    "payout": ["payout", "payouts"],
+    "sale": ["sale", "sales"],
+    "refund": ["refund"],
+    "verification": ["verification"],
+    "webhook": ["webhook", "handle-activities", "parse-payload"],
+    "initialize": ["initialize"],
+    "s2s": ["initialize"],
+    "reusablepayout": ["map-response", "payout"],
+    "reusable": ["map-response", "payout"],
+    "seeds": ["seeds.cql"],
+    "proto": [".proto"],
+    "payment method": ["methods/", "payment-methods"],
+    # APM-specific triggers — only fire when APM context is detected
+    # (guarded in section_shared_files_warning).
+    "apm": ["initialize", "methods/"],
+    "grpc-apm": ["initialize", "methods/"],
+    "integrate": ["seeds.cql", "methods/", "initialize"],
+    "integration": ["seeds.cql", "methods/", "initialize"],
+}
+
+# Words that confirm the task is about an APM / provider integration,
+# used to gate the keyword-triggered branch. Generic words like "provider"
+# or "sale" alone are not sufficient — there must be at least one of
+# these discriminators AND one operation keyword.
+_APM_CONTEXT_MARKERS = (
+    "apm", "grpc-apm", "grpc-providers", "payper", "paysafe", "trustly",
+    "nuvei", "volt", "ppro", "aeropay", "paynearme", "fonix", "epx",
+    "worldpay", "checkout", "braintree", "credorax",
+    "alternative payment method",
+    "new provider", "add a new provider", "add a provider",
+    "provider integration", "integrate a provider", "integrate a new provider",
+    "new apm", "apm integration",
+)
+
+
+def _detect_trigger_keywords(description: str | None) -> list[str]:
+    """Find operation/feature keywords in the task description."""
+    if not description:
+        return []
+    d = description.lower()
+    found: list[str] = []
+    for kw in _KEYWORD_FILE_TRIGGERS:
+        # Match whole words (allow hyphens and spaces for multi-word triggers)
+        pat = r"\b" + re.escape(kw).replace(r"\ ", r"[\s-]") + r"s?\b"
+        if re.search(pat, d):
+            found.append(kw)
+    return found
+
+
+def _has_apm_context(description: str | None, provider: str = "") -> bool:
+    """Gate the keyword-triggered branch: only fire when we are confident
+    the task is about an APM / provider integration, to avoid spraying
+    SHARED FILE IMPACT warnings on backoffice or infra tasks that merely
+    contain words like 'sale' or 'provider'.
+    """
+    if provider:
+        return True
+    if not description:
+        return False
+    d = description.lower()
+    return any(marker in d for marker in _APM_CONTEXT_MARKERS)
+
+
+def _match_shared_files_by_keywords(
+    description: str | None,
+    provider: str = "",
+) -> list[tuple[str, dict]]:
+    """Match shared_files entries whose path_pattern relates to keywords
+    detected in the task description. Returns
+    ``(path_pattern, shared_file_entry)`` pairs so the existing renderer
+    produces sensible output (path, not synthetic marker).
+
+    Gated by `_has_apm_context` to avoid false positives on non-APM tasks.
+    """
+    if not SHARED_FILES or not _has_apm_context(description, provider):
+        return []
+    keywords = _detect_trigger_keywords(description)
+    if not keywords:
+        return []
+    matches: list[tuple[str, dict]] = []
+    seen_patterns: set[str] = set()
+    for entry in SHARED_FILES:
+        pattern = entry.get("path_pattern", "")
+        if not pattern or pattern in seen_patterns:
+            continue
+        pat_lower = pattern.lower()
+        for kw in keywords:
+            triggers = _KEYWORD_FILE_TRIGGERS.get(kw, [])
+            if any(t in pat_lower for t in triggers):
+                seen_patterns.add(pattern)
+                matches.append((pattern, entry))
+                break
+    return matches
+
+
 # Fallback list of real APM provider names — used when shared_files entries
 # have semantic markers (e.g., "all_apm_providers_payout_method") instead of
 # real provider names. Order matters — paysafe first because it has broad coverage.
@@ -189,6 +290,16 @@ def section_shared_files_warning(ctx: AnalysisContext) -> str:
             if review_mode:
                 out += "### Historical matches from task_history (may be stale for in-progress work)\n\n"
             out += _render_shared_file_warning(matches, ctx.provider)
+    else:
+        # No known files (blind LOO, clean prompt, feature description).
+        # Use keyword triggers to predict which shared files this task
+        # will likely touch and emit preemptive warnings. This is the
+        # "proactivity" branch — surfaces scope/convention checks before
+        # any file has been committed.
+        kw_matches = _match_shared_files_by_keywords(ctx.description, ctx.provider)
+        if kw_matches:
+            out += "### Predicted shared-file impact (from task description keywords)\n\n"
+            out += _render_shared_file_warning(kw_matches, ctx.provider)
 
     return out
 
