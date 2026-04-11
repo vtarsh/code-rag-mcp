@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Full pipeline: clone → extract → index → graph → vectors
+# Full pipeline: clone → extract → facts/staleness → index → graph → vectors
 # Designed for cron/launchd. Logs to ~/.code-rag/logs/
 #
 # Usage:
@@ -210,6 +210,15 @@ else
   echo "No changes detected. Skipping rebuild."
   echo "Finished: $(date)"
 fi
+
+# Always-run: regenerate repo facts + doc staleness report.
+# These are cheap (no LLM, no vectors) and useful even on quiet days
+# when no repos changed but curated docs keep aging. Must run after
+# clone so that raw/ is present.
+echo ""
+echo "[post] Regenerating repo facts + staleness report..."
+python3 "$SCRIPTS_DIR/gen_repo_facts.py" 2>&1 | tail -3
+python3 "$SCRIPTS_DIR/detect_doc_staleness.py" 2>&1 | tail -3
 
 # Cleanup
 rm -f "$STATE_BEFORE"

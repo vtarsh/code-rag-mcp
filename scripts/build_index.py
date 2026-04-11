@@ -239,6 +239,7 @@ def chunk_proto(content: str, repo_name: str) -> list[dict]:
 def chunk_markdown(content: str, repo_name: str) -> list[dict]:
     """Chunk markdown by header sections."""
     chunks = []
+    content = re.sub(r"\A---\n.*?\n---\n?", "", content, count=1, flags=re.DOTALL)
     sections = re.split(r"^(#{1,3}\s+.+)$", content, flags=re.MULTILINE)
 
     current_header = ""
