@@ -63,24 +63,75 @@ def _match_shared_files(files: list[str]) -> list[tuple[str, dict]]:
 # Each keyword → substrings that a shared_files.path_pattern must contain
 # for it to be flagged as relevant.
 _KEYWORD_FILE_TRIGGERS: dict[str, list[str]] = {
+    # Sale / charge family
     "payout": ["payout", "payouts"],
     "sale": ["sale", "sales"],
+    "charge": ["sale"],
+    "purchase": ["sale"],
+    "capture": ["sale"],
     "refund": ["refund"],
+    "reversal": ["refund"],
+    # Payout family (synonyms)
+    "disburse": ["payout"],
+    "disbursement": ["payout"],
+    "transfer to customer": ["payout"],
+    "send money": ["payout"],
+    "send money back": ["payout"],
+    "send funds": ["payout"],
+    "withdraw": ["payout"],
+    "withdrawal": ["payout"],
+    "credit customer": ["payout"],
+    "pay out": ["payout"],
+    # Verification family
     "verification": ["verification"],
+    "verify": ["verification"],
+    "kyc": ["verification"],
+    "identity confirmation": ["verification"],
+    "identity check": ["verification"],
+    "authentication": ["verification"],
+    # Webhook / callback family
     "webhook": ["webhook", "handle-activities", "parse-payload"],
+    "callback": ["webhook", "handle-activities"],
+    "notification": ["webhook", "handle-activities"],
+    "notifications": ["webhook", "handle-activities"],
+    "async notification": ["webhook", "handle-activities"],
+    "status update": ["webhook", "handle-activities"],
+    "state change": ["webhook", "handle-activities"],
+    "push event": ["webhook", "handle-activities"],
+    # Scope / initialize
     "initialize": ["initialize"],
     "s2s": ["initialize"],
+    "server-to-server": ["initialize"],
+    # Reusable payout / token
     "reusablepayout": ["map-response", "payout"],
     "reusable": ["map-response", "payout"],
+    "reusable token": ["map-response", "payout"],
+    "payout token": ["map-response", "payout"],
+    "repeat customer": ["map-response", "payout"],
+    "returning customer": ["map-response", "payout"],
+    "storable token": ["map-response", "payout"],
+    "stored token": ["map-response", "payout"],
+    # Schema / seeds / proto
     "seeds": ["seeds.cql"],
+    "seed file": ["seeds.cql"],
     "proto": [".proto"],
+    "protobuf": [".proto"],
+    "message definition": [".proto"],
+    # Methods / payment method composition
     "payment method": ["methods/", "payment-methods"],
-    # APM-specific triggers — only fire when APM context is detected
-    # (guarded in section_shared_files_warning).
+    # APM-specific (gated by _has_apm_context)
     "apm": ["initialize", "methods/"],
     "grpc-apm": ["initialize", "methods/"],
     "integrate": ["seeds.cql", "methods/", "initialize"],
     "integration": ["seeds.cql", "methods/", "initialize"],
+    "onboard": ["seeds.cql", "methods/", "initialize"],
+    "onboarding": ["seeds.cql", "methods/", "initialize"],
+    "launch": ["seeds.cql", "methods/", "initialize"],
+    "new provider": ["seeds.cql", "methods/", "initialize"],
+    "add provider": ["seeds.cql", "methods/", "initialize"],
+    "alternative payment method": ["seeds.cql", "methods/", "initialize"],
+    "bank transfer": ["methods/", "initialize"],
+    "bank-transfer": ["methods/", "initialize"],
 }
 
 # Words that confirm the task is about an APM / provider integration,
@@ -95,7 +146,34 @@ _APM_CONTEXT_MARKERS = (
     "new provider", "add a new provider", "add a provider",
     "provider integration", "integrate a provider", "integrate a new provider",
     "new apm", "apm integration",
+    "onboard a new", "launch a new", "bank-transfer", "bank transfer",
+    "payment method provider", "new payment method",
 )
+
+# Operation-family keywords: if a task mentions 2+ of these, it is very
+# likely a provider-integration task even without an explicit APM marker.
+# Used as a second gate condition in _has_apm_context.
+_OPERATION_FAMILIES: list[tuple[str, ...]] = [
+    ("sale", "charge", "purchase", "capture", "direct charge"),
+    ("payout", "disburse", "disbursement", "send money", "send funds",
+     "withdraw", "withdrawal", "credit customer", "transfer to customer", "pay out"),
+    ("refund", "reversal"),
+    ("verification", "verify", "kyc", "identity confirmation", "identity check", "authentication"),
+    ("webhook", "callback", "notification", "notifications", "async notification",
+     "status update", "state change", "push event", "payment state"),
+]
+
+
+def _count_operation_families(description_lower: str) -> int:
+    """Count how many distinct operation families the description mentions."""
+    hit = 0
+    for family in _OPERATION_FAMILIES:
+        for kw in family:
+            pat = r"\b" + re.escape(kw).replace(r"\ ", r"[\s-]") + r"s?\b"
+            if re.search(pat, description_lower):
+                hit += 1
+                break
+    return hit
 
 
 def _detect_trigger_keywords(description: str | None) -> list[str]:
@@ -112,18 +190,44 @@ def _detect_trigger_keywords(description: str | None) -> list[str]:
     return found
 
 
+# If the description is clearly about reporting/analytics/BI, the gate
+# stays closed even with multi-family keyword hits — those tasks coincidentally
+# mention "sales" / "refunds" as metrics, not as coding operations.
+_NON_INTEGRATION_MARKERS = (
+    "backoffice", "back office", "back-office",
+    "dashboard", "dashboards",
+    "metrics", "metric",
+    "report", "reports", "reporting",
+    "analytics", "bi ", " bi",
+    "chart", "charts", "graph", "graphs",
+    "export csv", "export excel", "csv export",
+    "admin panel", "admin page",
+    "monitoring dashboard", "kpi",
+)
+
+
 def _has_apm_context(description: str | None, provider: str = "") -> bool:
     """Gate the keyword-triggered branch: only fire when we are confident
     the task is about an APM / provider integration, to avoid spraying
     SHARED FILE IMPACT warnings on backoffice or infra tasks that merely
     contain words like 'sale' or 'provider'.
+
+    Gate opens if:
+      1. ctx.provider is set (classifier is confident), OR
+      2. Description contains an explicit APM marker phrase, OR
+      3. Description touches ≥ 2 distinct operation families AND
+         contains no reporting/analytics markers.
     """
     if provider:
         return True
     if not description:
         return False
     d = description.lower()
-    return any(marker in d for marker in _APM_CONTEXT_MARKERS)
+    if any(marker in d for marker in _APM_CONTEXT_MARKERS):
+        return True
+    if _count_operation_families(d) >= 2 and not any(m in d for m in _NON_INTEGRATION_MARKERS):
+        return True
+    return False
 
 
 def _match_shared_files_by_keywords(
@@ -136,12 +240,20 @@ def _match_shared_files_by_keywords(
     produces sensible output (path, not synthetic marker).
 
     Gated by `_has_apm_context` to avoid false positives on non-APM tasks.
+    When the APM context is confirmed, the effective keyword set also
+    includes a synthetic "apm" trigger so that scope-check / initialize /
+    method-threading warnings fire even if the task description uses
+    paraphrased verbs that don't directly match individual keywords.
     """
     if not SHARED_FILES or not _has_apm_context(description, provider):
         return []
     keywords = _detect_trigger_keywords(description)
-    if not keywords:
-        return []
+    # APM context is confirmed — always include the synthetic "apm"
+    # trigger so standing integration checks (initialize, methods/, seeds)
+    # fire regardless of paraphrase. Without this, wording like "hook up a
+    # new gateway" would never surface the scope check.
+    if "apm" not in keywords:
+        keywords.append("apm")
     matches: list[tuple[str, dict]] = []
     seen_patterns: set[str] = set()
     for entry in SHARED_FILES:
