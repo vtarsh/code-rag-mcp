@@ -203,30 +203,43 @@ class DaemonHandler(BaseHTTPRequestHandler):
 
 _start_time = time.time()
 _CALLS_LOG = _LOG_DIR / "tool_calls.jsonl"
+_FULL_CALLS_LOG = _LOG_DIR / "tool_calls_full.jsonl"
+_FULL_LOG_ENABLED = os.environ.get("CODE_RAG_FULL_TOOL_LOG", "").lower() in ("1", "true", "yes", "on")
 
 
 def _log_call(
     tool_name: str, args: dict, result: str, duration_ms: float,
     error: str | None = None, source: str = "unknown", session: str = "",
 ) -> None:
-    """Append tool call record to JSONL log. Never raises."""
+    """Append tool call record to JSONL log. Never raises.
+
+    Writes preview (300 / 3000 chars) to tool_calls.jsonl (always).
+    Writes FULL result to tool_calls_full.jsonl when CODE_RAG_FULL_TOOL_LOG=1
+    (opt-in, used for blind-test audit to catch leaks past the preview cutoff).
+    """
     try:
         from datetime import datetime, timezone
 
+        ts = datetime.now(timezone.utc).isoformat()
         preview_limit = 3000 if tool_name == "analyze_task" else 300
-        record = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+        base = {
+            "ts": ts,
             "tool": tool_name,
             "args": args,
             "duration_ms": round(duration_ms),
             "result_len": len(result),
-            "result_preview": result[:preview_limit].replace("\n", " "),
             "error": error,
             "source": source,
             "session": session,
         }
         with open(_CALLS_LOG, "a") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            rec = {**base, "result_preview": result[:preview_limit].replace("\n", " ")}
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+        if _FULL_LOG_ENABLED:
+            with open(_FULL_CALLS_LOG, "a") as f:
+                rec = {**base, "result": result}
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     except Exception:
         pass
 
