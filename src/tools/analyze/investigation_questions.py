@@ -1,145 +1,26 @@
-"""Dynamic investigation-questions section for analyze_task.
+"""Hand-curated investigation questions for analyze_task.
 
-Instead of canned keyword-triggered warnings, this module asks Gemini to
-generate task-specific investigation questions: concrete, actionable
-checks a senior engineer would run BEFORE writing any code. Each question
-should point at a file, function, or provider comparison that can be
-verified via MCP tools (search, provider_type_map, trace_chain, etc.).
+Each question is validated via blind LOO eval (see logs/blind_tests/).
+Questions must prove BAS improvement before being added.
 
-This is the "true proactivity" path — the questions are contextual, not
-regex-triggered, and they scale with the task description richness
-rather than with our keyword coverage.
+Toggle via env var: CODE_RAG_QUESTIONS_MODE = "off" | "q1" | "q1+q2" | ...
+Default: "off" (no questions injected).
 """
 from __future__ import annotations
 
-import json
 import os
-import re
-import sys
-from dataclasses import dataclass
-
-_MODEL = os.environ.get("CODE_RAG_QUESTIONS_MODEL", "gemini-2.5-flash")
-_MAX_QUESTIONS = int(os.environ.get("CODE_RAG_QUESTIONS_MAX", "8"))
 
 
-# The prompt template is the primary knob for autoresearch tuning.
-# Variants should be injected via CODE_RAG_QUESTIONS_PROMPT env var, or
-# by calling generate_investigation_questions(..., prompt_template=...)
-# directly from a tuning loop.
-DEFAULT_PROMPT_TEMPLATE = """\
-You are a senior payments-infra engineer doing a pre-implementation
-safety review. Given the task description below and a short summary of
-files that similar tasks historically touch, write {n} critical
-investigation questions the implementer MUST answer BEFORE writing any
-code.
-
-Requirements for each question:
-- Name a specific file, function, provider, or route — no generic advice.
-- Be answerable via concrete actions: grep, file read, provider comparison, git log, or a specific MCP tool call (provider_type_map, trace_chain, search, trace_field).
-- Focus on: cross-provider impact, scope boundaries, fallback chains,
-  convention violations vs sibling providers, and enumeration
-  completeness (switch / enum cases).
-- MANDATORY: at least one question MUST ask about scope boundaries —
-  which code paths / flows / entry points does this task actually
-  require vs which exist but should NOT be touched (dead code risk).
-- One question per line, numbered, no preamble, no trailing notes.
-
-TASK DESCRIPTION:
-{description}
-
-RELEVANT FILES (historical shared-file patterns matched or likely touched):
-{shared_summary}
-
-EXISTING PROVIDER CONTEXT: {provider}
-
-Output the {n} questions now:
-"""
-
-
-def _call_gemini(prompt: str) -> str | None:
-    """Minimal Gemini text call. Rotates keys on quota."""
-    try:
-        from src.config import GEMINI_API_KEYS
-    except Exception:
-        return None
-    if not GEMINI_API_KEYS:
-        return None
-    try:
-        from google import genai
-    except ImportError:
-        return None
-    last_err = None
-    for idx, api_key in enumerate(GEMINI_API_KEYS):
-        try:
-            client = genai.Client(api_key=api_key)
-            resp = client.models.generate_content(
-                model=_MODEL,
-                contents=[{"role": "user", "parts": [{"text": prompt}]}],
-                config={"temperature": 0.0},
-            )
-            return (resp.text or "").strip()
-        except Exception as e:
-            last_err = e
-            s = str(e)
-            if "429" in s or "RESOURCE_EXHAUSTED" in s or "quota" in s.lower():
-                print(f"[investigation_questions] key #{idx+1} quota, rotating", file=sys.stderr)
-                continue
-            print(f"[investigation_questions] Gemini call failed: {e}", file=sys.stderr)
-            return None
-    print(f"[investigation_questions] all keys exhausted: {last_err}", file=sys.stderr)
-    return None
-
-
-def _summarise_shared_files(shared_file_patterns: list[str]) -> str:
-    """One-line-per-file summary used to seed Gemini context."""
-    if not shared_file_patterns:
-        return "(no shared files detected yet)"
-    return "\n".join(f"- {p}" for p in shared_file_patterns[:10])
-
-
-def generate_investigation_questions(
-    description: str,
-    shared_file_patterns: list[str] | None = None,
-    provider: str = "",
-    n: int = _MAX_QUESTIONS,
-    prompt_template: str = DEFAULT_PROMPT_TEMPLATE,
-) -> list[str]:
-    """Return a list of Gemini-generated investigation questions.
-
-    Returns an empty list if Gemini is unavailable or the response
-    parses to zero questions — the caller should fall back to the
-    keyword-triggered shared_files branch in that case.
-    """
-    if not description or not description.strip():
-        return []
-    prompt = prompt_template.format(
-        description=description.strip(),
-        shared_summary=_summarise_shared_files(shared_file_patterns or []),
-        provider=provider or "(unknown)",
-        n=n,
-    )
-    raw = _call_gemini(prompt)
-    if not raw:
-        print("[investigation_questions] Gemini returned nothing", file=sys.stderr)
-        return []
-    # Parse numbered list.
-    lines = []
-    for line in raw.splitlines():
-        m = re.match(r"^\s*(?:\d+[.)]|\-|\*)\s*(.+?)\s*$", line)
-        if m:
-            q = m.group(1).strip()
-            if q and len(q) >= 10:
-                lines.append(q)
-    result = lines[:n]
-    # Observability: log generated questions to stderr (structured)
-    print(json.dumps({
-        "event": "investigation_questions_generated",
-        "count": len(result),
-        "provider": provider or "(unknown)",
-        "description_snippet": description.strip()[:120],
-        "questions": result,
-    }, ensure_ascii=False), file=sys.stderr)
-    return result
+# Registry of validated questions. Keys are question IDs, values are the text.
+# Add a new question ONLY after blind LOO test shows +BAS and vector uniqueness
+# vs existing questions.
+_QUESTIONS: dict[str, str] = {
+    "q1": (
+        "Compare each method and webhook handler with 2 sibling providers: "
+        "are all tx types (sale/refund/payout) routed? "
+        "Is paymentMethod threaded from request, not hardcoded?"
+    ),
+}
 
 
 def render_investigation_section(questions: list[str]) -> str:
@@ -147,7 +28,7 @@ def render_investigation_section(questions: list[str]) -> str:
     if not questions:
         return ""
     out = "## 🤔 Investigation Questions — answer these before writing code\n\n"
-    out += "_Dynamically generated for this task. Each question is actionable via search/provider_type_map/trace_chain._\n\n"
+    out += "_Each question is actionable via search / provider_type_map / trace_chain._\n\n"
     for i, q in enumerate(questions, 1):
         out += f"{i}. {q}\n"
     out += "\n"
@@ -155,39 +36,12 @@ def render_investigation_section(questions: list[str]) -> str:
 
 
 def section_investigation_questions(ctx) -> str:
-    """analyze_task orchestrator adapter — takes AnalysisContext, returns markdown.
-
-    Short-circuits to empty when:
-      - description too short
-      - CODE_RAG_DISABLE_INVESTIGATION_QUESTIONS env var is set
-      - Gemini returns nothing
-    """
-    # Hand-curated questions — tested via blind LOO eval.
-    # Each question must prove value (BAS improvement) before staying.
-    return render_investigation_section([
-        "Compare each method and webhook handler with 2 sibling providers: are all tx types (sale/refund/payout) routed? Is paymentMethod threaded from request, not hardcoded?",
-    ])
-    description = getattr(ctx, "description", "") or ""
-    if len(description.strip()) < 20:
+    """analyze_task orchestrator adapter — returns markdown block or empty string."""
+    mode = os.environ.get("CODE_RAG_QUESTIONS_MODE", "off")
+    if mode == "off":
         return ""
-    provider = getattr(ctx, "provider", "") or ""
-
-    # Always seed Gemini with the full shared_files list — no APM gate.
-    # Gemini naturally tailors questions to the task type. If non-APM,
-    # it asks infra/debugging questions instead (still useful). The APM
-    # gate stays only on the v1 SHARED FILE IMPACT section.
-    try:
-        from src.config import SHARED_FILES
-        patterns = [e.get("path_pattern", "") for e in (SHARED_FILES or []) if e.get("path_pattern")]
-    except Exception:
-        patterns = []
-
-    template = os.environ.get("CODE_RAG_QUESTIONS_PROMPT") or DEFAULT_PROMPT_TEMPLATE
-
-    questions = generate_investigation_questions(
-        description=description,
-        shared_file_patterns=patterns,
-        provider=provider,
-        prompt_template=template,
-    )
-    return render_investigation_section(questions)
+    selected: list[str] = []
+    for qid, qtext in _QUESTIONS.items():
+        if qid in mode:
+            selected.append(qtext)
+    return render_investigation_section(selected)
