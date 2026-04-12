@@ -162,8 +162,11 @@ def section_investigation_questions(ctx) -> str:
       - CODE_RAG_DISABLE_INVESTIGATION_QUESTIONS env var is set
       - Gemini returns nothing
     """
-    if os.environ.get("CODE_RAG_DISABLE_INVESTIGATION_QUESTIONS") == "1":
-        return ""
+    # Hand-curated questions — tested via blind LOO eval.
+    # Each question must prove value (BAS improvement) before staying.
+    return render_investigation_section([
+        "Compare each method and webhook handler with 2 sibling providers: are all tx types (sale/refund/payout) routed? Is paymentMethod threaded from request, not hardcoded?",
+    ])
     description = getattr(ctx, "description", "") or ""
     if len(description.strip()) < 20:
         return ""
