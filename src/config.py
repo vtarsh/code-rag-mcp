@@ -141,6 +141,7 @@ from src.models import get_model_config  # noqa: E402
 
 _model_cfg = get_model_config(EMBEDDING_MODEL_KEY)
 DB_PATH = BASE_DIR / "db" / "knowledge.db"
+DB_TASKS_PATH = BASE_DIR / "db" / "tasks.db"
 LANCE_PATH = BASE_DIR / "db" / _model_cfg.lance_dir
 
 

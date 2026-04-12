@@ -24,7 +24,7 @@ from pathlib import Path
 
 BASE_DIR = Path(os.getenv("CODE_RAG_HOME", Path.home() / ".code-rag-mcp"))
 RAW_DIR = BASE_DIR / "raw"
-DB_PATH = BASE_DIR / "db" / "knowledge.db"
+DB_PATH = BASE_DIR / "db" / "tasks.db"
 
 # Match: require('./foo'), require('../libs'), require('../libs/bar')
 REQUIRE_RE = re.compile(r"""require\(\s*['"](\.[^'"]+)['"]\s*\)""")

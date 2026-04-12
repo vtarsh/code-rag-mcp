@@ -39,6 +39,9 @@ Requirements for each question:
 - Focus on: cross-provider impact, scope boundaries, fallback chains,
   convention violations vs sibling providers, and enumeration
   completeness (switch / enum cases).
+- MANDATORY: at least one question MUST ask about scope boundaries —
+  which code paths / flows / entry points does this task actually
+  require vs which exist but should NOT be touched (dead code risk).
 - One question per line, numbered, no preamble, no trailing notes.
 
 TASK DESCRIPTION:
@@ -156,20 +159,13 @@ def section_investigation_questions(ctx) -> str:
         return ""
     provider = getattr(ctx, "provider", "") or ""
 
-    # Seed the LLM with shared_file patterns. When the APM context gate
-    # opens, pass the FULL shared_files list (not just keyword-matched
-    # ones) so Gemini has visibility into every high-risk file even when
-    # the task description uses paraphrased wording that misses keyword
-    # triggers. This is the paraphrase-robustness fix.
+    # Always seed Gemini with the full shared_files list — no APM gate.
+    # Gemini naturally tailors questions to the task type. If non-APM,
+    # it asks infra/debugging questions instead (still useful). The APM
+    # gate stays only on the v1 SHARED FILE IMPACT section.
     try:
         from src.config import SHARED_FILES
-        from src.tools.analyze.shared_sections import _has_apm_context
-        patterns: list[str] = []
-        if _has_apm_context(description, provider):
-            for entry in SHARED_FILES:
-                pat = entry.get("path_pattern", "")
-                if pat:
-                    patterns.append(pat)
+        patterns = [e.get("path_pattern", "") for e in (SHARED_FILES or []) if e.get("path_pattern")]
     except Exception:
         patterns = []
 

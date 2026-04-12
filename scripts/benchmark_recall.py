@@ -106,6 +106,10 @@ def run_benchmark(
 ) -> None:
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
+    # Attach tasks.db for task_history (lives in separate DB since arch fix).
+    _tasks_db = DB_PATH.parent / "tasks.db"
+    if _tasks_db.exists():
+        conn.execute(f"ATTACH DATABASE '{_tasks_db}' AS tasks")
 
     if single_task:
         condition = "ticket_id = ?"

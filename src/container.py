@@ -20,7 +20,7 @@ import threading
 from collections.abc import Callable, Generator
 from typing import Any, ParamSpec, TypeVar
 
-from src.config import CACHE_SIZE, DB_PATH, EMBEDDING_MODEL_KEY, LANCE_PATH, MMAP_SIZE
+from src.config import CACHE_SIZE, DB_PATH, DB_TASKS_PATH, EMBEDDING_MODEL_KEY, LANCE_PATH, MMAP_SIZE
 
 # --- Lazy-loaded singletons ---
 _lance_table: Any = None
@@ -32,6 +32,11 @@ def get_db() -> sqlite3.Connection:
     """Get a new database connection. Caller must close it.
 
     Prefer using ``db_connection()`` context manager for automatic cleanup.
+
+    Attaches ``tasks.db`` so supplementary tables (task_history,
+    internal_traces, method_matrix, etc.) are accessible via the same
+    connection without qualifying table names. This survives full
+    rebuilds of ``knowledge.db`` because tasks.db is a separate file.
     """
     global _wal_set
     conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
@@ -41,6 +46,9 @@ def get_db() -> sqlite3.Connection:
         _wal_set = True
     conn.execute(f"PRAGMA mmap_size={MMAP_SIZE}")
     conn.execute(f"PRAGMA cache_size={CACHE_SIZE}")
+    # Attach supplementary DB so task_history et al. are transparent.
+    if DB_TASKS_PATH.exists():
+        conn.execute(f"ATTACH DATABASE '{DB_TASKS_PATH}' AS tasks")
     return conn
 
 
