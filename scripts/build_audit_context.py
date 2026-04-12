@@ -63,6 +63,10 @@ def get_db() -> sqlite3.Connection:
         print(f"Error: database not found at {DB_PATH}", file=sys.stderr)
         sys.exit(1)
     conn = sqlite3.connect(str(DB_PATH))
+    # Attach tasks.db for supplementary tables (task_history etc.)
+    _tasks_db = DB_PATH.parent / "tasks.db"
+    if _tasks_db.exists():
+        conn.execute(f"ATTACH DATABASE '{_tasks_db}' AS tasks")
     conn.row_factory = sqlite3.Row
     return conn
 

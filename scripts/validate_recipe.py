@@ -147,6 +147,10 @@ def main():
     evidence_tasks = recipe.get("evidence", {}).get("sample_tasks", [])
 
     conn = sqlite3.connect(str(DB_PATH))
+    # Attach tasks.db for supplementary tables (task_history etc.)
+    _tasks_db = DB_PATH.parent / "tasks.db"
+    if _tasks_db.exists():
+        conn.execute(f"ATTACH DATABASE '{_tasks_db}' AS tasks")
 
     evidence = recipe.get("evidence", {})
     edge_case_tasks = evidence.get("edge_case_tasks", [])

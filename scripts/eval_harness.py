@@ -447,6 +447,9 @@ def main():
 
     conn = sqlite3.connect(str(DB))
     conn.row_factory = sqlite3.Row
+    _tasks_db = DB.parent / "tasks.db"
+    if _tasks_db.exists():
+        conn.execute(f"ATTACH DATABASE '{_tasks_db}' AS tasks")
 
     mode = "FINAL-RANK" if args.final_rank else "RECIPE"
     print(f"=== Eval mode: {mode} ===")

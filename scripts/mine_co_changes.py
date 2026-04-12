@@ -32,6 +32,9 @@ def is_pi_relevant(repo: str) -> bool:
 
 def mine(min_support: int = 3, min_confidence: float = 0.5, pi_only: bool = False):
     db = sqlite3.connect(str(DB_PATH))
+    _tasks_db = DB_PATH.parent / "tasks.db"
+    if _tasks_db.exists():
+        db.execute(f"ATTACH DATABASE '{_tasks_db}' AS tasks")
     rows = db.execute(
         "SELECT ticket_id, repos_changed FROM task_history "
         "WHERE repos_changed IS NOT NULL AND repos_changed != ''"
