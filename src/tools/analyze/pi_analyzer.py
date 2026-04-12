@@ -45,10 +45,12 @@ def count_matching_providers(conn: sqlite3.Connection, words: set[str]) -> int:
 def detect_provider(conn: sqlite3.Connection, words: set[str]) -> str:
     """Auto-detect provider name from task description words."""
     provider_names = _get_provider_names(conn)
-    for p in provider_names:
-        if p in words:
-            return p
-    return ""
+    matches = sorted(p for p in provider_names if p in words)
+    if not matches:
+        return ""
+    # Prefer non-ambiguous names over ambiguous ones (e.g. "paymend" > "checkout")
+    non_ambiguous = [p for p in matches if p not in _AMBIGUOUS_PROVIDER_NAMES]
+    return non_ambiguous[0] if non_ambiguous else matches[0]
 
 
 _BULK_PATTERNS = re.compile(

@@ -381,13 +381,12 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
     # CORE/BO/HS-specific sections (when not PI)
     output += _run_section("core_analysis", run_core_analysis, ctx, classification)
 
-    # For CORE-prefix tasks classified as PI, also run keyword scan
-    # (catches banking/workflow repos not found by PI analyzer)
-    prefix_match = re.search(r"(CORE|BO|HS)-\d+", description, re.IGNORECASE)
-    if prefix_match and classification.domain == "pi":
-        from .core_analyzer import _section_keyword_scan
+    # Keyword scan: repo-name matching + broad FTS for task keywords.
+    # Originally gated to CORE/BO/HS→PI cross-domain, but PI tasks also benefit
+    # (catches provider repos like grpc-providers-paymend from task description).
+    from .core_analyzer import _section_keyword_scan
 
-        output += _run_section("keyword_scan", _section_keyword_scan, ctx, classification)
+    output += _run_section("keyword_scan", _section_keyword_scan, ctx, classification)
 
     # npm_dep scan: check npm dependencies of found repos for task keyword matches
     output += _run_section("npm_dep_scan", _section_npm_dep_scan, ctx)

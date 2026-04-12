@@ -7,10 +7,15 @@ import sys
 
 from src.config import (
     CO_CHANGE_RULES,
+    COOCCUR_FORWARD_PROB,
+    COOCCUR_MIN_COUNT,
+    COOCCUR_REVERSE_MIN_COUNT,
+    COOCCUR_REVERSE_PROB,
     DOMAIN_PATTERNS,
     HUB_DOWNSTREAM_MIN_DEPENDENTS,
     HUB_NEVER_CASCADE,
     HUB_SHALLOW_CASCADE,
+    UNIVERSAL_PCT,
 )
 from src.graph.queries import bfs_dependents
 
@@ -398,7 +403,7 @@ def _section_co_occurrence(ctx: AnalysisContext) -> str:
     boosted: set[str] = set()
 
     # Signal 1: Universal CORE repos (>25% of all CORE tasks)
-    universal_threshold = len(rows) * 0.25
+    universal_threshold = len(rows) * UNIVERSAL_PCT
     universal: list[tuple[str, int]] = []
     for repo, cnt in repo_count.most_common():
         if cnt < universal_threshold:
@@ -422,13 +427,13 @@ def _section_co_occurrence(ctx: AnalysisContext) -> str:
     cooccur_boosted: dict[str, tuple[str, float]] = {}
     if finding_repos:
         for (f_repo, other), count in cooccur_count.items():
-            if count < 3 or other in finding_repos or other in boosted:
+            if count < COOCCUR_MIN_COUNT or other in finding_repos or other in boosted:
                 continue
             prob_forward = count / repo_count[f_repo]
             prob_reverse = count / repo_count[other] if repo_count[other] > 0 else 0
-            if prob_forward >= 0.4 and other not in cooccur_boosted:
+            if prob_forward >= COOCCUR_FORWARD_PROB and other not in cooccur_boosted:
                 cooccur_boosted[other] = (f_repo, prob_forward)
-            elif prob_reverse >= 0.80 and count >= 4 and other not in cooccur_boosted:
+            elif prob_reverse >= COOCCUR_REVERSE_PROB and count >= COOCCUR_REVERSE_MIN_COUNT and other not in cooccur_boosted:
                 cooccur_boosted[other] = (f_repo, prob_reverse)
 
     if cooccur_boosted:
@@ -629,8 +634,11 @@ def _section_keyword_scan(ctx: AnalysisContext, classification: TaskClassificati
 
     # Phase 2: Repo name matching — lower threshold (4+ chars) since repo names are specific
     all_repo_names = [r["name"] for r in ctx.conn.execute("SELECT name FROM repos").fetchall()]
+    _repo_name_set = set(all_repo_names)
     name_words = [w for w in ctx.words if len(w) >= 4 and w not in _KEYWORD_STOP_WORDS]
-    for keyword in name_words[:12]:
+    # Prioritize words that appear in a repo name (they're the most specific signals)
+    name_words.sort(key=lambda w: (0 if any(w in rn for rn in _repo_name_set) else 1, w))
+    for keyword in name_words[:20]:
         for rname in all_repo_names:
             if keyword in rname and rname not in already_found:
                 new_finds.setdefault(rname, []).append(f"{keyword}(name)")
