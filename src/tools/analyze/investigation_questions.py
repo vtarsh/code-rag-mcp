@@ -156,17 +156,20 @@ def section_investigation_questions(ctx) -> str:
         return ""
     provider = getattr(ctx, "provider", "") or ""
 
-    # Seed the LLM with the same shared_file patterns the keyword branch
-    # would emit, so it has some grounding.
+    # Seed the LLM with shared_file patterns. When the APM context gate
+    # opens, pass the FULL shared_files list (not just keyword-matched
+    # ones) so Gemini has visibility into every high-risk file even when
+    # the task description uses paraphrased wording that misses keyword
+    # triggers. This is the paraphrase-robustness fix.
     try:
-        from src.tools.analyze.shared_sections import (
-            _has_apm_context,
-            _match_shared_files_by_keywords,
-        )
+        from src.config import SHARED_FILES
+        from src.tools.analyze.shared_sections import _has_apm_context
         patterns: list[str] = []
         if _has_apm_context(description, provider):
-            for pat, _entry in _match_shared_files_by_keywords(description, provider):
-                patterns.append(pat)
+            for entry in SHARED_FILES:
+                pat = entry.get("path_pattern", "")
+                if pat:
+                    patterns.append(pat)
     except Exception:
         patterns = []
 
