@@ -63,6 +63,9 @@ from .shared_sections import (
     section_shared_files_warning,
     section_task_patterns,
 )
+from src.tools.analyze.investigation_questions import (
+    section_investigation_questions,
+)
 
 # Note: _BOLD_REPO_RE regex was removed — repo extraction now uses ctx.findings directly.
 # benchmark_recall.py still has its own copy for parsing markdown output externally.
@@ -345,6 +348,12 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
     # signal for review/audit tasks — appears before any data section so the agent
     # sees sibling provider names in its own context.
     output += _run_section("shared_files_warning", section_shared_files_warning, ctx)
+
+    # INVESTIGATION QUESTIONS: Gemini-generated task-specific checks the
+    # implementer must answer before writing code. This is the "true
+    # proactivity" path — contextual and paraphrase-robust, unlike the
+    # keyword-triggered shared_files branch which only matches known words.
+    output += _run_section("investigation_questions", section_investigation_questions, ctx)
 
     if repo_refs_output:
         output += repo_refs_output + "\n"
