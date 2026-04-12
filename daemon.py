@@ -213,13 +213,14 @@ def _log_call(
     try:
         from datetime import datetime, timezone
 
+        preview_limit = 3000 if tool_name == "analyze_task" else 300
         record = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "tool": tool_name,
             "args": args,
             "duration_ms": round(duration_ms),
             "result_len": len(result),
-            "result_preview": result[:300].replace("\n", " "),
+            "result_preview": result[:preview_limit].replace("\n", " "),
             "error": error,
             "source": source,
             "session": session,

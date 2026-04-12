@@ -459,10 +459,18 @@ def section_existing_tasks(ctx: AnalysisContext) -> str:
 
     seen_snippets: set[str] = set()
     results = []
+
+    # Build exclude variants for data-leakage prevention (blind eval)
+    _excl_variants: list[str] = []
+    if ctx.exclude_task_id:
+        _eid = extract_task_id(ctx.exclude_task_id) or ctx.exclude_task_id.lower()
+        _excl_variants.append(_eid)                    # e.g. "pi-60"
+        _excl_variants.append(_eid.replace("-", "_"))   # e.g. "pi_60"
+
     for q in queries:
         try:
             rows = ctx.conn.execute(
-                "SELECT repo_name, chunk_type, snippet(chunks, 0, '>>>', '<<<', '...', 30) as snippet "
+                "SELECT repo_name, file_path, chunk_type, snippet(chunks, 0, '>>>', '<<<', '...', 30) as snippet "
                 "FROM chunks WHERE chunks MATCH ? AND file_type = 'task' "
                 "AND chunk_type != 'task_progress' ORDER BY rank LIMIT 5",
                 (q,),
@@ -470,6 +478,11 @@ def section_existing_tasks(ctx: AnalysisContext) -> str:
             for row in rows:
                 if ctx.provider and ctx.provider not in row["repo_name"]:
                     continue
+                # Skip chunks belonging to the excluded task (data-leakage guard)
+                if _excl_variants:
+                    haystack = (row["repo_name"] + " " + (row["file_path"] or "")).lower()
+                    if any(v in haystack for v in _excl_variants):
+                        continue
                 snip = row["snippet"][:300]
                 if snip not in seen_snippets:
                     seen_snippets.add(snip)
@@ -816,6 +829,11 @@ def section_github(ctx: AnalysisContext) -> tuple[str, dict[str, list[dict]], di
 
     if not task_id:
         output += "No task ID detected. Add a task ID (e.g., 'PI-54') for PR/branch scanning.\n\n"
+        return output, pr_data, branch_data
+
+    # Data leakage guard: skip GitHub API calls when evaluating the excluded task
+    if ctx.exclude_task_id and task_id.upper() == ctx.exclude_task_id.upper():
+        output += f"**Task ID detected**: `{task_id}` (skipped — excluded for eval)\n\n"
         return output, pr_data, branch_data
 
     output += f"**Task ID detected**: `{task_id}`\n\n"

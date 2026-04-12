@@ -120,6 +120,7 @@ def generate_investigation_questions(
     )
     raw = _call_gemini(prompt)
     if not raw:
+        print("[investigation_questions] Gemini returned nothing", file=sys.stderr)
         return []
     # Parse numbered list.
     lines = []
@@ -129,7 +130,16 @@ def generate_investigation_questions(
             q = m.group(1).strip()
             if q and len(q) >= 10:
                 lines.append(q)
-    return lines[:n]
+    result = lines[:n]
+    # Observability: log generated questions to stderr (structured)
+    print(json.dumps({
+        "event": "investigation_questions_generated",
+        "count": len(result),
+        "provider": provider or "(unknown)",
+        "description_snippet": description.strip()[:120],
+        "questions": result,
+    }, ensure_ascii=False), file=sys.stderr)
+    return result
 
 
 def render_investigation_section(questions: list[str]) -> str:
