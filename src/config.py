@@ -60,7 +60,6 @@ CONFIG: dict = json.loads(_config_path.read_text()) if _config_path.exists() els
 # --- Org config ---
 ORG: str = CONFIG.get("org", "my-org")
 NPM_SCOPE: str = CONFIG.get("npm_scope", f"@{ORG}")
-SERVER_NAME: str = CONFIG.get("server_name", "code-knowledge")
 DISPLAY_NAME: str = CONFIG.get("display_name", f"{ORG} Knowledge Base")
 GRPC_DOMAIN_SUFFIX: str = CONFIG.get("grpc_domain_suffix", "")
 
