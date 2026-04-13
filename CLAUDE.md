@@ -5,7 +5,7 @@ Git: vtarsh/code-rag-mcp (personal account).
 Python 3.12, FastMCP, SQLite FTS5, LanceDB, CrossEncoder reranker.
 
 **Key docs** (read for full context):
-- `ARCHITECTURE.md` — system design, analyze_task package, 20 mechanisms, conventions.yaml
+- `ARCHITECTURE.md` — system design, analyze_task package, 10 mechanisms, conventions.yaml
 - `.claude/rules/conventions.md` — always-loaded generic rules (12 lines)
 - `.claude/docs/` — data-changes, workflow-cycles (on-demand generic reference)
 - `profiles/pay-com/docs/rules/` — provider-code, impact-audit, audit-orchestration, provider-docs-first, rag-tuning
@@ -16,8 +16,8 @@ Python 3.12, FastMCP, SQLite FTS5, LanceDB, CrossEncoder reranker.
 ## Commands
 
 ```bash
-# Tests
-cd ~/.code-rag-mcp && python -m pytest tests/ -q
+# Tests (Python 3.11+ required for ParamSpec / datetime.UTC)
+cd ~/.code-rag-mcp && python3.12 -m pytest tests/ -q
 
 # Benchmarks (run after search pipeline changes)
 python scripts/benchmark_queries.py && python scripts/benchmark_realworld.py
@@ -32,7 +32,8 @@ make build  # or: ACTIVE_PROFILE=my-org ./scripts/full_update.sh --full
 # Start daemon (normally auto-started by launchd, or by mcp_server.py proxy)
 python daemon.py
 
-# Incremental build (only changed repos, seconds vs 30min)
+# Incremental build (only changed repos; ~30-60 min typical when many repos changed)
+# NOTE: full rebuild (`make build`) peaks ~20GB RAM, run overnight on 16GB Macs
 python scripts/build_index.py --incremental
 
 # MCP proxy (auto-started by Claude Code/Desktop -> forwards to daemon)
@@ -52,10 +53,17 @@ See `ARCHITECTURE.md` for full system design, dependency direction, and module m
 Summary: `daemon.py` (HTTP on :8742, holds ML models) + `mcp_server.py` (thin stdio proxy).
 All sessions share one daemon process. Proxy auto-starts daemon if not running.
 
-## Tools (12 total)
+## Tools (11 MCP + 6 daemon-only)
+
+11 tools exposed via `mcp_server.py` for Claude Code: search, analyze_task, trace_field,
+trace_chain, trace_flow, trace_impact, trace_internal, repo_overview, list_repos,
+provider_type_map, health_check.
+
+6 additional tools routed through `daemon.py` (accessible via `cli.py` HTTP client for
+sub-agents without MCP access): find_dependencies, context_builder, visualize_graph,
+diff_provider_config, search_task_history, plus legacy aliases.
 
 Single source of truth for tool list: `~/.claude/CLAUDE.md` (MCP Pay-Knowledge Tools section).
-Key tools: `search`, `analyze_task`, `context_builder`, `trace_flow`, `find_dependencies`.
 
 ## MCP Call Tracker
 

@@ -27,8 +27,9 @@ dependency tracing, and task analysis tools via Model Context Protocol.
 │       ├── context.py (context_builder)                      │
 │       └── service.py (repo_overview, health_check, etc.)    │
 ├─────────────────────────────────────────────────────────────┤
-│ db/knowledge.db  (SQLite FTS5, ~70MB)                       │
-│ db/vectors.lance.coderank/ (LanceDB embeddings, ~170MB)     │
+│ db/knowledge.db  (SQLite FTS5, ~130MB)                      │
+│ db/vectors.lance.coderank/ (LanceDB, ~211MB — active or fallback) │
+│ db/vectors.lance.gemini/   (LanceDB, ~278MB — coexists)     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -138,12 +139,12 @@ domain_patterns:
 ## Build Pipeline
 
 ```bash
-make build                    # Full: clone → extract → index → graph → vectors (~30 min)
+make build                    # Full: clone → extract → index → graph → vectors (~2-4h; ~20GB RAM peak)
 
 # Individual steps:
 scripts/extract_artifacts.py  # Parse repos → extracted/ (fills repos.org_deps)
 scripts/build_index.py        # Build FTS5 chunks + code_facts
-scripts/build_graph.py        # Build graph_edges (29 edge types, ~14.9k edges)
+scripts/build_graph.py        # Build graph_edges (29 edge types, ~15.5k edges)
 scripts/build_vectors.py      # Build LanceDB embeddings
 ```
 
