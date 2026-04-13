@@ -42,7 +42,8 @@ def run_core_analysis(ctx: AnalysisContext, classification: TaskClassification) 
     output += _section_bulk_migration(ctx)
     output += _section_provider_fanout(ctx)
     output += _section_function_search(ctx)
-    output += _section_keyword_scan(ctx, classification)
+    # NOTE: _section_keyword_scan is called from __init__.py:389 for all domains
+    # (PI + CORE + BO + HS), not here, to avoid duplicate invocation on CORE tasks.
     return output
 
 
