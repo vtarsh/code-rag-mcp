@@ -53,15 +53,15 @@ See `ARCHITECTURE.md` for full system design, dependency direction, and module m
 Summary: `daemon.py` (HTTP on :8742, holds ML models) + `mcp_server.py` (thin stdio proxy).
 All sessions share one daemon process. Proxy auto-starts daemon if not running.
 
-## Tools (11 MCP + 6 daemon-only)
+## Tools (11 MCP + 5 daemon-only)
 
 11 tools exposed via `mcp_server.py` for Claude Code: search, analyze_task, trace_field,
 trace_chain, trace_flow, trace_impact, trace_internal, repo_overview, list_repos,
 provider_type_map, health_check.
 
-6 additional tools routed through `daemon.py` (accessible via `cli.py` HTTP client for
+5 additional tools routed through `daemon.py` (accessible via `cli.py` HTTP client for
 sub-agents without MCP access): find_dependencies, context_builder, visualize_graph,
-diff_provider_config, search_task_history, plus legacy aliases.
+diff_provider_config, search_task_history.
 
 Single source of truth for tool list: `~/.claude/CLAUDE.md` (MCP Pay-Knowledge Tools section).
 

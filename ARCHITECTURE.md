@@ -17,7 +17,6 @@ dependency tracing, and task analysis tools via Model Context Protocol.
 │   └── localhost:8742                                        │
 ├─────────────────────────────────────────────────────────────┤
 │ src/                                                        │
-│   server.py ─── tool registration                           │
 │   config.py ─── profile loading, conventions.yaml           │
 │   container.py ── DB connections, ML model preload          │
 │   ├── search/  (FTS5 + LanceDB + CrossEncoder)              │
