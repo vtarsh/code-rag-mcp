@@ -260,6 +260,15 @@ GH_CACHE_MAX: int = int(_tuning.get("gh_cache_max", 256))
 MMAP_SIZE: int = int(_tuning.get("mmap_size", 268435456))
 CACHE_SIZE: int = int(_tuning.get("cache_size", -32000))
 
+# Co-occurrence boost tuning (extracted from core_analyzer.py hardcoded values)
+COOCCUR_MIN_COUNT: int = int(_tuning.get("cooccur_min_count", 3))
+COOCCUR_FORWARD_PROB: float = float(_tuning.get("cooccur_forward_prob", 0.4))
+COOCCUR_REVERSE_PROB: float = float(_tuning.get("cooccur_reverse_prob", 0.80))
+COOCCUR_REVERSE_MIN_COUNT: int = int(_tuning.get("cooccur_reverse_min_count", 4))
+
+# Universal repo detection threshold (fraction of tasks)
+UNIVERSAL_PCT: float = float(_tuning.get("universal_pct", 0.25))
+
 # --- Graph constants ---
 # Meaningful edge types for flow tracing (ordered by signal strength).
 # These are generic — not org-specific.
