@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Embed only chunks that are missing vectors in LanceDB.
+"""Sync LanceDB vectors with SQLite chunks by rowid.
 
-Recovers from partial cleanup incidents where SQLite chunks exist but
-their corresponding LanceDB vectors were deleted. Compares by rowid
-across both stores, embeds only the missing rows, appends to LanceDB.
+Full reconciliation:
+  1. Embed chunks missing from LanceDB (SQLite has → LanceDB needs)
+  2. Delete orphan vectors (LanceDB has → SQLite no longer has)
+  3. Rebuild ANN index if row count changed
 
-Does NOT delete anything. Does NOT touch existing vectors. Additive only.
+Ensures chunks == vectors post-run. Safe to run after any incremental
+re-index that touched SQLite chunks (build_index.py --incremental).
 
 Usage:
     CODE_RAG_HOME=~/.code-rag-mcp ACTIVE_PROFILE=pay-com \
@@ -60,7 +62,7 @@ def main() -> None:
         print(f"ERROR: {db_path} does not exist", file=sys.stderr)
         sys.exit(1)
 
-    print(f"[1/5] Loading {model_key} embedding model...")
+    print(f"[1/6] Loading {model_key} embedding model...")
     start = time.time()
     model, mcfg = load_model(model_key)
     print(f"  Loaded in {time.time() - start:.1f}s")
@@ -70,43 +72,58 @@ def main() -> None:
         print(f"ERROR: {lance_path} does not exist", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\n[2/5] Reading SQLite chunks from {db_path}...")
+    print(f"\n[2/6] Reading SQLite chunks from {db_path}...")
     conn = sqlite3.connect(str(db_path))
     sqlite_rows = conn.execute(
         "SELECT rowid, content, repo_name, file_path, file_type, chunk_type FROM chunks ORDER BY rowid"
     ).fetchall()
     conn.close()
     sqlite_by_rowid = {r[0]: r for r in sqlite_rows}
+    sqlite_rowid_set = set(sqlite_by_rowid.keys())
     print(f"  {len(sqlite_by_rowid)} chunks total in SQLite")
 
-    print(f"\n[3/5] Reading existing vectors from {lance_path}...")
+    print(f"\n[3/6] Reading existing vectors from {lance_path}...")
     db = lancedb.connect(str(lance_path))
     table = db.open_table("chunks")
     df = table.to_pandas()
     existing_rowids = set(df["rowid"].astype(int).tolist())
     print(f"  {len(existing_rowids)} existing vectors in LanceDB")
 
-    missing_rowids = sorted(set(sqlite_by_rowid.keys()) - existing_rowids)
-    print(f"  {len(missing_rowids)} missing rowids — need embedding")
+    missing_rowids = sorted(sqlite_rowid_set - existing_rowids)
+    orphan_rowids = sorted(existing_rowids - sqlite_rowid_set)
+    print(f"  {len(missing_rowids)} missing rowids (need embedding)")
+    print(f"  {len(orphan_rowids)} orphan rowids (need deletion)")
 
-    if not missing_rowids:
+    if not missing_rowids and not orphan_rowids:
         print("\nNothing to do. Store is already consistent.")
         return
 
-    print(f"\n[4/5] Embedding {len(missing_rowids)} chunks...")
-    missing_rows = [sqlite_by_rowid[rid] for rid in missing_rowids]
-    data = embed_simple(model, missing_rows, mcfg)
+    index_dirty = False
 
-    print(f"\n[5/5] Appending {len(data)} vectors to LanceDB...")
-    table.add(data)
+    if missing_rowids:
+        print(f"\n[4/6] Embedding {len(missing_rowids)} missing chunks...")
+        missing_rows = [sqlite_by_rowid[rid] for rid in missing_rowids]
+        data = embed_simple(model, missing_rows, mcfg)
+        print(f"\n[5/6] Appending {len(data)} vectors to LanceDB...")
+        table.add(data)
+        index_dirty = True
+
+    if orphan_rowids:
+        print(f"\n[5/6] Deleting {len(orphan_rowids)} orphan vectors in batches of 500...")
+        for i in range(0, len(orphan_rowids), 500):
+            batch = orphan_rowids[i : i + 500]
+            table.delete(f"rowid IN ({','.join(str(r) for r in batch)})")
+            if i % 5000 == 0 or i + 500 >= len(orphan_rowids):
+                print(f"  {min(i + 500, len(orphan_rowids))}/{len(orphan_rowids)}")
+        index_dirty = True
+
     new_total = table.count_rows()
-    print(f"  New total: {new_total} vectors")
+    print(f"\nLanceDB total: {new_total} vectors")
 
-    # Rebuild ANN index since we added new rows
-    if new_total >= 256:
+    if index_dirty and new_total >= 256:
         num_partitions = min(64 if mcfg.dim >= 512 else 32, new_total // 4)
         num_sub_vectors = min(48 if mcfg.dim >= 512 else 16, mcfg.dim)
-        print(f"  Rebuilding ANN index ({num_partitions} partitions)...")
+        print(f"\n[6/6] Rebuilding ANN index ({num_partitions} partitions)...")
         idx_start = time.time()
         table.create_index(
             metric="cosine",
@@ -116,7 +133,10 @@ def main() -> None:
         )
         print(f"  Index rebuilt in {time.time() - idx_start:.1f}s")
 
-    print(f"\nDone. Embedded {len(data)} missing chunks for {model_key}.")
+    print(
+        f"\nDone. Added {len(missing_rowids)}, removed {len(orphan_rowids)} "
+        f"for {model_key}. Final: {new_total} vectors."
+    )
 
 
 if __name__ == "__main__":

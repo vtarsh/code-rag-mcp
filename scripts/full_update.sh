@@ -167,6 +167,14 @@ print('ok')
     else
       python3 "$SCRIPTS_DIR/build_vectors.py" --model="$MODEL_KEY" --force 2>&1 | tail -3
     fi
+
+    # Step 5b: Sync missing doc vectors — build_index.py re-indexes profile docs
+    # (gotchas/flows/references/providers) which creates new SQLite rowids, but
+    # build_vectors.py --repos=X only touches the listed code repos. This syncs
+    # both sides and prunes orphans so chunks == vectors after every run.
+    echo ""
+    echo "[5b/7] Syncing doc vectors (missing + orphan cleanup)..."
+    python3 "$SCRIPTS_DIR/embed_missing_vectors.py" --model="$MODEL_KEY" 2>&1 | tail -5
   fi
 
   # Step 6: Build shadow types (YAMLs for each known provider)
@@ -219,6 +227,25 @@ echo ""
 echo "[post] Regenerating repo facts + staleness report..."
 python3 "$SCRIPTS_DIR/gen_repo_facts.py" 2>&1 | tail -3
 python3 "$SCRIPTS_DIR/detect_doc_staleness.py" 2>&1 | tail -3
+
+# Always-run: append health check snapshot to history log.
+# Gives a per-run record that chunks==vectors, graph OK, etc.
+# Reads via the daemon HTTP endpoint so it reflects the running process state.
+echo ""
+echo "[post] Appending health check to history..."
+HEALTH_LOG="$LOG_DIR/health_history.log"
+{
+  echo "=== $(date -Iseconds) ==="
+  if curl -s --max-time 10 -X POST "http://localhost:8742/tool/health_check" \
+       -H "Content-Type: application/json" -d '{}' 2>&1; then
+    echo ""
+  else
+    echo "ERROR: daemon not responding at localhost:8742"
+  fi
+  echo ""
+} >> "$HEALTH_LOG" 2>&1
+# Prune health log (keep last 200 snapshots)
+tail -n 4000 "$HEALTH_LOG" > "$HEALTH_LOG.tmp" && mv "$HEALTH_LOG.tmp" "$HEALTH_LOG" 2>/dev/null || true
 
 # Cleanup
 rm -f "$STATE_BEFORE"
