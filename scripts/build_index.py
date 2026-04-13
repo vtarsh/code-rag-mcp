@@ -710,7 +710,10 @@ def delete_repo_chunks(conn: sqlite3.Connection, repo_name: str) -> int:
 
 
 def delete_repo_data(conn: sqlite3.Connection, repo_name: str) -> int:
-    """Delete all data for a repo: chunks, chunk_meta, code_facts, code_facts_fts, repos row.
+    """Delete all SQLite data for a repo: chunks, chunk_meta, code_facts, code_facts_fts, repos row.
+
+    SQLite-only. For full cross-layer cleanup (including LanceDB vectors),
+    use ``reset_repo_all_layers()``.
 
     Returns count of deleted chunk rows.
     """
@@ -737,6 +740,64 @@ def delete_repo_data(conn: sqlite3.Connection, repo_name: str) -> int:
     conn.execute("DELETE FROM repos WHERE name = ?", (repo_name,))
 
     return len(rowids)
+
+
+def _delete_lancedb_repo(lance_dir_name: str, repo_name: str) -> int:
+    """Delete all vectors for a repo from one LanceDB store.
+
+    Returns count of deleted rows, or 0 if the store doesn't exist / is empty.
+    """
+    lance_path = _BASE_DIR / "db" / lance_dir_name
+    if not lance_path.exists():
+        return 0
+    try:
+        import lancedb
+    except ImportError:
+        print(f"  WARNING: lancedb not installed, skipping {lance_dir_name}", file=sys.stderr)
+        return 0
+    try:
+        db = lancedb.connect(str(lance_path))
+        if "chunks" not in db.table_names():
+            return 0
+        table = db.open_table("chunks")
+        before = table.count_rows()
+        safe = repo_name.replace("'", "''")
+        table.delete(f"repo_name = '{safe}'")
+        return before - table.count_rows()
+    except Exception as e:
+        print(f"  WARNING: could not clean {lance_dir_name} for {repo_name}: {e}", file=sys.stderr)
+        return 0
+
+
+def reset_repo_all_layers(conn: sqlite3.Connection, repo_name: str) -> dict[str, int]:
+    """Fully reset all data for a single repo across ALL storage layers.
+
+    Cleans:
+      1-5. SQLite: chunks, chunk_meta, code_facts, code_facts_fts, repos
+      6.   LanceDB vectors.lance.coderank (if exists)
+      7.   LanceDB vectors.lance.gemini (if exists)
+
+    NOT cleaned here (by design):
+      - graph_edges / graph_nodes — graph is rebuilt as a whole, never per-repo
+        (see scripts/build_graph.py which always DROPs and rebuilds)
+      - raw/, extracted/ — filesystem artifacts, untouched by SQLite cleanup
+
+    Use this whenever a repo needs to be removed or fully re-indexed to
+    prevent orphan vectors (which `delete_repo_data` alone leaves behind).
+
+    CAUTION: ``repo_name`` can be a pseudo-repo used for scraped docs
+    (e.g. ``silverflow-docs``, ``volt-docs``, ``provider-worldpay-*``,
+    ``apm-redirect-flow``). These are legitimate rows in SQLite ``chunks``
+    and LanceDB — never bulk-delete them based on ``repos`` table absence.
+    Pass only a known, verified repo name.
+
+    Returns dict with per-layer deletion counts.
+    """
+    stats: dict[str, int] = {}
+    stats["sqlite_chunks"] = delete_repo_data(conn, repo_name)
+    stats["lance_coderank"] = _delete_lancedb_repo("vectors.lance.coderank", repo_name)
+    stats["lance_gemini"] = _delete_lancedb_repo("vectors.lance.gemini", repo_name)
+    return stats
 
 
 def load_existing_shas(conn: sqlite3.Connection) -> dict[str, str]:
@@ -1859,6 +1920,27 @@ def index_test_scripts(conn: sqlite3.Connection) -> tuple[int, int]:
 
 
 def main():
+    # Early-exit flags (don't require extracted artifacts)
+    reset_target = None
+    for arg in sys.argv[1:]:
+        if arg.startswith("--reset-repo="):
+            reset_target = arg.split("=", 1)[1]
+
+    if reset_target:
+        if not DB_PATH.exists():
+            print(f"Error: {DB_PATH} does not exist.")
+            sys.exit(1)
+        conn = sqlite3.connect(str(DB_PATH))
+        try:
+            stats = reset_repo_all_layers(conn, reset_target)
+            conn.commit()
+        finally:
+            conn.close()
+        print(f"Reset '{reset_target}':")
+        for layer, n in stats.items():
+            print(f"  {layer}: {n} rows deleted")
+        return
+
     if not EXTRACTED_DIR.exists() or not INDEX_FILE.exists():
         print("Error: Run extract_artifacts.py first.")
         sys.exit(1)
