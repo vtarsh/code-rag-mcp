@@ -2136,6 +2136,9 @@ def main():
             # Update build info with global counts
             total_chunks_global = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
             total_repos_global = conn.execute("SELECT COUNT(*) FROM repos").fetchone()[0]
+            total_files_global = conn.execute(
+                "SELECT COUNT(DISTINCT file_path || '|' || repo_name) FROM chunks"
+            ).fetchone()[0]
 
             conn.execute(
                 "INSERT OR REPLACE INTO build_info(key, value) VALUES (?, ?)",
@@ -2146,7 +2149,8 @@ def main():
                 ("total_chunks", str(total_chunks_global)),
             )
             conn.execute(
-                "INSERT OR REPLACE INTO build_info(key, value) VALUES (?, ?)", ("total_files", str(total_files))
+                "INSERT OR REPLACE INTO build_info(key, value) VALUES (?, ?)",
+                ("total_files", str(total_files_global)),
             )
             conn.execute(
                 "INSERT OR REPLACE INTO build_info(key, value) VALUES (?, ?)", ("total_repos", str(total_repos_global))
