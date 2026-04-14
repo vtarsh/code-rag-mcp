@@ -172,9 +172,13 @@ print('ok')
     # (gotchas/flows/references/providers) which creates new SQLite rowids, but
     # build_vectors.py --repos=X only touches the listed code repos. This syncs
     # both sides and prunes orphans so chunks == vectors after every run.
+    # ALWAYS use gemini for sync — coderank fallback would load local model and
+    # may OOM the daemon on small Macs. If Gemini API is down, skip sync (chunks
+    # will reconcile on next run when API recovers) rather than crash the cron.
     echo ""
-    echo "[5b/7] Syncing doc vectors (missing + orphan cleanup)..."
-    python3 "$SCRIPTS_DIR/embed_missing_vectors.py" --model="$MODEL_KEY" 2>&1 | tail -5
+    echo "[5b/7] Syncing doc vectors (missing + orphan cleanup, gemini)..."
+    python3 "$SCRIPTS_DIR/embed_missing_vectors.py" --model=gemini 2>&1 | tail -10 || \
+        echo "  ⚠️ sync failed (Gemini API likely unavailable) — chunks/vectors will reconcile next run"
   fi
 
   # Step 6: Build shadow types (YAMLs for each known provider)
