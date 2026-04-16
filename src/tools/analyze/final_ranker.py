@@ -48,6 +48,7 @@ STRONG_SOURCES = frozenset({
     "repo_ref",            # literally named in description
     "pr_url_signal",       # PR URL in description
     "co_change_rule",      # curated co-change pair from conventions.yaml
+    "critical_trigger",    # infra repo's keyword_triggers matched (see pi_analyzer §10)
 })
 
 MEDIUM_SOURCES = frozenset({

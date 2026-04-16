@@ -40,6 +40,7 @@ __all__ = [
     "analyze_task_tool",
 ]
 from .pi_analyzer import (
+    promote_critical_infra,
     section_bulk_providers,
     section_change_impact,
     section_impact,
@@ -191,12 +192,41 @@ def _extract_repo_refs(ctx: AnalysisContext) -> str:
     return output
 
 
+# Words that appear in many task descriptions but are not task-specific
+# signals. Searching FTS for them returns almost every repo — producing
+# noise in the npm_dep_scan section (e.g. "existing", "through"). These are
+# additional to the base _KEYWORD_STOP_WORDS set used elsewhere.
+_NPM_SCAN_STOP_WORDS = frozenset({
+    "should", "which", "where", "their", "about", "these", "those",
+    "would", "could", "check", "start", "needs",
+    # Narrative words that match almost any repo's content:
+    "existing", "through", "support", "handle", "other", "provider",
+    "service", "server", "after", "before", "without",
+    # Generic keywords that pull in too many repos:
+    "account",  # matches every banking/merchant repo regardless of task
+})
+
+
 def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
     """Scan npm_dep edges from found repos for task keyword matches.
 
     Catches shared libraries like node-libs-common that have provider-specific
     code but aren't found via cascade (too many dependents = deprioritized).
+
+    Exclusions:
+    - Repos already flagged as STRONG evidence in ``ctx.findings`` are skipped
+      here so they don't appear twice (e.g. a ``critical_trigger`` repo in
+      §10 must not re-surface as a low-confidence "npm dependency" entry).
+    - Stop words in ``_NPM_SCAN_STOP_WORDS`` are filtered out — they match
+      almost any repo and drown out the real signal.
     """
+    # Skip repos already flagged by targeted analyzers. Listing them here
+    # just duplicates the signal and pushes the peripheral count up.
+    _STRONG_FTYPES = frozenset({
+        "critical_trigger", "provider", "proto", "webhook", "gateway",
+        "domain_template", "repo_ref", "co_change_rule", "recipe",
+    })
+    strong_repos = {f.repo for f in ctx.findings if f.ftype in _STRONG_FTYPES}
     finding_repos = {f.repo for f in ctx.findings}
     if not finding_repos:
         return ""
@@ -213,8 +243,11 @@ def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
             ).fetchall()
             for row in rows:
                 target = row["target"]
-                if target not in finding_repos and target not in dep_repos:
-                    dep_repos[target] = repo
+                if target in finding_repos or target in dep_repos:
+                    continue
+                if target in strong_repos:
+                    continue
+                dep_repos[target] = repo
         except Exception as e:
             print(f"[npm_dep_scan] query failed for repo '{repo}': {e}", file=sys.stderr)
             continue
@@ -222,26 +255,9 @@ def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
     if not dep_repos:
         return ""
 
-    # Check which dep repos have task keywords in their content
     keywords = [
-        w
-        for w in ctx.words
-        if len(w) >= 4
-        and w
-        not in {
-            "should",
-            "which",
-            "where",
-            "their",
-            "about",
-            "these",
-            "those",
-            "would",
-            "could",
-            "check",
-            "start",
-            "needs",
-        }
+        w for w in ctx.words
+        if len(w) >= 4 and w not in _NPM_SCAN_STOP_WORDS
     ]
     if ctx.provider:
         keywords = [ctx.provider] + keywords[:4]
@@ -251,8 +267,12 @@ def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
     if not keywords:
         return ""
 
-    new_finds: list[tuple[str, str, str]] = []  # (repo, via, keyword)
+    # Collect ALL matching keywords per repo (don't stop at first hit).
+    # A repo that matches 3 distinct task keywords is a stronger signal
+    # than one matching a single generic keyword ("error", "payments").
+    per_repo: dict[str, tuple[str, list[str]]] = {}  # repo → (via, [matched_kws])
     for dep_repo, via_repo in dep_repos.items():
+        matched_kws: list[str] = []
         for kw in keywords:
             try:
                 hit = ctx.conn.execute(
@@ -260,20 +280,52 @@ def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
                     (dep_repo, f'"{kw}"'),
                 ).fetchone()
                 if hit:
-                    new_finds.append((dep_repo, via_repo, kw))
-                    break
+                    matched_kws.append(kw)
             except Exception as e:
                 print(f"[npm_dep_scan] FTS query failed for '{kw}' in '{dep_repo}': {e}", file=sys.stderr)
                 continue
+        if matched_kws:
+            per_repo[dep_repo] = (via_repo, matched_kws)
 
-    if not new_finds:
+    if not per_repo:
         return ""
 
-    output = "## npm Dependency Scan\n\n"
-    output += "_Shared libraries with task keyword matches (via npm_dep edges):_\n\n"
-    for repo, via, kw in new_finds:
+    # Rank: (a) repos matching MORE distinct keywords first, then (b) by
+    # the most task-specific keyword in the matches. Compound/underscored
+    # keywords are strongest; short generic ones like "error" are weakest.
+    def _kw_weight(kw: str) -> int:
+        return len(kw) + (10 if ("_" in kw or "-" in kw) else 0)
+
+    def _repo_score(item: tuple[str, tuple[str, list[str]]]) -> tuple[int, int]:
+        _, (_, kws) = item
+        return (len(kws), max(_kw_weight(k) for k in kws))
+
+    ranked = sorted(per_repo.items(), key=_repo_score, reverse=True)
+
+    # Always record findings (low confidence) so downstream sections see them.
+    for repo, _ in ranked:
         ctx.findings.append(Finding("npm_dep_scan", repo, "low"))
-        output += f"  - **{repo}** — `{kw}` found (dep of {via})\n"
+
+    VISIBLE = 5
+    shown = ranked[:VISIBLE]
+    hidden = ranked[VISIBLE:]
+
+    output = "## npm Dependency Scan\n\n"
+    output += (
+        "_Shared libraries with task-keyword matches (via npm_dep edges, "
+        "ranked by distinct matched keywords):_\n\n"
+    )
+    for repo, (via, kws) in shown:
+        kws_str = ", ".join(f"`{k}`" for k in kws[:3])
+        more = f" (+{len(kws) - 3})" if len(kws) > 3 else ""
+        output += f"  - **{repo}** — {kws_str}{more} found (dep of {via})\n"
+    if hidden:
+        output += f"\n<details>\n<summary>…and {len(hidden)} more (collapsed)</summary>\n\n"
+        for repo, (via, kws) in hidden:
+            kws_str = ", ".join(f"`{k}`" for k in kws[:3])
+            more = f" (+{len(kws) - 3})" if len(kws) > 3 else ""
+            output += f"  - **{repo}** — {kws_str}{more} found (dep of {via})\n"
+        output += "\n</details>\n"
     output += "\n"
     return output
 
@@ -339,6 +391,12 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
     header += "SUMMARY_PLACEHOLDER\n"
 
     output = ""
+
+    # Promote infra_repos with matching keyword_triggers to high-confidence
+    # findings BEFORE any analyzer runs. Downstream sections (npm_dep_scan,
+    # completeness, final_ranker) can then treat them as STRONG evidence
+    # and avoid double-counting them as low-confidence noise.
+    _run_section("promote_critical_infra", promote_critical_infra, ctx)
 
     # Meta-guard: warn if query overlaps heavily with a stored task (first section).
     output += _run_section("meta_guard", section_meta_guard, ctx)

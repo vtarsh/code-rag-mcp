@@ -257,36 +257,146 @@ def section_change_impact(ctx: AnalysisContext) -> str:
     return output
 
 
+_TOKEN_RE = re.compile(r"[a-zA-Z0-9]+")
+
+
+def _description_tokens(description: str) -> set[str]:
+    """Split description into lowercase alphanumeric tokens.
+
+    Uses non-alphanumeric separators (whitespace, ``_``, ``-``, punctuation)
+    so that ``eu_bank_account`` yields ``{eu, bank, account}``. This lets
+    trigger keywords match word-by-word without the substring false positives
+    of ``"check" in "checkout"``.
+    """
+    return {m.group(0).lower() for m in _TOKEN_RE.finditer(description)}
+
+
+def _matched_triggers(triggers: list[str], desc_tokens: set[str]) -> list[str]:
+    """Return the triggers whose tokens are all present in ``desc_tokens``.
+
+    A trigger can be a single word (``sepa``) or a compound
+    (``bank_account``, ``name verification``). Both forms are tokenised and
+    all parts must be present (order-independent). Returns a sorted,
+    de-duplicated list preserving the original trigger strings for display.
+    """
+    matched: set[str] = set()
+    for trigger in triggers:
+        parts = [m.group(0).lower() for m in _TOKEN_RE.finditer(trigger)]
+        if parts and all(p in desc_tokens for p in parts):
+            matched.add(trigger)
+    return sorted(matched)
+
+
+def promote_critical_infra(ctx: AnalysisContext) -> None:
+    """Pre-pass: promote infra_repos with matching keyword_triggers to findings.
+
+    Runs BEFORE ``section_completeness`` so the Completeness Report groups
+    these repos under Core (high confidence). Without this pre-pass the
+    Critical list in §10 is rendered AFTER §8 already tiered the repos as
+    Peripheral (via npm_dep_scan), producing a contradictory view where the
+    same repo appears both ⚠️ Critical and [low-confidence] Peripheral.
+
+    Idempotent — repeated calls add nothing because
+    ``Finding("critical_trigger", repo, "high")`` already lives in
+    ``ctx.findings``.
+    """
+    if not ctx.provider or not INFRA_REPOS:
+        return
+    desc_tokens = _description_tokens(ctx.description)
+    # Track repos we've already promoted in this pass (idempotence within a
+    # single call). We do NOT skip when the repo is already in findings with
+    # a different ftype — e.g. npm_dep_scan may have added it at low
+    # confidence, and the whole point is to upgrade that to high.
+    promoted: set[str] = {
+        f.repo for f in ctx.findings if f.ftype == "critical_trigger"
+    }
+    for item in INFRA_REPOS:
+        repo = item.get("repo", "")
+        if not repo or repo in promoted:
+            continue
+        if not item.get("critical_note"):
+            continue
+        triggers = item.get("keyword_triggers", []) or []
+        if not _matched_triggers(triggers, desc_tokens):
+            continue
+        has_repo = ctx.conn.execute("SELECT 1 FROM repos WHERE name = ?", (repo,)).fetchone()
+        if not has_repo:
+            continue
+        ctx.findings.append(Finding("critical_trigger", repo, "high"))
+        promoted.add(repo)
+
+
 def section_provider_checklist(ctx: AnalysisContext) -> str:
-    """Section 10: Infrastructure checklist for provider integrations."""
+    """Section 10: Infrastructure checklist for provider integrations.
+
+    Splits output into two subsections:
+    - ⚠️ Critical for this task — repos whose ``keyword_triggers`` match the
+      task description (word-level match, not substring). They carry a
+      ``critical_note`` that warns the reader *why* skipping them tends to
+      lead to reinvented infrastructure. Promotion to high-confidence
+      findings is done earlier by :func:`promote_critical_infra`.
+    - Other infrastructure repos — everything else, listed as before.
+    """
     if not ctx.provider or not INFRA_REPOS:
         return ""
 
     output = "## 10. Provider Integration Checklist\n\n"
     finding_repos = {f.repo for f in ctx.findings}
+    desc_tokens = _description_tokens(ctx.description)
 
-    for item in INFRA_REPOS:
+    def _render(item: dict, *, show_note: bool, matched_triggers: list[str] | None = None) -> str:
         repo = item.get("repo", "")
         desc = item.get("description", "")
-        if not repo:
-            continue
-
-        in_findings = repo in finding_repos
-        has_repo = ctx.conn.execute("SELECT 1 FROM repos WHERE name = ?", (repo,)).fetchone()
-        if not has_repo:
-            continue
-
         provider_match = ctx.conn.execute(
             "SELECT COUNT(*) as cnt FROM chunks WHERE repo_name = ? AND content LIKE ?",
             (repo, f"%{ctx.provider}%"),
         ).fetchone()["cnt"]
-
-        status = "FOUND" if in_findings or provider_match > 0 else "CHECK"
-        marker = "[x]" if status == "FOUND" else "[ ]"
-        output += f"- {marker} **{repo}** — {desc}"
+        in_findings = repo in finding_repos
+        status_found = in_findings or provider_match > 0
+        marker = "[x]" if status_found else "[ ]"
+        line = f"- {marker} **{repo}** — {desc}"
         if provider_match > 0 and not in_findings:
-            output += f" ({provider_match} references found)"
-        output += "\n"
+            line += f" ({provider_match} references found)"
+        line += "\n"
+        if show_note:
+            note = item.get("critical_note", "")
+            if matched_triggers:
+                line += f"    - **Triggered by:** {', '.join(matched_triggers)}\n"
+            if note:
+                line += f"    - ⚠️ **{note}**\n"
+        return line
+
+    critical_items: list[tuple[dict, list[str]]] = []
+    regular_items: list[dict] = []
+
+    for item in INFRA_REPOS:
+        repo = item.get("repo", "")
+        if not repo:
+            continue
+        has_repo = ctx.conn.execute("SELECT 1 FROM repos WHERE name = ?", (repo,)).fetchone()
+        if not has_repo:
+            continue
+
+        triggers = item.get("keyword_triggers", []) or []
+        matched = _matched_triggers(triggers, desc_tokens)
+        if matched and item.get("critical_note"):
+            critical_items.append((item, matched))
+        else:
+            regular_items.append(item)
+
+    if critical_items:
+        output += "### ⚠️ Critical for this task (keyword-matched)\n\n"
+        output += (
+            "_Keyword triggers for these repos fired against the task description. "
+            "Read them BEFORE designing your solution — skipping leads to reinventing "
+            "existing infrastructure (token storage, vault flows, verification pipelines)._\n\n"
+        )
+        for item, matched in critical_items:
+            output += _render(item, show_note=True, matched_triggers=matched)
+        output += "\n### Other infrastructure repos\n\n"
+
+    for item in regular_items:
+        output += _render(item, show_note=False)
 
     output += "\n"
     return output
