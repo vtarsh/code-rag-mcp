@@ -302,13 +302,18 @@ def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
 
     ranked = sorted(per_repo.items(), key=_repo_score, reverse=True)
 
-    # Always record findings (low confidence) so downstream sections see them.
-    for repo, _ in ranked:
-        ctx.findings.append(Finding("npm_dep_scan", repo, "low"))
-
     VISIBLE = 5
     shown = ranked[:VISIBLE]
     hidden = ranked[VISIBLE:]
+
+    # Record findings only for the VISIBLE entries. The hidden-under-details
+    # tail is purely a reference for curious readers; adding it to
+    # ``ctx.findings`` inflates the Peripheral count in the summary header
+    # with repos the reader never actually sees. Downstream consumers
+    # (final_ranker, ci_risk) can still reach those dep repos by querying
+    # ``graph_edges`` directly if needed.
+    for repo, _ in shown:
+        ctx.findings.append(Finding("npm_dep_scan", repo, "low"))
 
     output = "## npm Dependency Scan\n\n"
     output += (

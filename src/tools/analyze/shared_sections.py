@@ -884,7 +884,7 @@ _FTYPE_LABELS = {
     "similar_task": "Similar past task",
     "bulk_migration": "Bulk migration",
     "npm_dep_scan": "npm dependency",
-    "critical_trigger": "Critical infra (keyword-triggered — see §10)",
+    "critical_trigger": "Critical infra (keyword-triggered — see Infrastructure Checklist)",
     "repo_ref": "Repo name in description",
     "domain_template": "Domain template",
     "co_change_rule": "Co-change rule (always changes together)",

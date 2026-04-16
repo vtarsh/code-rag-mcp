@@ -296,11 +296,17 @@ def promote_critical_infra(ctx: AnalysisContext) -> None:
     Peripheral (via npm_dep_scan), producing a contradictory view where the
     same repo appears both ⚠️ Critical and [low-confidence] Peripheral.
 
+    Runs for ALL domains, not just PI. Non-PI tasks (chargeback, risk,
+    BO) often hit infra keywords too (e.g. ``workflow-collaboration-processing``
+    triggers on ``chargeback`` / ``representment``); gating on ``ctx.provider``
+    hid those signals, leaving the relevant repo in the generic keyword-scan
+    section instead of Critical.
+
     Idempotent — repeated calls add nothing because
     ``Finding("critical_trigger", repo, "high")`` already lives in
     ``ctx.findings``.
     """
-    if not ctx.provider or not INFRA_REPOS:
+    if not INFRA_REPOS:
         return
     desc_tokens = _description_tokens(ctx.description)
     # Track repos we've already promoted in this pass (idempotence within a
@@ -327,30 +333,44 @@ def promote_critical_infra(ctx: AnalysisContext) -> None:
 
 
 def section_provider_checklist(ctx: AnalysisContext) -> str:
-    """Section 10: Infrastructure checklist for provider integrations.
+    """Section 10: Infrastructure checklist.
 
-    Splits output into two subsections:
+    Split into two subsections when a provider is detected; only the
+    Critical subsection renders for non-PI tasks (no provider), because
+    the full infra list is only meaningful for provider integration work.
+
     - ⚠️ Critical for this task — repos whose ``keyword_triggers`` match the
       task description (word-level match, not substring). They carry a
       ``critical_note`` that warns the reader *why* skipping them tends to
       lead to reinvented infrastructure. Promotion to high-confidence
       findings is done earlier by :func:`promote_critical_infra`.
-    - Other infrastructure repos — everything else, listed as before.
+    - Other infrastructure repos — only rendered when ``ctx.provider``
+      is set (the non-critical list is provider-checklist specific).
     """
-    if not ctx.provider or not INFRA_REPOS:
+    if not INFRA_REPOS:
         return ""
 
-    output = "## 10. Provider Integration Checklist\n\n"
+    title = (
+        "## 10. Provider Integration Checklist"
+        if ctx.provider
+        else "## 10. Infrastructure Checklist"
+    )
+    output = f"{title}\n\n"
     finding_repos = {f.repo for f in ctx.findings}
     desc_tokens = _description_tokens(ctx.description)
 
     def _render(item: dict, *, show_note: bool, matched_triggers: list[str] | None = None) -> str:
         repo = item.get("repo", "")
         desc = item.get("description", "")
-        provider_match = ctx.conn.execute(
-            "SELECT COUNT(*) as cnt FROM chunks WHERE repo_name = ? AND content LIKE ?",
-            (repo, f"%{ctx.provider}%"),
-        ).fetchone()["cnt"]
+        # Only count provider references when a provider is set — otherwise
+        # ``content LIKE '%%'`` matches every row and reports bogus counts.
+        if ctx.provider:
+            provider_match = ctx.conn.execute(
+                "SELECT COUNT(*) as cnt FROM chunks WHERE repo_name = ? AND content LIKE ?",
+                (repo, f"%{ctx.provider}%"),
+            ).fetchone()["cnt"]
+        else:
+            provider_match = 0
         in_findings = repo in finding_repos
         status_found = in_findings or provider_match > 0
         marker = "[x]" if status_found else "[ ]"
@@ -384,6 +404,13 @@ def section_provider_checklist(ctx: AnalysisContext) -> str:
         else:
             regular_items.append(item)
 
+    # For non-PI tasks (no provider) we skip the full infra list because it's
+    # not actionable outside of a provider integration flow. If no triggers
+    # fire either, the whole section is empty and we return "" so the
+    # analyze_task output doesn't carry a dangling "## 10." header.
+    if not ctx.provider and not critical_items:
+        return ""
+
     if critical_items:
         output += "### ⚠️ Critical for this task (keyword-matched)\n\n"
         output += (
@@ -393,10 +420,12 @@ def section_provider_checklist(ctx: AnalysisContext) -> str:
         )
         for item, matched in critical_items:
             output += _render(item, show_note=True, matched_triggers=matched)
-        output += "\n### Other infrastructure repos\n\n"
+        if ctx.provider:
+            output += "\n### Other infrastructure repos\n\n"
 
-    for item in regular_items:
-        output += _render(item, show_note=False)
+    if ctx.provider:
+        for item in regular_items:
+            output += _render(item, show_note=False)
 
     output += "\n"
     return output
