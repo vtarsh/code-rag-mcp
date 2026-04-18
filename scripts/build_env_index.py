@@ -20,7 +20,16 @@ BASE_DIR = Path(os.getenv("CODE_RAG_HOME", Path.home() / ".code-rag"))
 EXTRACTED_DIR = BASE_DIR / "extracted"
 RAW_DIR = BASE_DIR / "raw"
 DB_PATH = BASE_DIR / "db" / "knowledge.db"
-DOMAIN_REGISTRY_FILE = BASE_DIR / "docs" / "domain_registry.yaml"
+_profile = os.getenv("ACTIVE_PROFILE", "")
+if not _profile:
+    _ap = BASE_DIR / ".active_profile"
+    _profile = _ap.read_text().strip() if _ap.exists() else ""
+_profile_registry = BASE_DIR / "profiles" / _profile / "docs" / "domain_registry.yaml" if _profile else None
+DOMAIN_REGISTRY_FILE = (
+    _profile_registry
+    if (_profile_registry and _profile_registry.exists())
+    else BASE_DIR / "docs" / "domain_registry.yaml"
+)
 
 
 def init_env_table(conn: sqlite3.Connection):

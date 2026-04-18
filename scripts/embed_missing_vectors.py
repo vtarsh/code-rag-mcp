@@ -14,6 +14,7 @@ Usage:
         python3.12 scripts/embed_missing_vectors.py [--model=gemini|coderank]
 """
 
+import gc
 import os
 import sqlite3
 import sys
@@ -49,9 +50,18 @@ def load_model(model_key: str):
             sys.exit(1)
         return GeminiEmbeddingProvider(GEMINI_API_KEY, dim=mcfg.dim), mcfg
 
+    import torch
     from sentence_transformers import SentenceTransformer
 
-    model = SentenceTransformer(mcfg.name, trust_remote_code=mcfg.trust_remote_code)
+    if torch.backends.mps.is_available():
+        device = "mps"
+    elif torch.cuda.is_available():
+        device = "cuda"
+    else:
+        device = "cpu"
+    print(f"  Using device: {device}")
+
+    model = SentenceTransformer(mcfg.name, trust_remote_code=mcfg.trust_remote_code, device=device)
     return model, mcfg
 
 
@@ -62,31 +72,30 @@ def main() -> None:
         print(f"ERROR: {db_path} does not exist", file=sys.stderr)
         sys.exit(1)
 
-    print(f"[1/6] Loading {model_key} embedding model...")
-    start = time.time()
-    model, mcfg = load_model(model_key)
-    print(f"  Loaded in {time.time() - start:.1f}s")
-
+    # Resolve LanceDB path without loading the model — model load is expensive
+    # (~400 MB for CodeRankEmbed, ~1 GB RAM) and we want to short-circuit when
+    # nothing to embed. Metadata lookup is cheap.
+    mcfg = get_model_config(model_key)
     lance_path = _BASE_DIR / "db" / mcfg.lance_dir
     if not lance_path.exists():
         print(f"ERROR: {lance_path} does not exist", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\n[2/6] Reading SQLite chunks from {db_path}...")
+    print(f"[1/6] Reading SQLite chunk rowids (content deferred until embed needed)...")
     conn = sqlite3.connect(str(db_path))
-    sqlite_rows = conn.execute(
-        "SELECT rowid, content, repo_name, file_path, file_type, chunk_type FROM chunks ORDER BY rowid"
-    ).fetchall()
+    sqlite_rowid_set = {r[0] for r in conn.execute("SELECT rowid FROM chunks").fetchall()}
     conn.close()
-    sqlite_by_rowid = {r[0]: r for r in sqlite_rows}
-    sqlite_rowid_set = set(sqlite_by_rowid.keys())
-    print(f"  {len(sqlite_by_rowid)} chunks total in SQLite")
+    print(f"  {len(sqlite_rowid_set)} chunks total in SQLite")
 
-    print(f"\n[3/6] Reading existing vectors from {lance_path}...")
+    print(f"\n[2/6] Reading existing vectors from {lance_path}...")
     db = lancedb.connect(str(lance_path))
     table = db.open_table("chunks")
-    df = table.to_pandas()
-    existing_rowids = set(df["rowid"].astype(int).tolist())
+    # Read ONLY the rowid column — full to_pandas() pulls all 768-float vectors
+    # into memory (~140 MB for 47k rows) just to build a set of integer rowids.
+    # Projection via underlying lance dataset is ~10-30× faster + bounded RAM.
+    existing_rowids = set(
+        table.to_lance().to_table(columns=["rowid"])["rowid"].to_pylist()
+    )
     print(f"  {len(existing_rowids)} existing vectors in LanceDB")
 
     missing_rowids = sorted(sqlite_rowid_set - existing_rowids)
@@ -101,11 +110,84 @@ def main() -> None:
     index_dirty = False
 
     if missing_rowids:
-        print(f"\n[4/6] Embedding {len(missing_rowids)} missing chunks...")
-        missing_rows = [sqlite_by_rowid[rid] for rid in missing_rowids]
-        data = embed_simple(model, missing_rows, mcfg)
-        print(f"\n[5/6] Appending {len(data)} vectors to LanceDB...")
-        table.add(data)
+        # Lazy-load model only when embedding is actually needed — saves
+        # 1 GB RAM + model-load time on nights when nothing changed.
+        print(f"\n[3/6] Loading {model_key} embedding model...")
+        start = time.time()
+        model, _mcfg = load_model(model_key)
+        print(f"  Loaded in {time.time() - start:.1f}s")
+
+        # Batch SQL IN (SQLite default limit ~999) AND batch embed itself so
+        # memory stays bounded — each batch: fetch content, embed, append.
+        # Checkpointing is implicit: if embedding dies mid-way, LanceDB keeps
+        # what was already appended; next run picks up remaining delta.
+        # Try to get MPS cache clearer if available — release GPU buffers after
+        # each batch so they don't accumulate across the embed loop.
+        try:
+            import torch
+            _mps_empty = (
+                torch.mps.empty_cache
+                if torch.backends.mps.is_available() else None
+            )
+        except Exception:
+            _mps_empty = None
+
+        SQL_BATCH = 250
+        # LanceDB accumulates a new fragment file per `add()` — by 5-10 fragments
+        # the metadata scan on every subsequent add noticeably slows down. We
+        # compact every N batches (COMPACT_EVERY) to keep fragment count small.
+        # Tuned empirically on M1 Pro / MPS (2026-04-18): 250 × 4 = 1000 chunks
+        # per compact gave the best rate (~12-13 emb/s stable) vs 500/100 batch
+        # or 500-chunk compact window.
+        COMPACT_EVERY = 4  # ~1000 chunks per compact (250 × 4)
+
+        print(f"\n[4/6] Embedding {len(missing_rowids)} missing chunks "
+              f"(batches of {SQL_BATCH}, compact every {COMPACT_EVERY} batches)...")
+        conn = sqlite3.connect(str(db_path))
+        done = 0
+        embed_start = time.time()
+        batches_since_compact = 0
+        for i in range(0, len(missing_rowids), SQL_BATCH):
+            batch_ids = missing_rowids[i:i + SQL_BATCH]
+            placeholders = ",".join("?" * len(batch_ids))
+            batch_rows = conn.execute(
+                f"SELECT rowid, content, repo_name, file_path, file_type, chunk_type "
+                f"FROM chunks WHERE rowid IN ({placeholders}) ORDER BY rowid",
+                batch_ids,
+            ).fetchall()
+            data = embed_simple(model, batch_rows, mcfg)
+            table.add(data)
+            done += len(batch_rows)
+
+            # --- aggressive cleanup to stop RAM creep + fragment accumulation ---
+            del batch_rows, data
+            gc.collect()
+            if _mps_empty is not None:
+                try:
+                    _mps_empty()
+                except Exception:
+                    pass
+            batches_since_compact += 1
+            if batches_since_compact >= COMPACT_EVERY:
+                compact_start = time.time()
+                try:
+                    table.optimize()
+                except Exception as e:
+                    print(f"  [compact failed: {e}]")
+                else:
+                    print(f"  [compact ok in {time.time() - compact_start:.1f}s]")
+                batches_since_compact = 0
+
+            rate = done / max(time.time() - embed_start, 0.1)
+            remaining = (len(missing_rowids) - done) / max(rate, 0.01)
+            print(f"  {done}/{len(missing_rowids)} ({rate:.1f} emb/s, ~{remaining/60:.0f}m remaining)")
+        conn.close()
+        # Final compact to leave the table clean
+        try:
+            table.optimize()
+        except Exception:
+            pass
+        print(f"\n[5/6] Appended {done} vectors to LanceDB")
         index_dirty = True
 
     if orphan_rowids:
