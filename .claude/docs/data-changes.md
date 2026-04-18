@@ -1,6 +1,6 @@
 # Data Changes Reference
 
-## Build Pipeline (full rebuild ~30 min)
+## Build Pipeline (full rebuild ~2-4h; peaks ~20GB RAM)
 
 ```
 extract_artifacts.py -> build_index.py -> build_graph.py -> build_vectors.py
@@ -15,4 +15,4 @@ extract_artifacts.py -> build_index.py -> build_graph.py -> build_vectors.py
 
 - FTS5 virtual tables cannot have columns added — use separate tables
 - Restart daemon after editing glossaries (loaded at import time)
-- `analyze/` is a package (8 modules) — add domains via classifier.py + new analyzer file
+- `analyze/` is a package (13 modules) — add domains via classifier.py + new analyzer file

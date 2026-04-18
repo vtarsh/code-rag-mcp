@@ -6,13 +6,14 @@ Python 3.12, FastMCP, SQLite FTS5, LanceDB, CrossEncoder reranker.
 
 **Key docs** (read for full context):
 - **`profiles/pay-com/ROADMAP.md` P0** — migrate to local embedding + reranker (Gemini-free, weekend work; see 2026-04-14 incident)
-- `ARCHITECTURE.md` — system design, analyze_task package, 10 mechanisms, conventions.yaml
-- `.claude/rules/conventions.md` — always-loaded generic rules (12 lines)
-- `.claude/docs/` — data-changes, workflow-cycles (on-demand generic reference)
-- `profiles/pay-com/docs/rules/` — provider-code, impact-audit, audit-orchestration, provider-docs-first, rag-tuning
+- `ARCHITECTURE.md` — system design, analyze_task package, 10 generic mechanisms, conventions.yaml
+- `.claude/rules/conventions.md` — always-loaded generic rules
+- `.claude/docs/` — data-changes, workflow-cycles, development-pattern (on-demand generic reference)
+- `.claude/agents/` — generic agents (deep-analysis, pattern-miner); agents prefixed `pay-` are profile-scoped and assume ACTIVE_PROFILE=pay-com
+- `profiles/pay-com/docs/gotchas/` — runtime traps only: per-provider (grpc-apm-nuvei/payper/trustly, grpc-providers-features, next-web-pay-with-bank, phone-for-payout), clickhouse-cdc, e2e-tests, debugging, global-conventions
+- `profiles/pay-com/docs/references/` — stable structural knowledge: impact-audit-rules, impact-audit-catalog, investigation-framework, payment-flow, provider-response-mapping, async-flow-processors (s2s vs SDK queueing), s2s-vs-sdk (provider integration modes), do-not-expire-matrix (per-provider expiration handling), code-style
 - `TESTING.md` — recall methodology, how to measure/improve, validation without MCP
 - `profiles/pay-com/RECALL-TRACKER.md` — current scores, improvement log
-- `profiles/pay-com/NEXT-SESSION-PROMPT.md` — context for new sessions
 
 ## Commands
 
@@ -64,7 +65,7 @@ provider_type_map, health_check.
 sub-agents without MCP access): find_dependencies, context_builder, visualize_graph,
 diff_provider_config, search_task_history.
 
-Single source of truth for tool list: `~/.claude/CLAUDE.md` (MCP Pay-Knowledge Tools section).
+Tool inventory is generated from `mcp_server.py` + `daemon.py` (source of truth is the code itself, not a duplicated list).
 
 ## MCP Call Tracker
 
@@ -77,10 +78,10 @@ python scripts/analyze_calls.py --last 20    # recent calls
 python scripts/analyze_calls.py --sessions   # per-session breakdown
 ```
 
-**When starting a new session**: if `logs/mcp_calls.jsonl` has data, run `analyze_calls.py` first to see tool usage patterns before making UX/tool changes.
+**When starting a new session**: if `logs/tool_calls.jsonl` has data, run `analyze_calls.py` first to see tool usage patterns before making UX/tool changes.
 
 ## Gotchas (critical)
 
-- `analyze/` is a package (8 modules) -- add new domains via classifier.py + new analyzer file
+- `analyze/` is a package (13 modules) -- add new domains via classifier.py + new analyzer file
 - Daemon restart: `kill -9 $(lsof -ti:8742); sleep 2; CODE_RAG_HOME=~/.code-rag-mcp ACTIVE_PROFILE=pay-com python3 daemon.py &disown`
 - See `.claude/docs/data-changes.md` for build pipeline and FTS5/glossary constraints.
