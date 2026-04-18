@@ -24,6 +24,9 @@ graph-*.html
 # Python cache
 .pytest_cache/
 
+# Claude Code agent worktrees (ephemeral, per-session)
+.claude/worktrees/
+
 # Org-specific profiles (only example/ is tracked)
 profiles/*/
 !profiles/example/
