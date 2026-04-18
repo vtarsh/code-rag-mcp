@@ -344,7 +344,12 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
     import sys
 
     from .classifier import classify_task
-    from .core_analyzer import run_co_change_rules, run_co_occurrence, run_core_analysis
+    from .core_analyzer import (
+        run_async_chain_anchor,
+        run_co_change_rules,
+        run_co_occurrence,
+        run_core_analysis,
+    )
 
     words = set(re.findall(r"[a-zA-Z]{3,}", description.lower()))
 
@@ -414,6 +419,11 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
 
     # Domain template injection — auto-add base repos for the classified domain
     output += _run_section("domain_template", _inject_domain_template, ctx, classification)
+
+    # Async-chain anchor (P4.3): runs early so anchor repos sit near the top
+    # of the medium-confidence tier (other sections below may add more repos
+    # to that tier, pushing anchors down — we want them in top-25).
+    output += _run_section("async_chain_anchor", run_async_chain_anchor, ctx)
 
     # Shared sections (all task types)
     output += _run_section("gotchas", section_gotchas, ctx)
