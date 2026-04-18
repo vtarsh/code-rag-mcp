@@ -15,7 +15,7 @@ from .pi_analyzer import _AMBIGUOUS_PROVIDER_NAMES, count_matching_providers, de
 class TaskClassification:
     """Result of classifying a task into a domain."""
 
-    domain: str  # "pi", "core-risk", "core-api", "core-3ds", "core-platform", "core-payment", "bo", "hs", "unknown"
+    domain: str  # "pi", "core-risk", "core-api", "core-3ds", "core-platform", "core-payment", "core-dispute", "bo", "hs", "unknown"
     provider: str  # Non-empty only for PI
     confidence: float  # 0.0 - 1.0
     matched_keywords: list[str] = field(default_factory=list)

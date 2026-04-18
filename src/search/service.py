@@ -27,7 +27,7 @@ def search_tool(
     Args:
         query: Search query — keywords or natural language question
         repo: Optional - filter by repo name (exact or partial match)
-        file_type: Optional - filter by type: proto, docs, config, env, k8s, grpc_method, library, workflow, ci
+        file_type: Optional - filter by type: proto, docs, config, env, k8s, grpc_method, library, workflow, ci, gotchas, reference, dictionary, flow_annotation, task, provider_doc, domain_registry
         exclude_file_types: Optional - comma-separated file types to exclude from results (e.g. "gotchas,task")
         limit: Max results to return (default 10, max 20)
     """
