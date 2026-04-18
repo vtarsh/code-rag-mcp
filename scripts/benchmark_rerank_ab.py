@@ -144,6 +144,7 @@ def benchmark_model(
     label: str,
     tasks: list[dict],
     fts_conn: sqlite3.Connection,
+    fts_limit: int = 50,
 ) -> dict:
     from sentence_transformers import CrossEncoder
 
@@ -181,7 +182,7 @@ def benchmark_model(
             "error": None,
         }
         try:
-            chunks = fetch_fts_candidates(fts_conn, task["summary"], limit=50)
+            chunks = fetch_fts_candidates(fts_conn, task["summary"], limit=fts_limit)
             if not chunks:
                 per["error"] = "no_fts_candidates"
                 per["recall_at_10"] = 0.0
@@ -239,6 +240,8 @@ def main() -> None:
                     help="CSV of model names; default = all 4")
     ap.add_argument("--ticket-prefix", type=str, default="PI",
                     help="task_history.ticket_id prefix to sample (e.g. PI, CORE, BO)")
+    ap.add_argument("--fts-limit", type=int, default=50,
+                    help="FTS5 candidate pool size per task before rerank")
     args = ap.parse_args()
 
     models = [m.strip() for m in args.models.split(",")] if args.models else list(DEFAULT_MODELS)
@@ -262,6 +265,7 @@ def main() -> None:
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "seed": args.seed,
         "n_tasks": len(tasks),
+        "fts_limit": args.fts_limit,
         "tasks": [{"ticket_id": t["ticket_id"], "summary": t["summary"],
                    "expected_repos": t["expected_repos"]} for t in tasks],
         "models": {},
@@ -275,8 +279,8 @@ def main() -> None:
     try:
         for label in labels:
             name = label_to_name[label]
-            print(f"[{label}] starting", flush=True)
-            entry = benchmark_model(name, label, tasks, fts_conn)
+            print(f"[{label}] starting (fts_limit={args.fts_limit})", flush=True)
+            entry = benchmark_model(name, label, tasks, fts_conn, fts_limit=args.fts_limit)
             results["models"][label] = entry
             # intermediate save to survive crashes
             save_results(args.out, results)
