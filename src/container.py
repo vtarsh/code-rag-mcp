@@ -2,25 +2,24 @@
 
 Provides:
 - SQLite database connections (lazy, per-call)
-- Embedding provider (API-first with local fallback)
-- Reranker provider (API-first with local fallback)
+- Embedding provider (local SentenceTransformer)
+- Reranker provider (local CrossEncoder)
 - LanceDB vector table
 
-Models are NOT preloaded at startup. The daemon starts light (~200 MB).
-Local models are only loaded as fallback when API is unavailable.
+Models are NOT preloaded at startup. The daemon starts light (~200 MB);
+local models are loaded on first use and cached in the provider singletons.
 """
 
 from __future__ import annotations
 
 import contextlib
 import functools
-import logging
 import sqlite3
 import threading
 from collections.abc import Callable, Generator
-from typing import Any, ParamSpec, TypeVar
+from typing import Any
 
-from src.config import CACHE_SIZE, DB_PATH, DB_TASKS_PATH, EMBEDDING_MODEL_KEY, LANCE_PATH, MMAP_SIZE
+from src.config import CACHE_SIZE, DB_PATH, DB_TASKS_PATH, EMBEDDING_MODEL_KEY, MMAP_SIZE
 
 # --- Lazy-loaded singletons ---
 _lance_table: Any = None
@@ -110,37 +109,13 @@ def get_vector_search() -> tuple[Any, Any, str | None]:
         try:
             import lancedb
 
-            # Determine correct LanceDB path based on active provider
             from src.models import get_model_config
 
-            if "gemini" in provider.provider_name:
-                mcfg = get_model_config("gemini")
-            else:
-                mcfg = get_model_config(EMBEDDING_MODEL_KEY)
-
+            mcfg = get_model_config(EMBEDDING_MODEL_KEY)
             lance_path = DB_PATH.parent / mcfg.lance_dir
 
-            # Check if a different vector table is fresher (e.g., nightly rebuild
-            # used coderank because Gemini was down)
-            fallback_mcfg = get_model_config("coderank") if mcfg.key == "gemini" else get_model_config("gemini")
-            fallback_path = DB_PATH.parent / fallback_mcfg.lance_dir
-
             if not lance_path.exists():
-                if fallback_path.exists():
-                    logging.warning(f"Vectors for {mcfg.key} not found, using {fallback_mcfg.key}")
-                    lance_path = fallback_path
-                else:
-                    return provider, None, "No vector tables found. Run: python3 scripts/build_vectors.py"
-            elif fallback_path.exists():
-                # Both exist — use the fresher one
-                import os
-                primary_mtime = os.path.getmtime(str(lance_path))
-                fallback_mtime = os.path.getmtime(str(fallback_path))
-                if fallback_mtime > primary_mtime + 3600:  # >1 hour newer
-                    logging.warning(
-                        f"Fallback vectors ({fallback_mcfg.key}) are newer than primary ({mcfg.key}), using fallback"
-                    )
-                    lance_path = fallback_path
+                return provider, None, f"No vector table at {lance_path}. Run: python3 scripts/build_vectors.py"
 
             db = lancedb.connect(str(lance_path))
             _lance_table = db.open_table("chunks")
@@ -162,11 +137,7 @@ def get_reranker() -> tuple[Any, str | None]:
     return provider, warning
 
 
-P = ParamSpec("P")
-T = TypeVar("T")
-
-
-def require_db(func: Callable[P, T]) -> Callable[P, T]:
+def require_db[**P, T](func: Callable[P, T]) -> Callable[P, T]:
     """Decorator that checks DB health before running a tool function."""
 
     @functools.wraps(func)
@@ -182,10 +153,12 @@ def require_db(func: Callable[P, T]) -> Callable[P, T]:
 def is_model_loaded() -> bool:
     """Check if embedding provider is ready."""
     from src.embedding_provider import _embedding_provider
+
     return _embedding_provider is not None
 
 
 def is_reranker_loaded() -> bool:
     """Check if reranker provider is ready."""
     from src.embedding_provider import _reranker_provider
+
     return _reranker_provider is not None

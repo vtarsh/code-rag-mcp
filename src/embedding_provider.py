@@ -1,29 +1,20 @@
 """Embedding and reranking provider abstraction.
 
-API-first with lazy local fallback. Providers:
-- GeminiEmbeddingProvider: Gemini embedding-001 via API
-- LocalEmbeddingProvider: SentenceTransformer (CodeRankEmbed or MiniLM)
-- GeminiRerankerProvider: Gemini LLM listwise reranking via generateContent
-- LocalRerankerProvider: CrossEncoder (MiniLM-L-6-v2)
+Local-only: SentenceTransformer (CodeRankEmbed / MiniLM) + CrossEncoder reranker.
 
 Usage:
-    provider = get_embedding_provider()
+    provider, _ = get_embedding_provider()
     vectors = provider.embed(["some code snippet"])
 
-    reranker = get_reranker_provider()
+    reranker, _ = get_reranker_provider()
     scores = reranker.rerank("query", ["doc1", "doc2", ...])
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 import threading
-import time
 from typing import Protocol
-
-import numpy as np
 
 log = logging.getLogger(__name__)
 
@@ -56,214 +47,7 @@ class RerankerProvider(Protocol):
         ...
 
 
-# --- Gemini Embedding Provider ---
-
-
-class GeminiEmbeddingProvider:
-    """Gemini embedding-001 via Google AI Studio API."""
-
-    def __init__(self, api_key: str, model: str = "gemini-embedding-001", dim: int = 768):
-        from google import genai
-
-        self._client = genai.Client(api_key=api_key)
-        self._model = model
-        self._dim = dim
-
-    @property
-    def provider_name(self) -> str:
-        return f"gemini:{self._model}"
-
-    @property
-    def dim(self) -> int:
-        return self._dim
-
-    def embed(self, texts: list[str], task_type: str = "query") -> list[list[float]]:
-        from src.api_costs import ApiCostRecord, estimate_cost, log_api_cost
-
-        # RETRIEVAL_QUERY for NL→doc search (not CODE_RETRIEVAL_QUERY which is code→code)
-        gemini_task = "RETRIEVAL_QUERY" if task_type == "query" else "RETRIEVAL_DOCUMENT"
-
-        t0 = time.time()
-        all_vectors: list[list[float]] = []
-
-        # Batch in groups of 50 (API limit), with retry and rate limiting
-        for i in range(0, len(texts), 50):
-            batch = texts[i : i + 50]
-            # Truncate each text to ~2048 tokens (~8000 chars) for embedding-001 limit
-            batch = [t[:8000] for t in batch]
-
-            # Rate limit: max ~1200 RPM (well under 3000 RPM limit)
-            if i > 0:
-                time.sleep(0.05)
-
-            MAX_RL_RETRIES = 3  # rate-limit retries (quota resets per minute)
-            MAX_OTHER_RETRIES = 2  # other errors (transient network/5xx)
-            RL_WAIT_SECONDS = 61  # Gemini quota resets every 60s; 61s covers edge cases
-            rl_attempts = 0
-            other_attempts = 0
-            batch_succeeded = False
-            last_exc = None
-            while not batch_succeeded:
-                try:
-                    result = self._client.models.embed_content(
-                        model=self._model,
-                        contents=batch,
-                        config={"task_type": gemini_task, "output_dimensionality": self._dim},
-                    )
-                    for emb in result.embeddings:
-                        vec = list(emb.values)
-                        # Normalize for truncated dimensions (MRL requires normalization)
-                        norm = np.linalg.norm(vec)
-                        if norm > 0:
-                            vec = (np.array(vec) / norm).tolist()
-                        all_vectors.append(vec)
-                    notify_api_success()
-                    batch_succeeded = True
-                except Exception as e:
-                    notify_api_error()
-                    last_exc = e
-                    err_str = str(e)
-                    is_rate_limit = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str
-
-                    if is_rate_limit:
-                        rl_attempts += 1
-                        if rl_attempts > MAX_RL_RETRIES:
-                            log.error(f"Gemini rate-limit exhausted after {MAX_RL_RETRIES} retries. Giving up.")
-                            break
-                        log.warning(f"Gemini rate limit (RL retry {rl_attempts}/{MAX_RL_RETRIES}), waiting {RL_WAIT_SECONDS}s for quota reset")
-                        time.sleep(RL_WAIT_SECONDS)
-                        continue
-
-                    # Non-rate-limit: exponential backoff up to MAX_OTHER_RETRIES
-                    other_attempts += 1
-                    if other_attempts > MAX_OTHER_RETRIES:
-                        log.error(f"Gemini embed failed after {MAX_OTHER_RETRIES} non-RL retries.")
-                        break
-                    wait = 2 ** other_attempts
-                    log.warning(f"Gemini embed error (retry {other_attempts}/{MAX_OTHER_RETRIES}): {e.__class__.__name__}, waiting {wait}s")
-                    time.sleep(wait)
-
-            if not batch_succeeded:
-                # Raise — do NOT fall back to local during the day. Caller decides what to do.
-                # (Local model fallback should only happen in the nightly cron job, not interactively.)
-                raise last_exc
-
-        duration_ms = (time.time() - t0) * 1000
-        input_tokens = sum(len(t) // 4 for t in texts)  # rough estimate
-        cost = estimate_cost(self._model, input_tokens)
-        log_api_cost(ApiCostRecord(
-            provider="gemini-embedding",
-            model=self._model,
-            operation=f"embed_{task_type}",
-            input_tokens=input_tokens,
-            estimated_cost_usd=cost,
-            duration_ms=duration_ms,
-        ))
-
-        return all_vectors
-
-
-# --- Gemini LLM Reranker ---
-
-
-class GeminiRerankerProvider:
-    """Gemini LLM listwise reranking via generateContent."""
-
-    def __init__(self, api_key: str, model: str = "gemini-2.5-flash"):
-        from google import genai
-
-        self._client = genai.Client(api_key=api_key)
-        self._model = model
-
-    @property
-    def provider_name(self) -> str:
-        return f"gemini-rerank:{self._model}"
-
-    def rerank(self, query: str, documents: list[str], limit: int = 10) -> list[float]:
-        from src.api_costs import ApiCostRecord, estimate_cost, log_api_cost
-
-        if not documents:
-            return []
-
-        # Build listwise prompt
-        doc_list = ""
-        for i, doc in enumerate(documents):
-            # Truncate each doc to ~500 chars to fit context
-            truncated = doc[:500].replace("\n", " ")
-            doc_list += f"[{i}] {truncated}\n"
-
-        prompt = f"""Rate the relevance of each document to the query. Return ONLY a JSON array of scores (0.0 to 1.0) in the same order as the documents.
-
-Query: {query}
-
-Documents:
-{doc_list}
-
-Return JSON array of {len(documents)} float scores, e.g. [0.95, 0.2, 0.8, ...]. Nothing else."""
-
-        t0 = time.time()
-        try:
-            response = self._client.models.generate_content(
-                model=self._model,
-                contents=[{"role": "user", "parts": [{"text": prompt}]}],
-                config={"temperature": 0.0},
-            )
-            text = response.text.strip()
-            # Parse JSON array from response
-            if text.startswith("```"):
-                text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-
-            # Try direct parse, then regex extraction
-            try:
-                scores = json.loads(text)
-            except json.JSONDecodeError:
-                match = re.search(r"\[[\d.,\s]+\]", text)
-                if match:
-                    scores = json.loads(match.group())
-                else:
-                    log.warning(f"Gemini reranker returned unparseable response: {text[:200]}")
-                    return [0.5] * len(documents)
-
-            # Ensure we have the right number of scores
-            if len(scores) != len(documents):
-                log.warning(f"Gemini reranker returned {len(scores)} scores for {len(documents)} docs")
-                # Pad or truncate
-                scores = (scores + [0.0] * len(documents))[:len(documents)]
-
-            scores = [float(s) for s in scores]
-            notify_api_success()
-
-        except Exception as e:
-            notify_api_error()
-            # In strict mode (EMBEDDING_PROVIDER=gemini), do NOT load local CrossEncoder
-            # (it pulls in torch + sentence_transformers = ~400MB RAM and can freeze the PC).
-            # Instead, return uniform neutral scores so search falls back to its RRF ordering.
-            from src.config import EMBEDDING_PROVIDER
-            if EMBEDDING_PROVIDER == "gemini":
-                log.warning(f"Gemini reranker failed: {e}. Returning neutral scores (no local fallback in strict mode).")
-                return [0.5] * len(documents)
-            log.warning(f"Gemini reranker failed: {e}, falling back to local")
-            local = LocalRerankerProvider()
-            return local.rerank(query, documents, limit)
-
-        duration_ms = (time.time() - t0) * 1000
-        input_tokens = len(prompt) // 4
-        output_tokens = len(documents) * 3  # ~3 tokens per score
-        cost = estimate_cost(self._model, input_tokens, output_tokens)
-        log_api_cost(ApiCostRecord(
-            provider="gemini-rerank",
-            model=self._model,
-            operation="rerank",
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            estimated_cost_usd=cost,
-            duration_ms=duration_ms,
-        ))
-
-        return scores
-
-
-# --- Local Providers (lazy-loaded fallback) ---
+# --- Local providers ---
 
 
 class LocalEmbeddingProvider:
@@ -272,6 +56,7 @@ class LocalEmbeddingProvider:
     def __init__(self, model_key: str = "coderank"):
         self._model_key = model_key
         self._model = None
+        self._cfg = None
 
     @property
     def provider_name(self) -> str:
@@ -280,207 +65,118 @@ class LocalEmbeddingProvider:
     @property
     def dim(self) -> int:
         from src.models import get_model_config
+
         return get_model_config(self._model_key).dim
 
-    def _ensure_model(self):
+    def _ensure_model(self) -> None:
         if self._model is None:
             from sentence_transformers import SentenceTransformer
+
             from src.models import get_model_config
 
-            log.warning("Loading local embedding model (Gemini API unavailable)")
             cfg = get_model_config(self._model_key)
+            log.info(f"Loading embedding model: {cfg.name}")
             self._model = SentenceTransformer(cfg.name, trust_remote_code=cfg.trust_remote_code)
             self._cfg = cfg
 
     def embed(self, texts: list[str], task_type: str = "query") -> list[list[float]]:
         self._ensure_model()
-        if task_type == "query" and self._cfg.query_prefix:
+        if task_type == "query" and self._cfg and self._cfg.query_prefix:
             texts = [f"{self._cfg.query_prefix}{t}" for t in texts]
+        assert self._model is not None
         vectors = self._model.encode(texts)
         return [v.tolist() for v in vectors]
 
 
 class LocalRerankerProvider:
-    """CrossEncoder MiniLM — lazy loaded on first use."""
+    """CrossEncoder reranker — lazy loaded on first use.
 
-    def __init__(self):
+    Model resolution: CODERANK_RERANK_MODEL env var > config.reranker_model > default.
+    Short names (no "/") auto-prefix "cross-encoder/" for HuggingFace compatibility.
+    """
+
+    DEFAULT_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+    def __init__(self, model_name: str | None = None):
+        import os
+
         self._model = None
+        self._model_name = model_name or self._resolve_model_name(os.environ.get("CODERANK_RERANK_MODEL"))
+
+    @classmethod
+    def _resolve_model_name(cls, env_override: str | None) -> str:
+        if env_override:
+            env_override = env_override.strip()
+            return env_override if "/" in env_override else f"cross-encoder/{env_override}"
+        try:
+            from src.config import RERANKER_MODEL
+        except ImportError:
+            RERANKER_MODEL = ""
+        cfg = (RERANKER_MODEL or "").strip()
+        # Guard: ignore legacy Gemini model IDs that may still sit in stale configs.
+        if cfg and not cfg.lower().startswith("gemini"):
+            return cfg if "/" in cfg else f"cross-encoder/{cfg}"
+        return cls.DEFAULT_MODEL
 
     @property
     def provider_name(self) -> str:
-        return "local:ms-marco-MiniLM-L-6-v2"
+        return f"local:{self._model_name}"
 
-    def _ensure_model(self):
+    def _ensure_model(self) -> None:
         if self._model is None:
             from sentence_transformers import CrossEncoder
 
-            log.warning("Loading local reranker model (Gemini API unavailable)")
-            self._model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+            log.info(f"Loading reranker model: {self._model_name}")
+            self._model = CrossEncoder(self._model_name)
 
     def rerank(self, query: str, documents: list[str], limit: int = 10) -> list[float]:
         self._ensure_model()
+        assert self._model is not None
         pairs = [(query, doc) for doc in documents]
         scores = self._model.predict(pairs)
         return [float(s) for s in scores]
 
 
-# --- Provider Factory ---
+# --- Singletons ---
 
 _embedding_provider: EmbeddingProvider | None = None
 _reranker_provider: RerankerProvider | None = None
-_fallback_warning: str | None = None
-_api_error_count: int = 0
-_API_ERROR_THRESHOLD = 3  # Reset provider after this many consecutive API errors
-_fallback_since: float = 0  # timestamp when we fell back to local
-_RETRY_API_AFTER = 300  # try Gemini again after 5 minutes on local fallback
 _provider_lock = threading.Lock()
 
 
-def notify_api_error() -> None:
-    """Called when an API provider fails. After threshold, resets providers to re-evaluate."""
-    global _api_error_count
-    with _provider_lock:
-        _api_error_count += 1
-        if _api_error_count >= _API_ERROR_THRESHOLD:
-            log.warning(f"Gemini API failed {_api_error_count} times, resetting providers")
-            _reset_providers_locked()
-
-
-def notify_api_success() -> None:
-    """Called on successful API call. Resets error counter."""
-    global _api_error_count
-    with _provider_lock:
-        _api_error_count = 0
-
-
 def get_embedding_provider() -> tuple[EmbeddingProvider, str | None]:
-    """Get the active embedding provider. Returns (provider, warning_or_None).
+    """Get the active embedding provider. Returns (provider, None)."""
+    global _embedding_provider
 
-    Tries Gemini API first, falls back to local if unavailable.
-    """
-    global _embedding_provider, _fallback_warning, _fallback_since
-
-    with _provider_lock:
-        if _embedding_provider is not None:
-            # If on local fallback, periodically check if API recovered
-            if (
-                _fallback_warning
-                and _fallback_since > 0
-                and time.time() - _fallback_since > _RETRY_API_AFTER
-            ):
-                from src.config import GEMINI_API_KEY
-                if GEMINI_API_KEY:
-                    try:
-                        from google import genai
-                        client = genai.Client(api_key=GEMINI_API_KEY)
-                        client.models.embed_content(
-                            model="gemini-embedding-001",
-                            contents=["test"],
-                            config={"output_dimensionality": 768},
-                        )
-                        # API works again — restart daemon to free local model RAM
-                        log.info("Gemini API recovered. Restarting daemon to free RAM...")
-                        import os, sys
-                        os.execv(sys.executable, [sys.executable] + sys.argv)
-                    except Exception:
-                        _fallback_since = time.time()  # retry in another 5 min
-            return _embedding_provider, _fallback_warning
-
-    # Not yet initialized — read config outside the lock, then do API test outside lock
-    from src.config import EMBEDDING_PROVIDER, GEMINI_API_KEY
-
-    if EMBEDDING_PROVIDER == "local":
-        with _provider_lock:
-            if _embedding_provider is None:
-                _embedding_provider = LocalEmbeddingProvider()
-            return _embedding_provider, None
-
-    if EMBEDDING_PROVIDER in ("gemini", "auto") and GEMINI_API_KEY:
-        try:
-            provider = GeminiEmbeddingProvider(GEMINI_API_KEY)
-            # Quick test to verify API works (outside lock — slow I/O)
-            provider.embed(["test"], task_type="query")
-            with _provider_lock:
-                if _embedding_provider is None:
-                    _embedding_provider = provider
-                    log.info(f"Embedding provider: {provider.provider_name}")
-                return _embedding_provider, None
-        except Exception as e:
-            if EMBEDDING_PROVIDER == "gemini":
-                # Strict gemini mode — do NOT fall back to local. Keep provider so per-query
-                # failures raise cleanly; local model is only for nightly cron.
-                log.error(f"Gemini embedding initial test failed: {e}. Keeping Gemini provider (no local fallback in strict mode).")
-                with _provider_lock:
-                    if _embedding_provider is None:
-                        _embedding_provider = GeminiEmbeddingProvider(GEMINI_API_KEY)
-                        _fallback_warning = f"Gemini API test failed: {e}"
-                    return _embedding_provider, _fallback_warning
-            else:
-                log.warning(f"Gemini embedding unavailable ({e}), falling back to local")
-
-    # Fallback to local (only when EMBEDDING_PROVIDER == "auto" and Gemini failed)
     with _provider_lock:
         if _embedding_provider is None:
             _embedding_provider = LocalEmbeddingProvider()
-            _fallback_warning = "Gemini API unavailable, using local models"
-            _fallback_since = time.time()
-            log.warning(_fallback_warning)
-        return _embedding_provider, _fallback_warning
+        return _embedding_provider, None
 
 
 def get_reranker_provider() -> tuple[RerankerProvider, str | None]:
-    """Get the active reranker provider. Returns (provider, warning_or_None)."""
+    """Get the active reranker provider. Returns (provider, None)."""
     global _reranker_provider
-
-    with _provider_lock:
-        if _reranker_provider is not None:
-            return _reranker_provider, _fallback_warning
-
-    from src.config import EMBEDDING_PROVIDER, GEMINI_API_KEY, RERANKER_MODEL
-
-    if EMBEDDING_PROVIDER == "local":
-        with _provider_lock:
-            if _reranker_provider is None:
-                _reranker_provider = LocalRerankerProvider()
-            return _reranker_provider, None
-
-    if EMBEDDING_PROVIDER in ("gemini", "auto") and GEMINI_API_KEY:
-        try:
-            provider = GeminiRerankerProvider(GEMINI_API_KEY, model=RERANKER_MODEL)
-            with _provider_lock:
-                if _reranker_provider is None:
-                    _reranker_provider = provider
-                    log.info(f"Reranker provider: {provider.provider_name}")
-                return _reranker_provider, None
-        except Exception as e:
-            if EMBEDDING_PROVIDER == "gemini":
-                # Strict: keep Gemini reranker even if init fails — per-call failures
-                # return neutral scores rather than loading CrossEncoder (~400MB RAM)
-                log.error(f"Gemini reranker init failed: {e}. Keeping Gemini (no local fallback in strict mode).")
-                with _provider_lock:
-                    if _reranker_provider is None:
-                        _reranker_provider = GeminiRerankerProvider(GEMINI_API_KEY, model=RERANKER_MODEL)
-                    return _reranker_provider, f"Gemini reranker init failed: {e}"
-            log.warning(f"Gemini reranker unavailable ({e}), falling back to local")
 
     with _provider_lock:
         if _reranker_provider is None:
             _reranker_provider = LocalRerankerProvider()
-        return _reranker_provider, _fallback_warning
+        return _reranker_provider, None
 
 
 def _reset_providers_locked() -> None:
-    """Reset cached providers while _provider_lock is already held."""
-    global _embedding_provider, _reranker_provider, _fallback_warning, _api_error_count
+    """Reset cached providers while _provider_lock is already held. Unloads local models to free RAM."""
+    global _embedding_provider, _reranker_provider
     import gc
+
     need_gc = False
     if isinstance(_embedding_provider, LocalEmbeddingProvider) and _embedding_provider._model is not None:
-        log.info("Unloading local embedding model to free RAM")
+        log.info("Unloading embedding model to free RAM")
         del _embedding_provider._model
         _embedding_provider._model = None
         need_gc = True
     if isinstance(_reranker_provider, LocalRerankerProvider) and _reranker_provider._model is not None:
-        log.info("Unloading local reranker model to free RAM")
+        log.info("Unloading reranker model to free RAM")
         del _reranker_provider._model
         _reranker_provider._model = None
         need_gc = True
@@ -488,8 +184,6 @@ def _reset_providers_locked() -> None:
         gc.collect()
     _embedding_provider = None
     _reranker_provider = None
-    _api_error_count = 0
-    _fallback_warning = None
 
 
 def reset_providers() -> None:

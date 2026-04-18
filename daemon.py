@@ -32,6 +32,8 @@ if "CODE_RAG_HOME" not in os.environ:
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
+from datetime import UTC
+
 from src.container import is_model_loaded, is_reranker_loaded
 from src.graph.service import (
     find_dependencies_tool,
@@ -91,12 +93,14 @@ TOOLS: dict[str, Callable[[dict[str, Any]], str]] = {
         args.get("limit", 10),
     ),
     "find_dependencies": lambda args: find_dependencies_tool(args["repo_name"]),
-    "trace_impact": lambda args: trace_impact_tool(args.get("repo_name") or args.get("target", ""), args.get("max_depth", 2)),
+    "trace_impact": lambda args: trace_impact_tool(
+        args.get("repo_name") or args.get("target", ""), args.get("max_depth", 2)
+    ),
     "trace_flow": lambda args: (
         trace_flow_tool(args["source"], args["target"], args.get("max_depth", 5))
         if "source" in args and "target" in args
         else "Error: trace_flow requires 'source' and 'target' parameters (repo names). "
-             "Example: {\"source\": \"grpc-payment-gateway\", \"target\": \"grpc-apm-payper\"}"
+        'Example: {"source": "grpc-payment-gateway", "target": "grpc-apm-payper"}'
     ),
     "trace_chain": lambda args: trace_chain_tool(
         args["start"], args.get("direction", "both"), args.get("max_depth", 4)
@@ -106,7 +110,6 @@ TOOLS: dict[str, Callable[[dict[str, Any]], str]] = {
     "analyze_task": lambda args: analyze_task_tool(
         args["description"],
         args.get("provider", ""),
-        final_rank=args.get("final_rank", False),
         exclude_task_id=args.get("exclude_task_id", ""),
     ),
     "context_builder": lambda args: context_builder_tool(
@@ -136,19 +139,20 @@ class DaemonHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path == "/health":
             from src.embedding_provider import _embedding_provider, _reranker_provider
-            from src.api_costs import get_daily_cost
 
             providers_ready = is_model_loaded() and is_reranker_loaded()
             emb_name = _embedding_provider.provider_name if _embedding_provider else "not initialized"
             rer_name = _reranker_provider.provider_name if _reranker_provider else "not initialized"
-            self._json_response(200, {
-                "status": "ok" if providers_ready else "ready",
-                "embedding_provider": emb_name,
-                "reranker_provider": rer_name,
-                "daily_api_cost_usd": round(get_daily_cost(), 4),
-                "uptime": time.time() - _start_time,
-                "pid": os.getpid(),
-            })
+            self._json_response(
+                200,
+                {
+                    "status": "ok" if providers_ready else "ready",
+                    "embedding_provider": emb_name,
+                    "reranker_provider": rer_name,
+                    "uptime": time.time() - _start_time,
+                    "pid": os.getpid(),
+                },
+            )
         else:
             self._json_response(404, {"error": "not found"})
 
@@ -208,8 +212,13 @@ _FULL_LOG_ENABLED = os.environ.get("CODE_RAG_FULL_TOOL_LOG", "").lower() in ("1"
 
 
 def _log_call(
-    tool_name: str, args: dict, result: str, duration_ms: float,
-    error: str | None = None, source: str = "unknown", session: str = "",
+    tool_name: str,
+    args: dict,
+    result: str,
+    duration_ms: float,
+    error: str | None = None,
+    source: str = "unknown",
+    session: str = "",
 ) -> None:
     """Append tool call record to JSONL log. Never raises.
 
@@ -218,9 +227,9 @@ def _log_call(
     (opt-in, used for blind-test audit to catch leaks past the preview cutoff).
     """
     try:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        ts = datetime.now(timezone.utc).isoformat()
+        ts = datetime.now(UTC).isoformat()
         preview_limit = 3000 if tool_name == "analyze_task" else 300
         base = {
             "ts": ts,

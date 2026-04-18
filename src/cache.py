@@ -12,7 +12,6 @@ import json
 import threading
 import time
 from collections.abc import Callable
-from typing import ParamSpec, TypeVar
 
 from src.config import CACHE_MAX, CACHE_TTL
 from src.types import RuntimeStats, ToolCallStat
@@ -23,12 +22,12 @@ _CACHE_TTL = CACHE_TTL
 _CACHE_MAX = CACHE_MAX
 
 # --- Singleflight dedup: prevents N parallel threads from all running the same
-#     expensive computation (e.g., Gemini embed) when they miss the cache
+#     expensive computation (embedding + vector search) when they miss the cache
 #     simultaneously. One thread becomes leader and computes; the rest wait. ---
 _inflight_lock = threading.Lock()
 _inflight_events: dict[str, threading.Event] = {}
 # Max wait for follower threads when leader is computing.
-# Should be >= slowest expected search path (Gemini retry = up to ~3*61s = 183s).
+# Covers the slowest expected search path (cold model load + large vector scan).
 _SINGLEFLIGHT_TIMEOUT = 200.0
 
 # --- Runtime stats ---
@@ -76,9 +75,9 @@ def cache_or_compute(key: str, compute_fn: Callable[[], str]) -> str:
     """Return cached value, or compute once and cache (with singleflight dedup).
 
     If another thread is already computing this key, wait for it and reuse
-    its result instead of running a duplicate expensive computation (Gemini
-    embed, LanceDB vector search). Prevents request amplification when N
-    identical concurrent queries all miss the cache.
+    its result instead of running a duplicate expensive computation
+    (embedding + LanceDB vector search). Prevents request amplification when
+    N identical concurrent queries all miss the cache.
 
     If the leader thread fails or its result expires before we wake, we
     fall through and compute ourselves.
@@ -125,11 +124,7 @@ def _track_tool(func_name: str, duration: float) -> None:
         _stats["tool_times"][func_name] = times[-100:]
 
 
-P = ParamSpec("P")
-T = TypeVar("T")
-
-
-def tracked(fn: Callable[P, T]) -> Callable[P, T]:
+def tracked[**P, T](fn: Callable[P, T]) -> Callable[P, T]:
     """Decorator to track tool call count and duration."""
 
     @functools.wraps(fn)

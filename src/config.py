@@ -66,74 +66,10 @@ GRPC_DOMAIN_SUFFIX: str = CONFIG.get("grpc_domain_suffix", "")
 # --- Embedding model ---
 EMBEDDING_MODEL_KEY: str = CONFIG.get("embedding_model", os.getenv("CODE_RAG_MODEL", "coderank"))
 
-# --- Embedding/reranking provider: "gemini", "local", "auto" (default) ---
-EMBEDDING_PROVIDER: str = CONFIG.get("embedding_provider", os.getenv("CODE_RAG_PROVIDER", "auto"))
-RERANKER_MODEL: str = CONFIG.get("reranker_model", os.getenv("CODE_RAG_RERANKER", "gemini-2.5-flash"))
-
-# --- Gemini API key (centralized, used by embedding provider + reranker + analyze_task) ---
-def _load_gemini_keys() -> list[str]:
-    """Load all Gemini API keys from env + .env files for rotation on 429.
-
-    Priority order (paid/PRO tier first, then free-tier keys):
-      1. GEMINI_PRO_API_KEY (paid tier — highest quota)
-      2. GEMINI_API_KEY (single key env var)
-      3. GEMINI_API_KEYS (comma-separated, typically free tier)
-      4. Same keys scanned from .env files
-    Deduplicated, order preserved.
-    """
-    keys: list[str] = []
-    # 1. PRO/paid key first — highest priority
-    pro = os.getenv("GEMINI_PRO_API_KEY", "").strip()
-    if pro:
-        keys.append(pro)
-    # 2. Single free key
-    single = os.getenv("GEMINI_API_KEY", "").strip()
-    if single:
-        keys.append(single)
-    # 3. Multi-key free tier
-    multi = os.getenv("GEMINI_API_KEYS", "").strip()
-    if multi:
-        keys.extend([k.strip() for k in multi.split(",") if k.strip()])
-    # 4. Scan .env files for same keys (same priority order)
-    for env_path in [
-        Path.home() / "telegram-claude-bot" / ".env",
-        BASE_DIR / ".env",
-    ]:
-        if env_path.exists():
-            pro_line = None
-            key_line = None
-            keys_line = None
-            for line in env_path.read_text().splitlines():
-                if line.startswith("GEMINI_PRO_API_KEY="):
-                    pro_line = line
-                elif line.startswith("GEMINI_API_KEYS="):
-                    keys_line = line
-                elif line.startswith("GEMINI_API_KEY=") and not line.startswith("GEMINI_API_KEYS="):
-                    key_line = line
-            # Preserve priority: PRO first, then single, then multi
-            if pro_line:
-                val = pro_line.split("=", 1)[1].strip().strip("'\"")
-                if val:
-                    keys.insert(0, val)  # prepend: PRO is highest priority
-            if key_line:
-                val = key_line.split("=", 1)[1].strip().strip("'\"")
-                if val:
-                    keys.append(val)
-            if keys_line:
-                raw = keys_line.split("=", 1)[1].strip().strip("'\"")
-                keys.extend([k.strip() for k in raw.split(",") if k.strip()])
-    # Deduplicate while preserving order
-    seen = set()
-    deduped: list[str] = []
-    for k in keys:
-        if k not in seen:
-            seen.add(k)
-            deduped.append(k)
-    return deduped
-
-
-GEMINI_API_KEYS: list[str] = _load_gemini_keys()
-GEMINI_API_KEY: str = GEMINI_API_KEYS[0] if GEMINI_API_KEYS else ""
+# --- Reranker model (CrossEncoder; short names auto-prefix "cross-encoder/") ---
+RERANKER_MODEL: str = CONFIG.get(
+    "reranker_model", os.getenv("CODE_RAG_RERANKER", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+)
 
 # --- DB paths (derived from model config) ---
 from src.models import get_model_config  # noqa: E402
@@ -295,6 +231,7 @@ FLOW_EDGE_TYPES: set[str] = {
 
 # Pre-defined business flow entry points for trace_chain.
 KNOWN_FLOWS: dict[str, list[str]] = _load_yaml("known_flows.yaml") or {}
+
 
 # --- Structured recipes (evidence-based implementation patterns) ---
 def _load_recipes() -> dict[str, dict]:

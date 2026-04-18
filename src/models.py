@@ -37,18 +37,6 @@ EMBEDDING_MODELS: dict[str, EmbeddingModel] = {
         lance_dir="vectors.lance.coderank",
         description="SOTA code embeddings by Nomic. Best for code search. ~230MB RAM.",
     ),
-    "gemini": EmbeddingModel(
-        key="gemini",
-        name="gemini-embedding-001",
-        dim=768,
-        query_prefix="",  # Gemini uses task_type param instead
-        trust_remote_code=False,
-        batch_size=50,
-        short_limit=8000,  # ~2048 tokens
-        long_limit=8001,  # Slightly above short_limit to enable adaptive batching for long chunks
-        lance_dir="vectors.lance.gemini",
-        description="Gemini API embeddings with CODE_RETRIEVAL. Best quality, requires API key.",
-    ),
     "minilm": EmbeddingModel(
         key="minilm",
         name="all-MiniLM-L6-v2",
