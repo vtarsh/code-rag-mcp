@@ -6,30 +6,30 @@ MCP RAG server that indexes any GitHub org's codebase and provides intelligent c
 dependency tracing, and task analysis tools via Model Context Protocol.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────┐
 │ Claude Code / Claude Desktop                                │
 │   └── MCP stdio connection                                  │
-├─────────────────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────────┤
 │ mcp_server.py (thin proxy, ~20MB)                           │
 │   └── HTTP forwarding to daemon                             │
-├─────────────────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────────┤
 │ daemon.py (persistent, ~400MB, holds ML models)             │
 │   └── localhost:8742                                        │
-├─────────────────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────────┤
 │ src/                                                        │
 │   config.py ─── profile loading, conventions.yaml           │
 │   container.py ── DB connections, ML model preload          │
 │   ├── search/  (FTS5 + LanceDB + CrossEncoder)              │
-│   ├── graph/   (BFS, shortest path, 29 edge types)          │
+│   ├── graph/   (BFS, shortest path, 28 edge types)          │
 │   └── tools/                                                │
-│       ├── analyze/  (task analysis, 8 modules)              │
+│       ├── analyze/  (task analysis, 13 modules)             │
 │       ├── context.py (context_builder)                      │
 │       └── service.py (repo_overview, health_check, etc.)    │
-├─────────────────────────────────────────────────────────────┤
-│ db/knowledge.db  (SQLite FTS5, ~130MB)                      │
-│ db/vectors.lance.coderank/ (LanceDB, ~211MB — active or fallback) │
-│ db/vectors.lance.gemini/   (LanceDB, ~278MB — coexists)     │
-└─────────────────────────────────────────────────────────────┘
+├──────────────────────────────────────────────────────────┤
+│ db/knowledge.db  (SQLite FTS5, ~144MB)                      │
+│ db/vectors.lance.coderank/ (LanceDB, ~238MB — active or fallback) │
+│ db/vectors.lance.gemini/   (LanceDB, ~854MB — coexists; migration target per ROADMAP P0) │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ## Repository Structure
@@ -45,13 +45,12 @@ vtarsh/code-rag-mcp (PUBLIC)        vtarsh/code-rag-mcp-profile (PRIVATE)
 ├── CLAUDE.md                       ├── benchmarks.yaml
 ├── ARCHITECTURE.md (this file)     ├── install.sh          ← symlinks scripts
 ├── TESTING.md                      ├── uninstall.sh
-└── Makefile                        ├── scripts/            ← 20 org-specific scripts
+└── Makefile                        ├── scripts/            ← ~30 org-specific scripts
                                     ├── docs/flows/
-                                    ├── docs/gotchas/
-                                    ├── docs/references/
-                                    ├── docs/tasks/
-                                    ├── RECALL-TRACKER.md
-                                    └── NEXT-SESSION-PROMPT.md
+                                    ├── docs/gotchas/        ← runtime traps only
+                                    ├── docs/references/     ← stable structural knowledge
+                                    ├── docs/dictionary/     ← concepts/entities/fields YAMLs
+                                    └── RECALL-TRACKER.md
 ```
 
 **Dependency**: Private repo is cloned into `profiles/pay-com/` (gitignored in public repo).
@@ -63,15 +62,21 @@ All org-specific configuration loaded at runtime via `conventions.yaml`.
 The core intelligence — classifies tasks and finds relevant repos.
 
 ```
-__init__.py          Orchestrator: classify → dispatch → assemble output
-base.py              AnalysisContext dataclass, shared utilities
-classifier.py        7 domains (pi, core-risk/api/3ds/platform/payment, bo, hs)
-                     Multi-domain when scores close. Uses conventions.yaml domain_patterns.
-core_analyzer.py     Non-PI analysis: cascade, co-occurrence, fan-out, function search, keyword scan
-pi_analyzer.py       Provider analysis: provider repos, webhooks, impact, checklist, bulk detection
-shared_sections.py   Universal: gotchas, task patterns, file patterns, proto, gateway, GitHub, completeness, CI
-github_helpers.py    GitHub API (branches, PRs, task ID matching)
-method_helpers.py    gRPC method existence checks
+__init__.py              Orchestrator: classify → dispatch → assemble output
+base.py                  AnalysisContext dataclass, shared utilities
+classifier.py            9 domains (pi, core-risk/api/3ds/platform/payment/dispute, bo, hs)
+                         PI from provider detection; other 8 from conventions.yaml domain_patterns.
+                         Multi-domain when scores close.
+core_analyzer.py         Non-PI analysis: cascade, co-occurrence, fan-out, function search, keyword scan
+pi_analyzer.py           Provider analysis: provider repos, webhooks, impact, checklist, bulk detection
+shared_sections.py       Universal: gotchas, task patterns, file patterns, proto, gateway, GitHub, completeness, CI
+final_ranker.py          Cross-encoder + final score fusion before formatting output
+flows_loader.py          Loads docs/flows/*.yaml definitions used by trace_flow / completeness checks
+investigation_questions.py  Generates per-task investigation prompts surfaced in analyze_task output
+meta_guard.py            Guards against generic/repo-name leakage and duplicate output sections
+recipe_section.py        Renders the "Recipe" section (sequenced steps) for known task archetypes
+github_helpers.py        GitHub API (branches, PRs, task ID matching)
+method_helpers.py        gRPC method existence checks
 ```
 
 ### Data Flow
@@ -96,12 +101,18 @@ classify_task() → TaskClassification(domain, provider, seed_repos)
 │ co-occurrence boost, methods,      │
 │ GitHub activity, completeness,     │
 │ CI risk                            │
-└────────────────────────────────────┘
+└─────────────────────────────────────┘
     ↓
 Markdown output with **bold repo names**
 ```
 
-### 10 Mechanisms (all generic, zero hardcoded repo names)
+### 10 Generic Mechanisms (all generic, zero hardcoded repo names)
+
+> Counts: this section lists the **10 core generic mechanisms** in `src/tools/analyze/`.
+> `profiles/pay-com/RECALL-TRACKER.md` lists **20** because it adds profile-tuned
+> refinements (hub penalty, domain templates, phantom filtering, Gemini re-ranker, etc.)
+> that ride on top of these 10.
+
 
 1. **Classifier** — keywords + task prefix + repo patterns → domain. Multi-domain union when close.
 2. **BFS cascade upstream** — `bfs_dependents(seed, depth=2)` finds who depends on seeds.
@@ -143,7 +154,7 @@ make build                    # Full: clone → extract → index → graph → 
 # Individual steps:
 scripts/extract_artifacts.py  # Parse repos → extracted/ (fills repos.org_deps)
 scripts/build_index.py        # Build FTS5 chunks + code_facts
-scripts/build_graph.py        # Build graph_edges (29 edge types, ~15.5k edges)
+scripts/build_graph.py        # Build graph_edges (28 edge types, ~15.5k edges)
 scripts/build_vectors.py      # Build LanceDB embeddings
 ```
 

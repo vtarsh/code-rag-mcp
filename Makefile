@@ -16,9 +16,9 @@ help: ## Show this help
 init: ## Run setup wizard for a new profile
 	$(PYTHON) setup_wizard.py
 
-build: ## Full pipeline: clone → extract → index → vectors → graph (~30-60 min)
+build: ## Full pipeline: clone → extract → index → vectors → graph (~2-4h; peaks ~20GB RAM)
 	@echo "Building with profile: $(PROFILE)"
-	@echo "This may take 30-60 minutes depending on org size..."
+	@echo "Full build typically 2-4h, peaks ~20GB RAM. Run overnight on 16GB Macs."
 	ACTIVE_PROFILE=$(PROFILE) $(SCRIPTS)/full_update.sh --full
 
 update: ## Incremental update (changed repos only)
