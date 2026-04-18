@@ -267,8 +267,6 @@ def cleanup_pid() -> None:
 def main() -> None:
     log.info(f"Starting daemon on port {PORT} (pid={os.getpid()})")
 
-    # No model preloading — providers initialize lazily on first query
-    # API providers (Gemini) need no preload; local fallback loads on demand
     write_pid()
 
     server = ThreadingHTTPServer(("127.0.0.1", PORT), DaemonHandler)

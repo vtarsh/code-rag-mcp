@@ -187,8 +187,8 @@ def build_index():
             # (gotchas/references/dictionary/providers/...). That churns SQLite
             # rowids which are used as LanceDB primary keys → every chunk becomes
             # orphan + missing → embed_missing_vectors re-embeds 22k chunks every
-            # night. On Gemini API that's ~30 min; on coderank (CPU-only 16 GB
-            # Mac) it's 10-50 h → hang + OOM.
+            # night. With coderank on MPS that's 30-90 min; on CPU-only 16 GB
+            # Mac it's 10-50 h → hang + OOM.
             docs_fp = compute_profile_docs_fingerprint()
             stored_fp_row = conn.execute("SELECT value FROM build_info WHERE key = 'profile_docs_fp'").fetchone()
             if stored_fp_row and stored_fp_row[0] == docs_fp:

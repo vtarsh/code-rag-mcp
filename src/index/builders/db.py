@@ -151,7 +151,6 @@ def reset_repo_all_layers(conn: sqlite3.Connection, repo_name: str) -> dict[str,
     Cleans:
       1-5. SQLite: chunks, chunk_meta, code_facts, code_facts_fts, repos
       6.   LanceDB vectors.lance.coderank (if exists)
-      7.   LanceDB vectors.lance.gemini (if exists)
 
     NOT cleaned here (by design):
       - graph_edges / graph_nodes — graph is rebuilt as a whole, never per-repo
@@ -172,5 +171,4 @@ def reset_repo_all_layers(conn: sqlite3.Connection, repo_name: str) -> dict[str,
     stats: dict[str, int] = {}
     stats["sqlite_chunks"] = delete_repo_data(conn, repo_name)
     stats["lance_coderank"] = _delete_lancedb_repo("vectors.lance.coderank", repo_name)
-    stats["lance_gemini"] = _delete_lancedb_repo("vectors.lance.gemini", repo_name)
     return stats
