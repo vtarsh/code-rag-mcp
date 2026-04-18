@@ -86,23 +86,11 @@ def _filter_pkg_bump_repos(files_changed: str | None, repos: set[str]) -> tuple[
     return filtered, len(repos) - len(filtered)
 
 
-_RERANK_SECTION_RE = re.compile(r"## Re-ranked Predictions \(Gemini\)\n(.*?)(?=\n## |\Z)", re.DOTALL)
-
-
-def _extract_reranked_repos(result: str) -> set[str] | None:
-    """Extract repos from the re-ranked section only. Returns None if section missing."""
-    m = _RERANK_SECTION_RE.search(result)
-    if not m:
-        return None
-    return {r.group(1) for r in _BOLD_REPO_RE.finditer(m.group(1)) if not r.group(1).startswith(_EXCLUDE_PREFIXES)}
-
-
 def run_benchmark(
     groups: list[str] | None = None,
     single_task: str | None = None,
     filter_phantoms: bool = False,
     filter_pkg_bumps: bool = False,
-    rerank: bool = False,
 ) -> None:
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
@@ -159,15 +147,11 @@ def run_benchmark(
             task_desc = r["description"] or ""
             if task_desc:
                 desc += " " + task_desc[:300]
-            result = _analyze_task_impl(db, desc, "", rerank=rerank)
+            result = _analyze_task_impl(db, desc, "")
         finally:
             db.close()
 
-        if rerank:
-            reranked = _extract_reranked_repos(result)
-            found = reranked if reranked is not None else extract_found_repos(result)
-        else:
-            found = extract_found_repos(result)
+        found = extract_found_repos(result)
         hits = actual & found
         recall = len(hits) / len(actual) * 100
         precision = len(hits) / len(found) * 100 if found else 0.0
@@ -235,9 +219,6 @@ def main() -> None:
         action="store_true",
         help="Include pkg-bump-only repos in ground truth",
     )
-    parser.add_argument(
-        "--rerank", action="store_true", help="Enable Gemini re-ranking and measure from re-ranked section"
-    )
     args = parser.parse_args()
 
     groups = [g.strip().upper() for g in args.group.split(",")] if args.group else None
@@ -246,7 +227,6 @@ def main() -> None:
         single_task=args.task,
         filter_phantoms=args.filter_phantoms,
         filter_pkg_bumps=not args.no_filter_pkg_bumps,
-        rerank=args.rerank,
     )
 
 

@@ -18,6 +18,7 @@ Usage:
   python3 scripts/autoresearch_loop.py --iters 10 --benchmark queries
   python3 scripts/autoresearch_loop.py --iters 20 --benchmark realworld --seed 42
 """
+
 from __future__ import annotations
 
 import argparse
@@ -29,7 +30,7 @@ import shutil
 import subprocess
 import sys
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 BASE_DIR = Path(os.environ.get("CODE_RAG_HOME", Path.home() / ".code-rag-mcp"))
@@ -42,16 +43,19 @@ SNAPSHOT = Path("/tmp") / f"conventions.yaml.autoresearch.{os.getpid()}.bak"
 
 # Bounded ranges — anything outside these is refused.
 KNOB_RANGES = {
-    "rrf_k":            (int,   10,   200),
-    "keyword_weight":   (float, 0.5,  5.0),
-    "gotchas_boost":    (float, 0.5,  3.0),
-    "reference_boost":  (float, 0.5,  3.0),
+    "rrf_k": (int, 10, 200),
+    "keyword_weight": (float, 0.5, 5.0),
+    "gotchas_boost": (float, 0.5, 3.0),
+    "reference_boost": (float, 0.5, 3.0),
 }
 
 BENCHMARKS = {
-    "queries":   {"cmd": ["python3", "scripts/benchmark_queries.py"],   "regex": r"Average composite score[.\s]*\s*([\d.]+)"},
+    "queries": {
+        "cmd": ["python3", "scripts/benchmark_queries.py"],
+        "regex": r"Average composite score[.\s]*\s*([\d.]+)",
+    },
     "realworld": {"cmd": ["python3", "scripts/benchmark_realworld.py"], "regex": r"Average[^:]*:\s*([\d.]+)"},
-    "mrr":       {"cmd": ["python3", "scripts/autoresearch_eval.py"],   "regex": r"Average MRR score:\s*([\d.]+)"},
+    "mrr": {"cmd": ["python3", "scripts/autoresearch_eval.py"], "regex": r"Average MRR score:\s*([\d.]+)"},
 }
 
 
@@ -97,7 +101,7 @@ def propose(current: Tuning, rng: random.Random) -> tuple[str, Tuning]:
     new_val = cur_val * (1 + delta_pct)
     new_val = max(lo, min(hi, new_val))
     if kind is int:
-        new_val = max(int(round(new_val)), lo)
+        new_val = max(round(new_val), lo)
     else:
         new_val = round(new_val, 3)
     if new_val == cur_val:
@@ -111,14 +115,10 @@ def propose(current: Tuning, rng: random.Random) -> tuple[str, Tuning]:
 def run_benchmark(name: str) -> tuple[float | None, float, str]:
     """Execute benchmark, parse score. Returns (score, duration_s, raw_tail)."""
     spec = BENCHMARKS[name]
-    # Force local reranker for determinism. Gemini reranker is
-    # non-deterministic across runs (variance up to ±0.11 on MRR metric),
-    # which makes the loop's keep/reject decisions noise-driven.
     env = {
         **os.environ,
         "CODE_RAG_HOME": str(BASE_DIR),
         "ACTIVE_PROFILE": PROFILE,
-        "EMBEDDING_PROVIDER": "local",
     }
     t0 = time.time()
     proc = subprocess.run(
@@ -147,8 +147,9 @@ def main() -> int:
     parser.add_argument("--iters", type=int, default=10)
     parser.add_argument("--benchmark", choices=list(BENCHMARKS), default="queries")
     parser.add_argument("--seed", type=int, default=None)
-    parser.add_argument("--min-delta", type=float, default=0.0,
-                        help="Minimum score improvement to accept (default: any improvement)")
+    parser.add_argument(
+        "--min-delta", type=float, default=0.0, help="Minimum score improvement to accept (default: any improvement)"
+    )
     args = parser.parse_args()
 
     rng = random.Random(args.seed)
@@ -173,12 +174,17 @@ def main() -> int:
             print(f"FATAL: baseline benchmark failed to produce a score. Tail:\n{base_tail}", file=sys.stderr)
             return 2
         print(f"[autoresearch] baseline score: {base_score:.4f}  ({base_dur:.1f}s)")
-        log({
-            "run": run_id, "iter": 0, "event": "baseline",
-            "score": base_score, "duration_s": base_dur,
-            "tuning": start_tuning.as_dict(),
-            "benchmark": args.benchmark,
-        })
+        log(
+            {
+                "run": run_id,
+                "iter": 0,
+                "event": "baseline",
+                "score": base_score,
+                "duration_s": base_dur,
+                "tuning": start_tuning.as_dict(),
+                "benchmark": args.benchmark,
+            }
+        )
 
         best_score = base_score
         best_tuning = start_tuning
@@ -187,7 +193,7 @@ def main() -> int:
         for i in range(1, args.iters + 1):
             knob, proposed = propose(best_tuning, rng)
             write_tuning(proposed)
-            score, dur, tail = run_benchmark(args.benchmark)
+            score, dur, _tail = run_benchmark(args.benchmark)
             if score is None:
                 action = "ERROR_PARSE"
                 delta = None
@@ -198,18 +204,28 @@ def main() -> int:
                     action = "KEEP"
                     best_score = score
                     best_tuning = proposed
-                    print(f"[autoresearch] iter={i} {knob}={getattr(proposed, knob)} → {score:.4f}  Δ={delta:+.4f}  KEEP  ({dur:.1f}s)")
+                    print(
+                        f"[autoresearch] iter={i} {knob}={getattr(proposed, knob)} → {score:.4f}  Δ={delta:+.4f}  KEEP  ({dur:.1f}s)"
+                    )
                 else:
                     action = "REJECT"
                     write_tuning(best_tuning)  # revert
-                    print(f"[autoresearch] iter={i} {knob}={getattr(proposed, knob)} → {score:.4f}  Δ={delta:+.4f}  REJECT ({dur:.1f}s)")
-            log({
-                "run": run_id, "iter": i, "event": action,
-                "knob": knob,
-                "proposed": proposed.as_dict(),
-                "score": score, "delta": delta, "duration_s": dur,
-                "benchmark": args.benchmark,
-            })
+                    print(
+                        f"[autoresearch] iter={i} {knob}={getattr(proposed, knob)} → {score:.4f}  Δ={delta:+.4f}  REJECT ({dur:.1f}s)"
+                    )
+            log(
+                {
+                    "run": run_id,
+                    "iter": i,
+                    "event": action,
+                    "knob": knob,
+                    "proposed": proposed.as_dict(),
+                    "score": score,
+                    "delta": delta,
+                    "duration_s": dur,
+                    "benchmark": args.benchmark,
+                }
+            )
             history.append({"iter": i, "score": score, "tuning": proposed.as_dict(), "action": action, "knob": knob})
 
         # Final: restore original file formatting if no improvement; else apply best.
@@ -222,13 +238,19 @@ def main() -> int:
         print("=" * 60)
         print(f"[autoresearch] DONE  baseline={base_score:.4f}  best={best_score:.4f}  Δ={improvement:+.4f}")
         print(f"[autoresearch] best tuning: {best_tuning.as_dict()}")
-        print(f"[autoresearch] kept {sum(1 for h in history if h['action']=='KEEP')}/{args.iters} iterations")
+        print(f"[autoresearch] kept {sum(1 for h in history if h['action'] == 'KEEP')}/{args.iters} iterations")
         print("=" * 60)
-        log({
-            "run": run_id, "iter": args.iters, "event": "final",
-            "baseline": base_score, "best": best_score, "delta": improvement,
-            "best_tuning": best_tuning.as_dict(),
-        })
+        log(
+            {
+                "run": run_id,
+                "iter": args.iters,
+                "event": "final",
+                "baseline": base_score,
+                "best": best_score,
+                "delta": improvement,
+                "best_tuning": best_tuning.as_dict(),
+            }
+        )
         return 0
     except KeyboardInterrupt:
         print("\n[autoresearch] interrupted — restoring snapshot", file=sys.stderr)

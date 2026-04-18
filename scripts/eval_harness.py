@@ -10,6 +10,7 @@ Usage:
   python3 scripts/eval_harness.py
   python3 scripts/eval_harness.py --tasks PI-5,PI-60 --verbose
 """
+
 from __future__ import annotations
 
 import argparse
@@ -84,8 +85,8 @@ def load_ground_truth(task_id: str) -> tuple[set[str], set[str], set[str]]:
         for name, rd in repos_data.items():
             if not use_authoritative and _has_data(rd):
                 repos.add(name)
-            for pr in (rd.get("prs", []) or []):
-                for f in (pr.get("files", []) or []):
+            for pr in rd.get("prs", []) or []:
+                for f in pr.get("files", []) or []:
                     p = f.get("path") if isinstance(f, dict) else f
                     if not p or p in ("package.json", "package-lock.json", ".gitignore"):
                         continue
@@ -101,7 +102,7 @@ def load_ground_truth(task_id: str) -> tuple[set[str], set[str], set[str]]:
                     repos.add(item["repo"])
                 # Aggregate files from either files_changed or prs[].files
                 file_sources = []
-                for pr in (item.get("prs", []) or []):
+                for pr in item.get("prs", []) or []:
                     file_sources.extend(pr.get("files", []) or [])
                 file_sources.extend(item.get("files_changed", []) or [])
                 for f in file_sources:
@@ -119,7 +120,7 @@ def load_ground_truth(task_id: str) -> tuple[set[str], set[str], set[str]]:
     # Prefer top-level file_churn if available (cleaner signal)
     file_churn = data.get("file_churn") or {}
     if isinstance(file_churn, dict) and file_churn:
-        for repo_name, repo_churn in file_churn.items():
+        for _repo_name, repo_churn in file_churn.items():
             if not isinstance(repo_churn, dict):
                 continue
             for path, info in repo_churn.items():
@@ -222,69 +223,12 @@ def _normalize_file_set(files: set[str]) -> set[str]:
     return {f.split("/")[-1] for f in files}
 
 
-def run_analyze(description: str, provider: str, exclude_task_id: str, final_rank: bool = False) -> str:
+def run_analyze(description: str, provider: str, exclude_task_id: str) -> str:
     """Run analyze_task and return the output markdown."""
     sys.path.insert(0, str(BASE))
     from src.tools.analyze import analyze_task_tool
-    return analyze_task_tool(
-        description, provider=provider, exclude_task_id=exclude_task_id, final_rank=final_rank,
-    )
 
-
-def extract_final_ranked_repos(output: str) -> tuple[list[str], list[str]]:
-    """Parse the 'Final LLM Ranking' section. Returns (core, related)."""
-    core: list[str] = []
-    related: list[str] = []
-    in_section = False
-    current: list[str] | None = None
-
-    for raw in output.split("\n"):
-        line = raw.strip()
-        if line.startswith("## Final LLM Ranking"):
-            in_section = True
-            continue
-        if not in_section:
-            continue
-        if line.startswith("## ") or line.startswith("---"):
-            break
-        if line.startswith("**Core"):
-            current = core
-            continue
-        if line.startswith("**Related"):
-            current = related
-            continue
-        if line.startswith("**Dropped"):
-            current = None
-            continue
-        if current is not None:
-            m = re.match(r"-\s+\*\*([a-z0-9][a-z0-9-]+)\*\*", line)
-            if m:
-                current.append(m.group(1))
-                continue
-            m = re.match(r"-\s+([a-z0-9][a-z0-9-]+)\s", line)
-            if m:
-                current.append(m.group(1))
-    return core, related
-
-
-def extract_dropped_repos(output: str) -> list[str]:
-    """Parse repos listed in the 'Dropped' section of the Final LLM Ranking."""
-    dropped: list[str] = []
-    in_dropped = False
-    for raw in output.split("\n"):
-        line = raw.strip()
-        if line.startswith("**Dropped"):
-            in_dropped = True
-            continue
-        if not in_dropped:
-            continue
-        if line.startswith("## ") or line.startswith("---") or line.startswith("**"):
-            break
-        # Format: "- ~~repo-name~~ [TIER] — reason"
-        m = re.match(r"-\s+~~([a-z0-9][a-z0-9-]+)~~", line)
-        if m:
-            dropped.append(m.group(1))
-    return dropped
+    return analyze_task_tool(description, provider=provider, exclude_task_id=exclude_task_id)
 
 
 def detect_provider(task_id: str, ground_truth_repos: set[str]) -> str:
@@ -294,19 +238,21 @@ def detect_provider(task_id: str, ground_truth_repos: set[str]) -> str:
             return repo.replace("grpc-apm-", "")
     for repo in ground_truth_repos:
         if repo.startswith("grpc-providers-") and repo not in (
-            "grpc-providers-credentials", "grpc-providers-features", "grpc-providers-proto"
+            "grpc-providers-credentials",
+            "grpc-providers-features",
+            "grpc-providers-proto",
         ):
             return repo.replace("grpc-providers-", "")
     return ""
 
 
-def evaluate_task(conn: sqlite3.Connection, task_id: str, *, verbose: bool = False, final_rank: bool = False) -> dict:
+def evaluate_task(conn: sqlite3.Connection, task_id: str, *, verbose: bool = False) -> dict:
     """Evaluate one task. Returns metrics dict."""
     summary, description = load_task_description(conn, task_id)
     if not description and not summary:
         return {"task_id": task_id, "error": "no summary/description in task_history"}
 
-    gt_repos, gt_high_churn, gt_all_files = load_ground_truth(task_id)
+    gt_repos, gt_high_churn, _gt_all_files = load_ground_truth(task_id)
     if not gt_repos:
         return {"task_id": task_id, "error": "no ground truth in implementation_traces/"}
 
@@ -316,7 +262,7 @@ def evaluate_task(conn: sqlite3.Connection, task_id: str, *, verbose: bool = Fal
     clean_desc = strip_hints(f"{summary}\n{description}")
 
     # Run analyze with task excluded from task_history
-    output = run_analyze(clean_desc, provider, exclude_task_id=task_id, final_rank=final_rank)
+    output = run_analyze(clean_desc, provider, exclude_task_id=task_id)
 
     # Extract predictions
     churn_files = extract_churn_warnings(output)
@@ -332,33 +278,12 @@ def evaluate_task(conn: sqlite3.Connection, task_id: str, *, verbose: bool = Fal
             result.append(r)
         return result
 
-    if final_rank:
-        # Prefer the LLM ranker's output (core=top 5, related=next).
-        ranked_core, ranked_related = extract_final_ranked_repos(output)
-        if not ranked_core and not ranked_related:
-            # Ranker failed (API error, parse failure). Fall back to recipe tiers
-            # so we don't report spurious zero-recall for a Gemini outage.
-            print(f"  (final-rank fallback to recipe tiers)")
-            core, common, conditional = extract_predicted_repos(output)
-            core_e = set(expand(core))
-            common_e = set(expand(common))
-            cond_e = set(expand(conditional))
-            all_predicted = core_e | common_e | cond_e
-            ordered_source = expand(core) + expand(common) + expand(conditional)
-        else:
-            core_e = set(expand(ranked_core))
-            common_e = set(expand(ranked_related))
-            cond_e = set()
-            all_predicted = core_e | common_e
-            # Ordering: core first, then related, preserving ranker order.
-            ordered_source = expand(ranked_core) + expand(ranked_related)
-    else:
-        core, common, conditional = extract_predicted_repos(output)
-        core_e = set(expand(core))
-        common_e = set(expand(common))
-        cond_e = set(expand(conditional))
-        all_predicted = core_e | common_e | cond_e
-        ordered_source = expand(core) + expand(common) + expand(conditional)
+    core, common, conditional = extract_predicted_repos(output)
+    core_e = set(expand(core))
+    common_e = set(expand(common))
+    cond_e = set(expand(conditional))
+    all_predicted = core_e | common_e | cond_e
+    ordered_source = expand(core) + expand(common) + expand(conditional)
 
     # Metrics
     def pct(a, b):
@@ -386,13 +311,6 @@ def evaluate_task(conn: sqlite3.Connection, task_id: str, *, verbose: bool = Fal
     churn_hit = len(churn_warned_basenames & gt_churn_basenames)
     churn_total_gt = len(gt_churn_basenames)
 
-    # Dropped-list quality (only meaningful with final_rank).
-    dropped_repos: list[str] = []
-    false_drops: list[str] = []
-    if final_rank:
-        dropped_repos = extract_dropped_repos(output)
-        false_drops = sorted(gt_repos & set(dropped_repos))
-
     metrics = {
         "task_id": task_id,
         "provider": provider,
@@ -412,8 +330,6 @@ def evaluate_task(conn: sqlite3.Connection, task_id: str, *, verbose: bool = Fal
         "churn_total_gt": churn_total_gt,
         "missed_repos": sorted(gt_repos - all_predicted),
         "extra_repos": sorted(all_predicted - gt_repos),
-        "dropped_repos": dropped_repos,
-        "false_drops": false_drops,
     }
 
     if verbose:
@@ -429,8 +345,6 @@ def evaluate_task(conn: sqlite3.Connection, task_id: str, *, verbose: bool = Fal
             print(f"  MISSED: {', '.join(metrics['missed_repos'][:5])}")
         if metrics["extra_repos"]:
             print(f"  Extra:  {', '.join(metrics['extra_repos'][:5])}")
-        if final_rank and metrics["false_drops"]:
-            print(f"  FALSE DROPS (GT in dropped list): {', '.join(metrics['false_drops'])}")
 
     return metrics
 
@@ -439,8 +353,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--tasks", default=",".join(DEFAULT_TASKS))
     parser.add_argument("--verbose", action="store_true")
-    parser.add_argument("--final-rank", action="store_true",
-                        help="Use the final LLM ranker's output (precision mode)")
     args = parser.parse_args()
 
     tasks = [t.strip().upper() for t in args.tasks.split(",")]
@@ -451,12 +363,11 @@ def main():
     if _tasks_db.exists():
         conn.execute(f"ATTACH DATABASE '{_tasks_db}' AS tasks")
 
-    mode = "FINAL-RANK" if args.final_rank else "RECIPE"
-    print(f"=== Eval mode: {mode} ===")
+    print("=== Eval mode: RECIPE ===")
 
     results = []
     for tid in tasks:
-        m = evaluate_task(conn, tid, verbose=args.verbose, final_rank=args.final_rank)
+        m = evaluate_task(conn, tid, verbose=args.verbose)
         results.append(m)
         if "error" in m:
             print(f"{tid}: ERROR {m['error']}")
@@ -467,8 +378,10 @@ def main():
     valid = [r for r in results if "error" not in r]
     if valid:
         print("\n=== AGGREGATE ===")
+
         def avg(k):
             return round(sum(r[k] for r in valid) / len(valid), 1)
+
         print(f"  Tasks evaluated:       {len(valid)}")
         print(f"  Avg recall (all):      {avg('recall_all')}%")
         print(f"  Avg recall (core+com): {avg('recall_core_common')}%")
@@ -481,51 +394,13 @@ def main():
 
         # Per-task summary table
         print("\n=== PER-TASK TABLE ===")
-        print(f"  {'Task':11} {'GT':3} {'Pred':4} {'Rec':6} {'Rec++':6} {'Prec':6} {'T5':6} {'T10':6} {'FD':3}")
+        print(f"  {'Task':11} {'GT':3} {'Pred':4} {'Rec':6} {'Rec++':6} {'Prec':6} {'T5':6} {'T10':6}")
         for r in valid:
-            fd = len(r.get("false_drops", []))
             print(
                 f"  {r['task_id']:11} {r['gt_repos']:3d} {r['predicted_total']:4d} "
                 f"{r['recall_all']:5.1f}% {r['recall_core_common']:5.1f}% "
-                f"{r['precision']:5.1f}% {r['top5_recall']:5.1f}% {r['top10_recall']:5.1f}% {fd:3d}"
+                f"{r['precision']:5.1f}% {r['top5_recall']:5.1f}% {r['top10_recall']:5.1f}%"
             )
-
-        # False-drop / false-keep analysis (only in final-rank mode)
-        if args.final_rank:
-            all_false_drops: list[str] = []
-            all_kept: set[str] = set()
-            all_gt: set[str] = set()
-            total_gt_count = 0
-            total_kept_count = 0
-            # Stable-drop histogram: how many tasks dropped each repo
-            from collections import Counter
-            drop_counter: Counter[str] = Counter()
-            for r in valid:
-                all_false_drops.extend(r["false_drops"])
-                for repo in r["dropped_repos"]:
-                    drop_counter[repo] += 1
-                total_gt_count += r["gt_repos"]
-                total_kept_count += r["predicted_total"]
-                # Note: we can reconstruct kept/gt only per-task for rate calc
-
-            # Rates
-            total_false_drop = sum(len(r["false_drops"]) for r in valid)
-            total_false_keep = sum(len(r["extra_repos"]) for r in valid)
-            false_drop_rate = (total_false_drop / total_gt_count * 100) if total_gt_count else 0
-            false_keep_rate = (total_false_keep / total_kept_count * 100) if total_kept_count else 0
-
-            print("\n=== DROPPED-LIST QUALITY ===")
-            print(f"  False drops (GT in dropped):  {total_false_drop}/{total_gt_count} = {false_drop_rate:.1f}%  (target <5%)")
-            print(f"  False keeps (kept not in GT): {total_false_keep}/{total_kept_count} = {false_keep_rate:.1f}%  (target <50%)")
-
-            # Stable drops — repos dropped in >= 50% of tasks
-            threshold = max(2, len(valid) // 2)
-            stable_drops = [(r, n) for r, n in drop_counter.most_common() if n >= threshold]
-            print(f"\n=== STABLE DROPS (≥{threshold}/{len(valid)} tasks) ===")
-            for repo, n in stable_drops[:30]:
-                print(f"  {n:2d}×  {repo}")
-            if len(stable_drops) > 30:
-                print(f"  ... {len(stable_drops) - 30} more")
 
 
 if __name__ == "__main__":

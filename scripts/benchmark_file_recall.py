@@ -46,9 +46,7 @@ BOILERPLATE_PATTERNS = (
     ".dockerignore",
 )
 
-BOILERPLATE_REPOS = (
-    "boilerplate-node-providers-grpc-service",
-)
+BOILERPLATE_REPOS = ("boilerplate-node-providers-grpc-service",)
 
 
 def _is_boilerplate(filepath: str) -> bool:
@@ -74,11 +72,7 @@ def _file_repo(filepath: str) -> str | None:
 
 
 def _extract_predicted_repos(result: str) -> set[str]:
-    return {
-        m.group(1)
-        for m in _BOLD_REPO_RE.finditer(result)
-        if not m.group(1).startswith(_EXCLUDE_PREFIXES)
-    }
+    return {m.group(1) for m in _BOLD_REPO_RE.finditer(result) if not m.group(1).startswith(_EXCLUDE_PREFIXES)}
 
 
 def run_benchmark(
@@ -135,7 +129,7 @@ def run_benchmark(
             task_desc = r["description"] or ""
             if task_desc:
                 desc += " " + task_desc[:300]
-            result = _analyze_task_impl(db, desc, "", rerank=False)
+            result = _analyze_task_impl(db, desc, "")
         finally:
             db.close()
 
