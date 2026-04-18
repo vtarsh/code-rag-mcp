@@ -181,6 +181,13 @@ GOTCHAS_BOOST: float = float(_tuning.get("gotchas_boost", 1.5))
 REFERENCE_BOOST: float = float(_tuning.get("reference_boost", 1.3))
 DICTIONARY_BOOST: float = float(_tuning.get("dictionary_boost", 1.4))
 
+# --- Rerank pool size (P4.2) — feed more candidates to cross-encoder ---
+# Controls pre-rerank cap. Benchmark (rerank_ab_top200.json) showed 50→200
+# gives +10 pp r@10 for baseline MiniLM-L-6. Env override: CODE_RAG_RERANK_POOL_SIZE.
+RERANK_POOL_SIZE: int = int(
+    os.getenv("CODE_RAG_RERANK_POOL_SIZE", _tuning.get("rerank_pool_size", 200))
+)
+
 # --- Rerank penalties (P4.1) — down-weight doc/test chunks for code-related queries ---
 # Applied to normalized combined_score AFTER cross-encoder reranking,
 # skipped when query itself requests docs/tests/guides.

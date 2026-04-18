@@ -22,6 +22,7 @@ from src.config import (
     GUIDE_PENALTY,
     KEYWORD_WEIGHT,
     REFERENCE_BOOST,
+    RERANK_POOL_SIZE,
     RRF_K,
     TEST_PENALTY,
 )
@@ -148,8 +149,9 @@ def hybrid_search(
     K = RRF_K
     KW_WEIGHT = KEYWORD_WEIGHT
 
-    # 1. Keyword search (FTS5) — large pool, no per-repo cap
-    keyword_results = fts_search(query, repo, file_type, exclude_file_types, limit=100)
+    # 1. Keyword search (FTS5) — large pool, no per-repo cap.
+    #    P4.2: raised 100→150 to fill rerank pool to ~200 after RRF overlap.
+    keyword_results = fts_search(query, repo, file_type, exclude_file_types, limit=150)
 
     # 2. Vector search
     vector_results, vec_err = vector_search(query, repo, file_type, exclude_file_types, limit=50)
@@ -213,8 +215,12 @@ def hybrid_search(
 
     total_candidates = len(scores)
 
-    # Sort by RRF score, take top candidates for reranking
-    ranked = sorted(scores.values(), key=lambda x: x["score"], reverse=True)[: limit * 2]
+    # Sort by RRF score, take top candidates for reranking.
+    # P4.2: widened from `limit*2` to `max(limit*2, RERANK_POOL_SIZE)` so the
+    # cross-encoder sees ~200 candidates (was ~20). `max(...)` preserves old
+    # behavior when the caller asks for a very large limit.
+    rerank_cap = max(limit * 2, RERANK_POOL_SIZE)
+    ranked = sorted(scores.values(), key=lambda x: x["score"], reverse=True)[:rerank_cap]
 
     # Rerank with cross-encoder
     ranked = rerank(query, ranked, limit)
