@@ -157,6 +157,34 @@ class DaemonHandler(BaseHTTPRequestHandler):
             self._json_response(404, {"error": "not found"})
 
     def do_POST(self) -> None:
+        if self.path == "/admin/unload":
+            # Release resident models so a sibling process (nightly embed) can
+            # load its own copy without doubling RSS and tripping Jetsam.
+            # Python's pymalloc keeps freed pages in process arenas, so
+            # dropping references alone barely reduces RSS. We therefore exit
+            # the process (in a detached thread, after flushing the HTTP
+            # response) and rely on launchd KeepAlive to restart us — the
+            # next MCP call then brings the model back lazily.
+            from src.embedding_provider import reset_providers
+
+            reset_providers()
+            with contextlib.suppress(Exception):
+                import torch
+
+                if torch.backends.mps.is_available():
+                    torch.mps.empty_cache()
+            log.info("Admin: unloaded resident models; scheduling process exit for launchd restart")
+            self._json_response(200, {"status": "unloaded", "will_exit": True})
+
+            import threading
+
+            def _exit_after_flush() -> None:
+                time.sleep(0.5)
+                os._exit(0)
+
+            threading.Thread(target=_exit_after_flush, daemon=True).start()
+            return
+
         if not self.path.startswith("/tool/"):
             self._json_response(404, {"error": "not found"})
             return

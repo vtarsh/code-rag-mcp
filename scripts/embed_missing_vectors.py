@@ -20,6 +20,8 @@ import os
 import sqlite3
 import sys
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 _BASE_DIR = Path(os.getenv("CODE_RAG_HOME", Path.home() / ".code-rag"))
@@ -27,17 +29,69 @@ _SCRIPT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_SCRIPT_DIR))
 
 import lancedb  # noqa: E402
+import psutil  # noqa: E402
 
 from scripts.build_vectors import embed_simple  # noqa: E402
 from src.models import get_model_config  # noqa: E402
 
+# Memory watchdog — 2026-04-18 03:00 nightly run hit SIGKILL (macOS Jetsam).
+# Root causes: (1) daemon and embed each load the model (~1 GB + MPS buffers)
+# giving a combined ~14 GB on 16 GB M1, (2) nothing in the embed loop bounds
+# RSS under pressure. Mitigations applied here: pause daemon at start (it
+# auto-restarts via mcp_server.py proxy on next MCP call) + watchdog that
+# force-compacts on soft, exits cleanly on hard. LanceDB is append-only so
+# the next run resumes from the remaining delta.
+# Overrides (for testing): CODE_RAG_EMBED_{RSS_SOFT_GB,RSS_HARD_GB,
+# SYS_AVAIL_SOFT_GB,SYS_AVAIL_HARD_GB}.
+_GIB = 1024 ** 3
+RSS_SOFT_LIMIT_BYTES = int(float(os.getenv("CODE_RAG_EMBED_RSS_SOFT_GB", "8")) * _GIB)
+RSS_HARD_LIMIT_BYTES = int(float(os.getenv("CODE_RAG_EMBED_RSS_HARD_GB", "10")) * _GIB)
+SYS_AVAIL_SOFT_BYTES = int(float(os.getenv("CODE_RAG_EMBED_SYS_AVAIL_SOFT_GB", "2")) * _GIB)
+SYS_AVAIL_HARD_BYTES = int(float(os.getenv("CODE_RAG_EMBED_SYS_AVAIL_HARD_GB", "0.8")) * _GIB)
+DAEMON_PORT = int(os.getenv("CODE_RAG_DAEMON_PORT", "8742"))
 
-def parse_args() -> str:
+
+def pause_daemon(port: int = DAEMON_PORT, timeout: float = 5.0) -> bool:
+    """Ask daemon to release its resident ML models via POST /admin/unload.
+
+    Prevents concurrent model residency — daemon holds ~1 GB model + MPS
+    buffers, embedding a second copy here would peak ~14 GB on 16 GB Mac
+    and trigger Jetsam. Python's pymalloc won't return pages to the OS
+    after `del`, so the daemon exits itself after responding and lets
+    launchd KeepAlive restart it as a fresh low-RSS process. Embed
+    proceeds while launchd honours its ~10s throttle — by the time
+    embed finishes, daemon is back up idle.
+
+    Returns True if the daemon acknowledged unload, False if no daemon
+    is reachable or the endpoint is missing.
+    """
+    url = f"http://127.0.0.1:{port}/admin/unload"
+    req = urllib.request.Request(url, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            resp.read()
+        print(f"  [daemon on :{port} unloaded + exiting for launchd restart]", flush=True)
+        return True
+    except urllib.error.URLError as e:
+        reason = getattr(e, "reason", str(e))
+        if isinstance(reason, OSError) and reason.errno in {61, 111}:  # ECONNREFUSED
+            return False  # daemon not running — nothing to pause
+        print(f"  [daemon unload failed: {reason}; continuing without pause]", flush=True)
+        return False
+    except Exception as e:
+        print(f"  [daemon unload error: {e}; continuing without pause]", flush=True)
+        return False
+
+
+def parse_args() -> tuple[str, bool]:
     model_key = "coderank"
+    pause_daemon_flag = True  # default: serialize with daemon to avoid RAM doubling
     for arg in sys.argv[1:]:
         if arg.startswith("--model="):
             model_key = arg.split("=", 1)[1]
-    return model_key
+        elif arg == "--no-pause-daemon":
+            pause_daemon_flag = False
+    return model_key, pause_daemon_flag
 
 
 def load_model(model_key: str):
@@ -59,7 +113,7 @@ def load_model(model_key: str):
 
 
 def main() -> None:
-    model_key = parse_args()
+    model_key, pause_daemon_flag = parse_args()
     db_path = _BASE_DIR / "db" / "knowledge.db"
     if not db_path.exists():
         print(f"ERROR: {db_path} does not exist", file=sys.stderr)
@@ -101,6 +155,13 @@ def main() -> None:
     index_dirty = False
 
     if missing_rowids:
+        # Serialize with the MCP daemon: daemon holds its own copy of the
+        # model (~1 GB + MPS buffers); running both at once peaks ~14 GB on
+        # 16 GB Mac and trips Jetsam. Daemon auto-restarts on the next MCP
+        # call via the mcp_server.py proxy.
+        if pause_daemon_flag:
+            pause_daemon()
+
         # Lazy-load model only when embedding is actually needed — saves
         # 1 GB RAM + model-load time on nights when nothing changed.
         print(f"\n[3/6] Loading {model_key} embedding model...")
@@ -157,15 +218,44 @@ def main() -> None:
                 with contextlib.suppress(Exception):
                     _mps_empty()
             batches_since_compact += 1
-            if batches_since_compact >= COMPACT_EVERY:
+            rss = psutil.Process().memory_info().rss
+            available = psutil.virtual_memory().available
+            mem_pressure = rss >= RSS_SOFT_LIMIT_BYTES or available <= SYS_AVAIL_SOFT_BYTES
+            if batches_since_compact >= COMPACT_EVERY or mem_pressure:
+                reason = (
+                    f"rss={rss / _GIB:.1f}G avail={available / _GIB:.1f}G"
+                    if mem_pressure else "scheduled"
+                )
                 compact_start = time.time()
                 try:
                     table.optimize()
                 except Exception as e:
-                    print(f"  [compact failed: {e}]")
+                    print(f"  [compact failed ({reason}): {e}]")
                 else:
-                    print(f"  [compact ok in {time.time() - compact_start:.1f}s]")
+                    print(f"  [compact ok in {time.time() - compact_start:.1f}s ({reason})]")
                 batches_since_compact = 0
+                if mem_pressure:
+                    gc.collect()
+                    if _mps_empty is not None:
+                        with contextlib.suppress(Exception):
+                            _mps_empty()
+                    rss_after = psutil.Process().memory_info().rss
+                    avail_after = psutil.virtual_memory().available
+                    if rss_after >= RSS_HARD_LIMIT_BYTES or avail_after <= SYS_AVAIL_HARD_BYTES:
+                        print(
+                            f"  [hard memory pressure: rss={rss_after / _GIB:.1f}G "
+                            f"avail={avail_after / _GIB:.1f}G; exiting cleanly at "
+                            f"{done}/{len(missing_rowids)} — next run resumes from delta]",
+                            flush=True,
+                        )
+                        sys.exit(0)
+                    if rss_after >= RSS_SOFT_LIMIT_BYTES or avail_after <= SYS_AVAIL_SOFT_BYTES:
+                        print(
+                            f"  [rss={rss_after / _GIB:.1f}G avail={avail_after / _GIB:.1f}G "
+                            f"still tight after compact; sleeping 30s]",
+                            flush=True,
+                        )
+                        time.sleep(30)
 
             rate = done / max(time.time() - embed_start, 0.1)
             remaining = (len(missing_rowids) - done) / max(rate, 0.01)
