@@ -145,21 +145,6 @@ print(','.join(changed))
     BATCH_SIZE=30
     echo ""
     echo "[5/7] Building vector embeddings..."
-    # If model is gemini, verify API is available; fallback to coderank if not
-    if [[ "$MODEL_KEY" == "gemini" ]]; then
-      if python3 -c "
-from src.config import GEMINI_API_KEY
-from google import genai
-client = genai.Client(api_key=GEMINI_API_KEY)
-client.models.embed_content(model='gemini-embedding-001', contents=['test'], config={'output_dimensionality': 768})
-print('ok')
-" 2>/dev/null | grep -q "ok"; then
-        echo "  Gemini API available — building gemini vectors"
-      else
-        echo "  ⚠️ Gemini API unavailable — falling back to coderank (local)"
-        MODEL_KEY="coderank"
-      fi
-    fi
     if [[ -n "$REPOS_FLAG" ]]; then
       # Split repos into batches to avoid OOM — each batch is a separate process
       REPO_LIST="${REPOS_FLAG#--repos=}"
@@ -187,11 +172,10 @@ print('ok')
     # (gotchas/flows/references/providers) which creates new SQLite rowids, but
     # build_vectors.py --repos=X only touches the listed code repos. This syncs
     # both sides and prunes orphans so chunks == vectors after every run.
-    # Uses local coderank model to stay resilient to Gemini API outages
-    # (P0 local-model migration). Doc chunks are a small subset, so OOM risk
-    # on 16GB Macs is acceptable vs code-vector batches.
+    # Doc chunks are a small subset, so OOM risk on 16GB Macs is acceptable
+    # vs code-vector batches.
     echo ""
-    echo "[5b/7] Syncing doc vectors (missing + orphan cleanup, coderank local)..."
+    echo "[5b/7] Syncing doc vectors (missing + orphan cleanup)..."
     # 3h hard timeout — prevents hanging process eating RAM for days
     "$SCRIPTS_DIR/run_with_timeout.sh" 10800 \
         python3 "$SCRIPTS_DIR/embed_missing_vectors.py" --model=coderank 2>&1 | tail -10 || \

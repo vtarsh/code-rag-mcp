@@ -11,9 +11,10 @@ re-index that touched SQLite chunks (build_index.py --incremental).
 
 Usage:
     CODE_RAG_HOME=~/.code-rag-mcp ACTIVE_PROFILE=pay-com \
-        python3.12 scripts/embed_missing_vectors.py [--model=gemini|coderank]
+        python3.12 scripts/embed_missing_vectors.py [--model=coderank|minilm]
 """
 
+import contextlib
 import gc
 import os
 import sqlite3
@@ -25,14 +26,14 @@ _BASE_DIR = Path(os.getenv("CODE_RAG_HOME", Path.home() / ".code-rag"))
 _SCRIPT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_SCRIPT_DIR))
 
+import lancedb  # noqa: E402
+
 from scripts.build_vectors import embed_simple  # noqa: E402
 from src.models import get_model_config  # noqa: E402
 
-import lancedb  # noqa: E402
-
 
 def parse_args() -> str:
-    model_key = "gemini"
+    model_key = "coderank"
     for arg in sys.argv[1:]:
         if arg.startswith("--model="):
             model_key = arg.split("=", 1)[1]
@@ -41,14 +42,6 @@ def parse_args() -> str:
 
 def load_model(model_key: str):
     mcfg = get_model_config(model_key)
-    if mcfg.key == "gemini":
-        from src.config import GEMINI_API_KEY
-        from src.embedding_provider import GeminiEmbeddingProvider
-
-        if not GEMINI_API_KEY:
-            print("ERROR: GEMINI_API_KEY not set", file=sys.stderr)
-            sys.exit(1)
-        return GeminiEmbeddingProvider(GEMINI_API_KEY, dim=mcfg.dim), mcfg
 
     import torch
     from sentence_transformers import SentenceTransformer
@@ -81,7 +74,7 @@ def main() -> None:
         print(f"ERROR: {lance_path} does not exist", file=sys.stderr)
         sys.exit(1)
 
-    print(f"[1/6] Reading SQLite chunk rowids (content deferred until embed needed)...")
+    print("[1/6] Reading SQLite chunk rowids (content deferred until embed needed)...")
     conn = sqlite3.connect(str(db_path))
     sqlite_rowid_set = {r[0] for r in conn.execute("SELECT rowid FROM chunks").fetchall()}
     conn.close()
@@ -92,10 +85,8 @@ def main() -> None:
     table = db.open_table("chunks")
     # Read ONLY the rowid column — full to_pandas() pulls all 768-float vectors
     # into memory (~140 MB for 47k rows) just to build a set of integer rowids.
-    # Projection via underlying lance dataset is ~10-30× faster + bounded RAM.
-    existing_rowids = set(
-        table.to_lance().to_table(columns=["rowid"])["rowid"].to_pylist()
-    )
+    # Projection via underlying lance dataset is ~10-30x faster + bounded RAM.
+    existing_rowids = set(table.to_lance().to_table(columns=["rowid"])["rowid"].to_pylist())
     print(f"  {len(existing_rowids)} existing vectors in LanceDB")
 
     missing_rowids = sorted(sqlite_rowid_set - existing_rowids)
@@ -125,10 +116,8 @@ def main() -> None:
         # each batch so they don't accumulate across the embed loop.
         try:
             import torch
-            _mps_empty = (
-                torch.mps.empty_cache
-                if torch.backends.mps.is_available() else None
-            )
+
+            _mps_empty = torch.mps.empty_cache if torch.backends.mps.is_available() else None
         except Exception:
             _mps_empty = None
 
@@ -136,19 +125,21 @@ def main() -> None:
         # LanceDB accumulates a new fragment file per `add()` — by 5-10 fragments
         # the metadata scan on every subsequent add noticeably slows down. We
         # compact every N batches (COMPACT_EVERY) to keep fragment count small.
-        # Tuned empirically on M1 Pro / MPS (2026-04-18): 250 × 4 = 1000 chunks
+        # Tuned empirically on M1 Pro / MPS (2026-04-18): 250 x 4 = 1000 chunks
         # per compact gave the best rate (~12-13 emb/s stable) vs 500/100 batch
         # or 500-chunk compact window.
-        COMPACT_EVERY = 4  # ~1000 chunks per compact (250 × 4)
+        COMPACT_EVERY = 4  # ~1000 chunks per compact (250 x 4)
 
-        print(f"\n[4/6] Embedding {len(missing_rowids)} missing chunks "
-              f"(batches of {SQL_BATCH}, compact every {COMPACT_EVERY} batches)...")
+        print(
+            f"\n[4/6] Embedding {len(missing_rowids)} missing chunks "
+            f"(batches of {SQL_BATCH}, compact every {COMPACT_EVERY} batches)..."
+        )
         conn = sqlite3.connect(str(db_path))
         done = 0
         embed_start = time.time()
         batches_since_compact = 0
         for i in range(0, len(missing_rowids), SQL_BATCH):
-            batch_ids = missing_rowids[i:i + SQL_BATCH]
+            batch_ids = missing_rowids[i : i + SQL_BATCH]
             placeholders = ",".join("?" * len(batch_ids))
             batch_rows = conn.execute(
                 f"SELECT rowid, content, repo_name, file_path, file_type, chunk_type "
@@ -163,10 +154,8 @@ def main() -> None:
             del batch_rows, data
             gc.collect()
             if _mps_empty is not None:
-                try:
+                with contextlib.suppress(Exception):
                     _mps_empty()
-                except Exception:
-                    pass
             batches_since_compact += 1
             if batches_since_compact >= COMPACT_EVERY:
                 compact_start = time.time()
@@ -180,13 +169,11 @@ def main() -> None:
 
             rate = done / max(time.time() - embed_start, 0.1)
             remaining = (len(missing_rowids) - done) / max(rate, 0.01)
-            print(f"  {done}/{len(missing_rowids)} ({rate:.1f} emb/s, ~{remaining/60:.0f}m remaining)")
+            print(f"  {done}/{len(missing_rowids)} ({rate:.1f} emb/s, ~{remaining / 60:.0f}m remaining)")
         conn.close()
         # Final compact to leave the table clean
-        try:
+        with contextlib.suppress(Exception):
             table.optimize()
-        except Exception:
-            pass
         print(f"\n[5/6] Appended {done} vectors to LanceDB")
         index_dirty = True
 

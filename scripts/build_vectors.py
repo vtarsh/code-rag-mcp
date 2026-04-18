@@ -129,16 +129,10 @@ def load_checkpoint(checkpoint_path):
 
 
 def _encode(model, texts, mcfg, batch_size=None):
-    """Encode texts using either SentenceTransformer or API provider."""
-    if hasattr(model, "embed"):
-        # API provider (GeminiEmbeddingProvider)
-        vectors = model.embed(texts, task_type="document")
-        return vectors
-    else:
-        # Local SentenceTransformer
-        bs = batch_size or mcfg.batch_size
-        embeddings = model.encode(texts, batch_size=bs, show_progress_bar=False)
-        return [e.tolist() for e in embeddings]
+    """Encode texts with a local SentenceTransformer model."""
+    bs = batch_size or mcfg.batch_size
+    embeddings = model.encode(texts, batch_size=bs, show_progress_bar=False)
+    return [e.tolist() for e in embeddings]
 
 
 def embed_adaptive(model, rows, mcfg, checkpoint_path):
@@ -296,31 +290,21 @@ def main():
         print(f"Mode: incremental ({len(only_repos)} repos)")
     print("=" * 60)
 
-    # Load model or API provider
+    # Load local SentenceTransformer
     print(f"\n[1/4] Loading {mcfg.key} model...")
     start = time.time()
-    if mcfg.key == "gemini":
-        from src.config import GEMINI_API_KEY
-        from src.embedding_provider import GeminiEmbeddingProvider
+    import torch
+    from sentence_transformers import SentenceTransformer
 
-        if not GEMINI_API_KEY:
-            print("  ERROR: GEMINI_API_KEY not set. Cannot build Gemini vectors.")
-            sys.exit(1)
-        model = GeminiEmbeddingProvider(GEMINI_API_KEY, dim=mcfg.dim)
-        print(f"  Gemini API provider ready in {time.time() - start:.1f}s")
+    if torch.backends.mps.is_available():
+        device = "mps"
+    elif torch.cuda.is_available():
+        device = "cuda"
     else:
-        import torch
-        from sentence_transformers import SentenceTransformer
+        device = "cpu"
 
-        if torch.backends.mps.is_available():
-            device = "mps"
-        elif torch.cuda.is_available():
-            device = "cuda"
-        else:
-            device = "cpu"
-
-        model = SentenceTransformer(mcfg.name, trust_remote_code=mcfg.trust_remote_code, device=device)
-        print(f"  Model loaded on {device} in {time.time() - start:.1f}s")
+    model = SentenceTransformer(mcfg.name, trust_remote_code=mcfg.trust_remote_code, device=device)
+    print(f"  Model loaded on {device} in {time.time() - start:.1f}s")
 
     # Read chunks
     print("\n[2/4] Reading chunks from SQLite...")
@@ -359,17 +343,17 @@ def main():
         # logic — prevents build-up across many incremental runs)
         del data
         import gc as _gc
+
         _gc.collect()
         try:
             import torch as _t
+
             if _t.backends.mps.is_available():
                 _t.mps.empty_cache()
         except Exception:
             pass
-        try:
+        with contextlib.suppress(Exception):
             table.optimize()
-        except Exception:
-            pass
 
         total_vectors = table.count_rows()
         if no_reindex:
@@ -403,9 +387,10 @@ def main():
         except Exception:
             print("\n  LanceDB exists but can't read. Rebuilding...")
 
-    # Use adaptive batching for models with long_limit > short_limit, or API models
+    # Adaptive batching kicks in when the model has a higher long_limit than
+    # short_limit (long chunks embed one-by-one with checkpoints).
     print(f"\n[3/4] Embedding {len(rows)} chunks...")
-    if mcfg.long_limit > mcfg.short_limit or mcfg.key == "gemini":
+    if mcfg.long_limit > mcfg.short_limit:
         data = embed_adaptive(model, rows, mcfg, checkpoint_path)
     else:
         data = embed_simple(model, rows, mcfg)
