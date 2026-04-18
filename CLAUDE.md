@@ -5,7 +5,6 @@ Git: vtarsh/code-rag-mcp (personal account).
 Python 3.12, FastMCP, SQLite FTS5, LanceDB, CrossEncoder reranker.
 
 **Key docs** (read for full context):
-- **`profiles/pay-com/ROADMAP.md` P0** — migrate to local embedding + reranker (Gemini-free, weekend work; see 2026-04-14 incident)
 - `ARCHITECTURE.md` — system design, analyze_task package, 10 generic mechanisms, conventions.yaml
 - `.claude/rules/conventions.md` — always-loaded generic rules
 - `.claude/docs/` — data-changes, workflow-cycles, development-pattern (on-demand generic reference)

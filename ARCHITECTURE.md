@@ -25,11 +25,10 @@ dependency tracing, and task analysis tools via Model Context Protocol.
 │       ├── analyze/  (task analysis, 13 modules)             │
 │       ├── context.py (context_builder)                      │
 │       └── service.py (repo_overview, health_check, etc.)    │
-├──────────────────────────────────────────────────────────┤
+├─────────────────────────────────────────────────────────────┤
 │ db/knowledge.db  (SQLite FTS5, ~144MB)                      │
-│ db/vectors.lance.coderank/ (LanceDB, ~238MB — active or fallback) │
-│ db/vectors.lance.gemini/   (LanceDB, ~854MB — coexists; migration target per ROADMAP P0) │
-└──────────────────────────────────────────────────────────┘
+│ db/vectors.lance.coderank/ (LanceDB, ~238MB — active table) │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## Repository Structure
@@ -70,8 +69,6 @@ classifier.py            9 domains (pi, core-risk/api/3ds/platform/payment/dispu
 core_analyzer.py         Non-PI analysis: cascade, co-occurrence, fan-out, function search, keyword scan
 pi_analyzer.py           Provider analysis: provider repos, webhooks, impact, checklist, bulk detection
 shared_sections.py       Universal: gotchas, task patterns, file patterns, proto, gateway, GitHub, completeness, CI
-final_ranker.py          Cross-encoder + final score fusion before formatting output
-flows_loader.py          Loads docs/flows/*.yaml definitions used by trace_flow / completeness checks
 investigation_questions.py  Generates per-task investigation prompts surfaced in analyze_task output
 meta_guard.py            Guards against generic/repo-name leakage and duplicate output sections
 recipe_section.py        Renders the "Recipe" section (sequenced steps) for known task archetypes
@@ -109,9 +106,9 @@ Markdown output with **bold repo names**
 ### 10 Generic Mechanisms (all generic, zero hardcoded repo names)
 
 > Counts: this section lists the **10 core generic mechanisms** in `src/tools/analyze/`.
-> `profiles/pay-com/RECALL-TRACKER.md` lists **20** because it adds profile-tuned
-> refinements (hub penalty, domain templates, phantom filtering, Gemini re-ranker, etc.)
-> that ride on top of these 10.
+> `profiles/pay-com/RECALL-TRACKER.md` lists more because it adds profile-tuned
+> refinements (hub penalty, domain templates, phantom filtering, etc.) that ride
+> on top of these 10.
 
 
 1. **Classifier** — keywords + task prefix + repo patterns → domain. Multi-domain union when close.
