@@ -13,6 +13,21 @@ BASE_DIR="${CODE_RAG_HOME:-$HOME/.code-rag}"
 LOG_DIR="$BASE_DIR/logs"
 mkdir -p "$LOG_DIR"
 
+# --- Singleton lock (prevents two launchd agents or manual run + cron overlap) ---
+LOCK_DIR="$LOG_DIR/full_update.lock.d"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  OLD_PID="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+  if [[ -n "$OLD_PID" ]] && kill -0 "$OLD_PID" 2>/dev/null; then
+    echo "[$(date -Iseconds)] full_update.sh already running (pid=$OLD_PID). Exiting." >&2
+    exit 0
+  fi
+  echo "[$(date -Iseconds)] Stale lock (pid=${OLD_PID:-unknown} not running). Removing." >&2
+  rm -rf "$LOCK_DIR"
+  mkdir "$LOCK_DIR"
+fi
+echo "$$" > "$LOCK_DIR/pid"
+trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM
+
 # Resolve active profile
 export ACTIVE_PROFILE="${ACTIVE_PROFILE:-$(cat "$BASE_DIR/.active_profile" 2>/dev/null || echo "example")}"
 PROFILE_CONFIG="$BASE_DIR/profiles/$ACTIVE_PROFILE/config.json"
@@ -172,13 +187,15 @@ print('ok')
     # (gotchas/flows/references/providers) which creates new SQLite rowids, but
     # build_vectors.py --repos=X only touches the listed code repos. This syncs
     # both sides and prunes orphans so chunks == vectors after every run.
-    # ALWAYS use gemini for sync — coderank fallback would load local model and
-    # may OOM the daemon on small Macs. If Gemini API is down, skip sync (chunks
-    # will reconcile on next run when API recovers) rather than crash the cron.
+    # Uses local coderank model to stay resilient to Gemini API outages
+    # (P0 local-model migration). Doc chunks are a small subset, so OOM risk
+    # on 16GB Macs is acceptable vs code-vector batches.
     echo ""
-    echo "[5b/7] Syncing doc vectors (missing + orphan cleanup, gemini)..."
-    python3 "$SCRIPTS_DIR/embed_missing_vectors.py" --model=gemini 2>&1 | tail -10 || \
-        echo "  ⚠️ sync failed (Gemini API likely unavailable) — chunks/vectors will reconcile next run"
+    echo "[5b/7] Syncing doc vectors (missing + orphan cleanup, coderank local)..."
+    # 3h hard timeout — prevents hanging process eating RAM for days
+    "$SCRIPTS_DIR/run_with_timeout.sh" 10800 \
+        python3 "$SCRIPTS_DIR/embed_missing_vectors.py" --model=coderank 2>&1 | tail -10 || \
+        echo "  ⚠️ sync failed or timed out — chunks/vectors will reconcile next run"
   fi
 
   # Step 6: Build shadow types (YAMLs for each known provider)
