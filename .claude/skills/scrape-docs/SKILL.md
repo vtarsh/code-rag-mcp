@@ -49,14 +49,6 @@ cd ~/.code-rag-mcp && python3 scripts/build_index.py
 # Or incremental: python3 scripts/build_vectors.py --repos=provider-docs
 ```
 
-## Existing Provider Docs (27 providers)
+## Existing Provider Docs
 
-```
-profiles/pay-com/docs/providers/
-aps, braintree, checkout, credorax, ecp, flutterwave, gumballpay,
-monek, neosurf, nexi, nuvei, paylands, paynearme, paypal, payper,
-paysafe, plaid, ppro, rapyd, silverflow, stripe, stripe-cashapp,
-tabapay-crawl, tabapay-extract, trustly, volt, worldpay
-```
-
-Missing: okto, iris, ilixium
+`profiles/pay-com/docs/providers/` currently has ~49 directories. Run `ls profiles/pay-com/docs/providers/` for the live list — some are full scrapes, some are placeholder `index.md` only.

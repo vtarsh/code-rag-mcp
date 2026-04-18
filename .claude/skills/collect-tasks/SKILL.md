@@ -28,7 +28,7 @@ cd ~/.code-rag-mcp && python3 scripts/collect_task.py PI-54
 - Enriches each task with GitHub PR data (repos_changed, files_changed)
 - JIRA_EMAIL fallback: hardcoded `vyacheslav.t@pay.com` in collect_task.py
 - JIRA_API_TOKEN: from env or ~/.zshrc fallback
-- Runs hourly via launchd (`com.code-rag-mcp.auto-collect.plist`)
+- Runs hourly via launchd (`com.pay-knowledge.auto-collect.plist`)
 
 ## Post-Collection Verification
 

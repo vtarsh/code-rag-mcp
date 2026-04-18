@@ -21,12 +21,7 @@ Run the full recall/precision benchmark suite and report results.
    CODE_RAG_HOME=~/.code-rag-mcp ACTIVE_PROFILE=pay-com python3 scripts/benchmark_recall.py
    ```
 
-2. **Compare against baselines** (do not regress):
-   - Conceptual: 0.85
-   - Real-world: 0.83
-   - Flows: 0.875
-   - analyze_task recall: 96.4% total (phantom-filtered) on 361 tasks
-   - PI: 97.6%, CORE: 94.3%, BO: 98.0%, HS: 92.9%
+2. **Compare against baselines** (do not regress) — live numbers in `profiles/pay-com/RECALL-TRACKER.md` (single source of truth). Conceptual / real-world / flows baselines + per-group recall (PI/CORE/BO/HS) all live there.
 
 3. **Report** pass/fail for each benchmark with delta from baseline
 
