@@ -309,10 +309,18 @@ def main():
         model = GeminiEmbeddingProvider(GEMINI_API_KEY, dim=mcfg.dim)
         print(f"  Gemini API provider ready in {time.time() - start:.1f}s")
     else:
+        import torch
         from sentence_transformers import SentenceTransformer
 
-        model = SentenceTransformer(mcfg.name, trust_remote_code=mcfg.trust_remote_code)
-        print(f"  Model loaded in {time.time() - start:.1f}s")
+        if torch.backends.mps.is_available():
+            device = "mps"
+        elif torch.cuda.is_available():
+            device = "cuda"
+        else:
+            device = "cpu"
+
+        model = SentenceTransformer(mcfg.name, trust_remote_code=mcfg.trust_remote_code, device=device)
+        print(f"  Model loaded on {device} in {time.time() - start:.1f}s")
 
     # Read chunks
     print("\n[2/4] Reading chunks from SQLite...")
@@ -346,6 +354,22 @@ def main():
         print(f"  Deleted old vectors for: {', '.join(sorted(only_repos))}")
         table.add(data)
         print(f"  Added {len(data)} new vectors")
+
+        # Free memory + consolidate fragments (matches embed_missing_vectors.py
+        # logic — prevents build-up across many incremental runs)
+        del data
+        import gc as _gc
+        _gc.collect()
+        try:
+            import torch as _t
+            if _t.backends.mps.is_available():
+                _t.mps.empty_cache()
+        except Exception:
+            pass
+        try:
+            table.optimize()
+        except Exception:
+            pass
 
         total_vectors = table.count_rows()
         if no_reindex:
