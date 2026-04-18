@@ -243,6 +243,7 @@ RRF_K: int = int(_tuning.get("rrf_k", 60))
 KEYWORD_WEIGHT: float = float(_tuning.get("keyword_weight", 2.0))
 GOTCHAS_BOOST: float = float(_tuning.get("gotchas_boost", 1.5))
 REFERENCE_BOOST: float = float(_tuning.get("reference_boost", 1.3))
+DICTIONARY_BOOST: float = float(_tuning.get("dictionary_boost", 1.4))
 
 # Query cache
 CACHE_TTL: int = int(_tuning.get("cache_ttl", 300))

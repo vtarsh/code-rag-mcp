@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 
-from src.config import GOTCHAS_BOOST, KEYWORD_WEIGHT, REFERENCE_BOOST, RRF_K
+from src.config import DICTIONARY_BOOST, GOTCHAS_BOOST, KEYWORD_WEIGHT, REFERENCE_BOOST, RRF_K
 from src.container import db_connection, get_reranker
 from src.search.fts import fts_search
 from src.search.vector import vector_search
@@ -143,6 +143,8 @@ def hybrid_search(
             data["score"] *= TASK_BOOST.get(data.get("chunk_type", ""), 1.0)
         elif ft == "reference":
             data["score"] *= REFERENCE_BOOST
+        elif ft == "dictionary":
+            data["score"] *= DICTIONARY_BOOST
 
     total_candidates = len(scores)
 
