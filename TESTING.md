@@ -35,7 +35,7 @@ Per-task recall, then averaged by group (CORE, PI, BO, HS).
 ### Running Benchmarks
 
 ```bash
-# Full recall on all 105 tasks
+# Full recall on all benchmarkable tasks (current set: 361 — see RECALL-TRACKER)
 python3 scripts/benchmark_recall.py
 
 # By group
@@ -206,15 +206,6 @@ task_history. Report your findings."
 
 No mention of analyze_task, no expected repos, no hints.
 
-## Current Scores (2026-03-22)
+## Current Scores
 
-| Group | Recall | Tasks |
-|-------|--------|-------|
-| CORE | 83.6% | 50 |
-| PI | 78.5% | 41 |
-| BO | 66.7% | 9 |
-| HS | 100% | 5 |
-| **Total** | **80.8%** | **105** |
-
-Search benchmarks: conceptual 0.85, realworld 0.83, flows 0.875
-Unit tests: 126 passing
+Live baselines (per profile) live in `profiles/{name}/RECALL-TRACKER.md` — that file is the source of truth, including the improvement log.

@@ -28,8 +28,8 @@ gh auth login
 
 ```bash
 # Clone the repo
-git clone https://github.com/vtarsh/code-rag-mcp.git ~/.code-rag
-cd ~/.code-rag
+git clone https://github.com/vtarsh/code-rag-mcp.git ~/.code-rag-mcp
+cd ~/.code-rag-mcp
 
 # Run the interactive setup wizard
 python3 setup_wizard.py
@@ -53,7 +53,8 @@ python3 setup_wizard.py --org my-github-org --model minilm --no-launchd
 
 ```bash
 # Full build — clones all repos, extracts, indexes, builds vectors + graph
-# This takes 30-60 minutes depending on org size
+# Typical: 2-4 hours; peaks ~20GB RAM (run overnight on 16GB Macs).
+# Incremental rebuilds (`make update`) finish in 30-60 min.
 make build
 
 # Or for a specific profile:
@@ -121,22 +122,33 @@ List models: `python3 scripts/build_vectors.py --list-models`
 
 **Disk space**: Embedding models are 80-250 MB (downloaded from HuggingFace on first run). The SQLite database and vector store grow at roughly 1 MB per 10 indexed repos.
 
-## MCP Tools (12)
+## Tools (11 MCP + 5 daemon-only)
+
+**MCP-exposed** (callable from Claude Code via `mcp_server.py`):
 
 | Tool | Description |
 |------|-------------|
 | `search` | Hybrid search (FTS5 + vector + RRF + CrossEncoder). Supports `exclude_file_types` filter |
-| `context_builder` | One-call context: search + deps + proto for LLM tasks |
 | `repo_overview` | Aggregated info about a specific repo |
 | `list_repos` | List/filter repos by type or dependency |
-| `find_dependencies` | Bidirectional dependency lookup via graph |
 | `trace_impact` | Transitive impact analysis — "if I change X, what breaks?" |
 | `trace_flow` | Shortest path between two repos |
 | `trace_chain` | Full processing chain from a repo or concept |
+| `trace_field` | Trace a payload field through provider mappers |
+| `trace_internal` | Trace a method's internal call graph inside one repo |
+| `provider_type_map` | Resolve provider name → payment-method-type bindings (seeds.cql) |
 | `analyze_task` | Task analysis with proto/webhook/gateway check + GitHub PR scan |
-| `diff_provider_config` | Compare feature flags between two providers from seeds.cql |
 | `health_check` | System diagnostics |
+
+**Daemon-only** (call via `cli.py` HTTP client — for sub-agents without MCP access):
+
+| Tool | Description |
+|------|-------------|
+| `context_builder` | One-call context: search + deps + proto for LLM tasks |
+| `find_dependencies` | Bidirectional dependency lookup via graph |
+| `diff_provider_config` | Compare feature flags between two providers from seeds.cql |
 | `visualize_graph` | Interactive graph visualization |
+| `search_task_history` | Query the historical task DB collected by `/collect-tasks` |
 
 ## Code Facts Extraction
 
@@ -158,7 +170,7 @@ Facts are searchable via `search(query, file_type="code_fact")`.
 ```bash
 make help              # Show all commands
 make init              # Run setup wizard
-make build             # Full pipeline (~30-60 min)
+make build             # Full pipeline (~2-4h; peaks ~20GB RAM)
 make update            # Incremental update (changed repos only)
 make test              # Run tests
 make health            # Health check + diagnostics
@@ -177,7 +189,7 @@ The setup wizard registers MCP for **Claude Code** automatically. For **Claude D
 ```json
 {
   "mcpServers": {
-    "code-knowledge": {
+    "code-rag": {
       "command": "python3",
       "args": ["/path/to/code-rag-mcp/mcp_server.py"],
       "env": {
@@ -189,7 +201,7 @@ The setup wizard registers MCP for **Claude Code** automatically. For **Claude D
 }
 ```
 
-Replace `/path/to/code-rag-mcp` with your actual install path (e.g. `/Users/you/.code-rag`) and `my-org` with your profile name. Restart Claude Desktop after saving.
+Replace `/path/to/code-rag-mcp` with your actual install path (e.g. `/Users/you/.code-rag-mcp`) and `my-org` with your profile name. Restart Claude Desktop after saving.
 
 ## Architecture
 
@@ -262,14 +274,14 @@ Profile config (`profiles/<name>/config.json`):
 Environment variables:
 - `ACTIVE_PROFILE` — override active profile (default: read from `.active_profile`)
 - `CODE_RAG_MODEL` — override embedding model
-- `CODE_RAG_HOME` — override base directory (default: `~/.code-rag`)
+- `CODE_RAG_HOME` — override base directory (default: `~/.code-rag-mcp`)
 - `CODE_RAG_PORT` — daemon port (default: 8742)
 
 ## Troubleshooting
 
 **`gh auth login` fails**: Make sure you have a GitHub account with access to the org you want to index. You need read access to the repos.
 
-**Build takes too long**: The first build clones all repos. For large orgs (500+ repos), this can take 30-60 min. Subsequent `make update` runs are incremental and much faster.
+**Build takes too long**: The first build clones all repos. For large orgs (500+ repos), allow ~2-4h with peak ~20GB RAM (run overnight on 16GB Macs). Subsequent `make update` runs are incremental and finish in 30-60 min.
 
 **Model download is slow**: The first run downloads the embedding model (~100-250MB from HuggingFace). This is a one-time download.
 
@@ -287,7 +299,7 @@ Environment variables:
 
 **Manual daemon start (non-launchd)**: If you skipped launchd setup or are on a non-macOS system, start the daemon manually:
 ```bash
-cd ~/.code-rag && python3 daemon.py &
+cd ~/.code-rag-mcp && python3 daemon.py &
 ```
 The MCP proxy (`mcp_server.py`) will also auto-start the daemon if it is not running.
 
