@@ -42,7 +42,7 @@ def test_concurrent_identical_queries_dedup():
 
     def compute():
         calls[0] += 1
-        # Simulate slow Gemini API call so followers have time to queue up.
+        # Simulate a slow computation so followers have time to queue up.
         time.sleep(0.2)
         return f"result-{calls[0]}"
 
@@ -76,6 +76,7 @@ def test_different_keys_run_independently():
             calls[key] += 1
             time.sleep(0.1)
             return f"r-{key}"
+
         return compute
 
     def worker(key):
@@ -133,9 +134,7 @@ def test_leader_exception_allows_follower_to_retry():
 
     leader_thread = threading.Thread(target=run_leader)
     follower_result = [None]
-    follower_thread = threading.Thread(
-        target=lambda: follower_result.__setitem__(0, run_follower())
-    )
+    follower_thread = threading.Thread(target=lambda: follower_result.__setitem__(0, run_follower()))
 
     leader_thread.start()
     follower_thread.start()

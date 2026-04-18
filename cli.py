@@ -27,11 +27,15 @@ def call_tool(tool_name: str, args: dict) -> str:
     url = f"{DAEMON_URL}/{tool_name}"
     data = json.dumps(args).encode()
     session_id = f"cli-{os.getpid()}"
-    req = urllib.request.Request(url, data=data, headers={
-        "Content-Type": "application/json",
-        "User-Agent": "cli.py",
-        "X-Session-ID": session_id,
-    })
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "cli.py",
+            "X-Session-ID": session_id,
+        },
+    )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             result = json.loads(resp.read().decode())
@@ -72,15 +76,13 @@ def main() -> None:
 
     elif cmd == "analyze-task":
         if len(sys.argv) < 3:
-            print("Usage: cli.py analyze-task <description> [--provider NAME] [--final-rank]")
+            print("Usage: cli.py analyze-task <description> [--provider NAME]")
             sys.exit(1)
         args = {"description": sys.argv[2]}
         if "--provider" in sys.argv:
             idx = sys.argv.index("--provider")
             if idx + 1 < len(sys.argv):
                 args["provider"] = sys.argv[idx + 1]
-        if "--final-rank" in sys.argv:
-            args["final_rank"] = True
         print(call_tool("analyze_task", args))
 
     elif cmd == "context":
