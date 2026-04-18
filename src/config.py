@@ -171,6 +171,15 @@ DOMAIN_TEMPLATES: dict[str, dict] = _conventions.get("domain_templates", {})
 # Domain classification patterns for non-PI tasks
 DOMAIN_PATTERNS: dict[str, dict] = _conventions.get("domain_patterns", {})
 
+# Async-chain anchor (P4.3) — domain-specific recall boost for async/webhook/payout flows.
+# Generic default: empty. Profile-specific (pay-com) declares triggers + repos in
+# conventions.yaml → async_chain: { triggers: [...], repos: [...] }. When any
+# trigger keyword appears in task description, the listed repos are injected into
+# the candidate set with medium confidence so they land in the top-25 tier.
+_async_chain: dict = _conventions.get("async_chain", {}) or {}
+ASYNC_CHAIN_TRIGGERS: list[str] = list(_async_chain.get("triggers", []))
+ASYNC_CHAIN_REPOS: list[str] = list(_async_chain.get("repos", []))
+
 # --- Tuning constants (overridable via conventions.yaml → tuning) ---
 _tuning: dict = _conventions.get("tuning", {})
 
