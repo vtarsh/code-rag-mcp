@@ -22,7 +22,7 @@ from src.search.vector import vector_search
 
 
 def rerank(query: str, results: list[dict], limit: int = 10) -> list[dict]:
-    """Rerank search results using provider (Gemini API or local cross-encoder).
+    """Rerank search results with the local CrossEncoder provider.
 
     Takes RRF-fused results and reranks by scoring each snippet
     against the query. Combines: 70% reranker score + 30% normalized RRF score.

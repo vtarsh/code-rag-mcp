@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import re
 import sqlite3
-
 import sys
 
 from src.container import db_connection, require_db
@@ -39,6 +38,11 @@ __all__ = [
     "_validate_repo_name",
     "analyze_task_tool",
 ]
+from src.tools.analyze.investigation_questions import (
+    section_investigation_questions,
+)
+
+from .meta_guard import section_meta_guard
 from .pi_analyzer import (
     promote_critical_infra,
     section_bulk_providers,
@@ -48,8 +52,6 @@ from .pi_analyzer import (
     section_provider_checklist,
     section_webhooks,
 )
-from .final_ranker import section_final_ranker
-from .meta_guard import section_meta_guard
 from .recipe_section import section_recipe
 from .shared_sections import (
     section_ci_risk,
@@ -64,46 +66,9 @@ from .shared_sections import (
     section_shared_files_warning,
     section_task_patterns,
 )
-from src.tools.analyze.investigation_questions import (
-    section_investigation_questions,
-)
 
 # Note: _BOLD_REPO_RE regex was removed — repo extraction now uses ctx.findings directly.
 # benchmark_recall.py still has its own copy for parsing markdown output externally.
-
-
-def _section_rerank(ctx: AnalysisContext, description: str, output: str) -> str:
-    """Run Gemini re-ranker on all repo names collected in ctx.findings."""
-    import sys
-
-    try:
-        from src.tools.reranker import rerank_repos
-    except ImportError:
-        print("[reranker] reranker module not available, skipping", file=sys.stderr)
-        return ""
-
-    # Extract candidate repos from structured findings (replaces regex on markdown)
-    candidates = sorted(ctx.get_unique_repos())
-    if not candidates:
-        return ""
-
-    try:
-        ranked = rerank_repos(ctx.conn, description, candidates)
-    except Exception as e:
-        print(f"[reranker] Error during re-ranking: {e}", file=sys.stderr)
-        return ""
-
-    if not ranked:
-        return ""
-
-    section = "\n## Re-ranked Predictions (Gemini)\n\n"
-    for entry in ranked:
-        repo = entry.get("repo", "")
-        conf = entry.get("confidence", "?")
-        reason = entry.get("reason", "")
-        section += f"- **{repo}** [{conf}] — {reason}\n"
-    section += "\n"
-    return section
 
 
 def _inject_domain_template(ctx: AnalysisContext, classification: object) -> str:
@@ -196,15 +161,36 @@ def _extract_repo_refs(ctx: AnalysisContext) -> str:
 # signals. Searching FTS for them returns almost every repo — producing
 # noise in the npm_dep_scan section (e.g. "existing", "through"). These are
 # additional to the base _KEYWORD_STOP_WORDS set used elsewhere.
-_NPM_SCAN_STOP_WORDS = frozenset({
-    "should", "which", "where", "their", "about", "these", "those",
-    "would", "could", "check", "start", "needs",
-    # Narrative words that match almost any repo's content:
-    "existing", "through", "support", "handle", "other", "provider",
-    "service", "server", "after", "before", "without",
-    # Generic keywords that pull in too many repos:
-    "account",  # matches every banking/merchant repo regardless of task
-})
+_NPM_SCAN_STOP_WORDS = frozenset(
+    {
+        "should",
+        "which",
+        "where",
+        "their",
+        "about",
+        "these",
+        "those",
+        "would",
+        "could",
+        "check",
+        "start",
+        "needs",
+        # Narrative words that match almost any repo's content:
+        "existing",
+        "through",
+        "support",
+        "handle",
+        "other",
+        "provider",
+        "service",
+        "server",
+        "after",
+        "before",
+        "without",
+        # Generic keywords that pull in too many repos:
+        "account",  # matches every banking/merchant repo regardless of task
+    }
+)
 
 
 def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
@@ -222,10 +208,19 @@ def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
     """
     # Skip repos already flagged by targeted analyzers. Listing them here
     # just duplicates the signal and pushes the peripheral count up.
-    _STRONG_FTYPES = frozenset({
-        "critical_trigger", "provider", "proto", "webhook", "gateway",
-        "domain_template", "repo_ref", "co_change_rule", "recipe",
-    })
+    _STRONG_FTYPES = frozenset(
+        {
+            "critical_trigger",
+            "provider",
+            "proto",
+            "webhook",
+            "gateway",
+            "domain_template",
+            "repo_ref",
+            "co_change_rule",
+            "recipe",
+        }
+    )
     strong_repos = {f.repo for f in ctx.findings if f.ftype in _STRONG_FTYPES}
     finding_repos = {f.repo for f in ctx.findings}
     if not finding_repos:
@@ -255,12 +250,9 @@ def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
     if not dep_repos:
         return ""
 
-    keywords = [
-        w for w in ctx.words
-        if len(w) >= 4 and w not in _NPM_SCAN_STOP_WORDS
-    ]
+    keywords = [w for w in ctx.words if len(w) >= 4 and w not in _NPM_SCAN_STOP_WORDS]
     if ctx.provider:
-        keywords = [ctx.provider] + keywords[:4]
+        keywords = [ctx.provider, *keywords[:4]]
     else:
         keywords = keywords[:5]
 
@@ -310,15 +302,14 @@ def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
     # tail is purely a reference for curious readers; adding it to
     # ``ctx.findings`` inflates the Peripheral count in the summary header
     # with repos the reader never actually sees. Downstream consumers
-    # (final_ranker, ci_risk) can still reach those dep repos by querying
-    # ``graph_edges`` directly if needed.
+    # (ci_risk) can still reach those dep repos by querying ``graph_edges``
+    # directly if needed.
     for repo, _ in shown:
         ctx.findings.append(Finding("npm_dep_scan", repo, "low"))
 
     output = "## npm Dependency Scan\n\n"
     output += (
-        "_Shared libraries with task-keyword matches (via npm_dep edges, "
-        "ranked by distinct matched keywords):_\n\n"
+        "_Shared libraries with task-keyword matches (via npm_dep edges, ranked by distinct matched keywords):_\n\n"
     )
     for repo, (via, kws) in shown:
         kws_str = ", ".join(f"`{k}`" for k in kws[:3])
@@ -336,22 +327,19 @@ def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
 
 
 @require_db
-def analyze_task_tool(description: str, provider: str = "", rerank: bool = False, exclude_task_id: str = "", final_rank: bool = False) -> str:
+def analyze_task_tool(description: str, provider: str = "", exclude_task_id: str = "") -> str:
     """Analyze a development task and find ALL relevant repos, files, and dependencies.
 
     Args:
         description: Task description (e.g., "implement DirectDebitMandate verification for Trustly")
         provider: Optional provider name to focus on (e.g., "trustly", "paypal")
-        rerank: Set to true to filter predictions via Gemini 3.1 Pro (requires GEMINI_API_KEY)
         exclude_task_id: Optional task ID to exclude from task_history lookups (for blind eval)
-        final_rank: Set to true to run precision-oriented LLM pruner on the final
-            candidate set (requires GEMINI_API_KEY). Default False until validated.
     """
     with db_connection() as conn:
-        return _analyze_task_impl(conn, description, provider, rerank=rerank, exclude_task_id=exclude_task_id, final_rank=final_rank)
+        return _analyze_task_impl(conn, description, provider, exclude_task_id=exclude_task_id)
 
 
-def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str, *, rerank: bool = False, exclude_task_id: str = "", final_rank: bool = False) -> str:
+def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str, *, exclude_task_id: str = "") -> str:
     """Orchestrate task analysis. Dispatches to shared + domain-specific sections."""
     import sys
 
@@ -399,8 +387,8 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
 
     # Promote infra_repos with matching keyword_triggers to high-confidence
     # findings BEFORE any analyzer runs. Downstream sections (npm_dep_scan,
-    # completeness, final_ranker) can then treat them as STRONG evidence
-    # and avoid double-counting them as low-confidence noise.
+    # completeness) can then treat them as STRONG evidence and avoid
+    # double-counting them as low-confidence noise.
     _run_section("promote_critical_infra", promote_critical_infra, ctx)
 
     # Meta-guard: warn if query overlaps heavily with a stored task (first section).
@@ -412,10 +400,10 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
     # sees sibling provider names in its own context.
     output += _run_section("shared_files_warning", section_shared_files_warning, ctx)
 
-    # INVESTIGATION QUESTIONS: Gemini-generated task-specific checks the
-    # implementer must answer before writing code. This is the "true
-    # proactivity" path — contextual and paraphrase-robust, unlike the
-    # keyword-triggered shared_files branch which only matches known words.
+    # INVESTIGATION QUESTIONS: task-specific checks the implementer must
+    # answer before writing code. Contextual and paraphrase-robust, unlike
+    # the keyword-triggered shared_files branch which only matches known
+    # words.
     output += _run_section("investigation_questions", section_investigation_questions, ctx)
 
     if repo_refs_output:
@@ -487,16 +475,6 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
 
     # CI risk (all task types)
     output += _run_section("ci_risk", section_ci_risk, ctx)
-
-    # Optional Gemini re-ranking
-    if rerank:
-        output += _run_section("rerank", _section_rerank, ctx, description, output)
-
-    # Optional precision-oriented LLM pruner: runs AFTER all other sections,
-    # rewrites ctx.findings based on evidence + similar-task ground truth.
-    # Must run before the summary header is built (summary reads findings).
-    if final_rank:
-        output += _run_section("final_ranker", section_final_ranker, ctx, classification)
 
     # Append warning if any sections failed
     if failed_sections:
