@@ -52,6 +52,72 @@ def run_co_occurrence(ctx: AnalysisContext) -> str:
     return _section_co_occurrence(ctx)
 
 
+def run_async_chain_anchor(ctx: AnalysisContext) -> str:
+    """Async-chain anchor (P4.3): boost recall for async/webhook/payout flows.
+
+    When the task description mentions any trigger keyword from
+    ``ASYNC_CHAIN_TRIGGERS`` (profile-configured in conventions.yaml →
+    async_chain), inject the anchor repos from ``ASYNC_CHAIN_REPOS`` as
+    medium-confidence findings. This surfaces async completion/webhook/CDC
+    repos that lexical provider-name matching alone misses (e.g. PI-61:
+    SEPA/Nuvei payout task missing workflow-payment-completion).
+
+    Generic by default (empty triggers/repos). Runs for ALL domains, not
+    just PI, because async chains cross domain boundaries (risk callbacks,
+    dispute webhooks, settlement pending transactions).
+    """
+    from src.config import ASYNC_CHAIN_REPOS, ASYNC_CHAIN_TRIGGERS
+
+    if not ASYNC_CHAIN_TRIGGERS or not ASYNC_CHAIN_REPOS:
+        return ""
+
+    desc_lower = ctx.description.lower()
+    # Match trigger as a word-prefix token so "payout" matches both
+    # "payout" and "payouts" (plural) but not "prehookable" or
+    # "non-paid-out". Left boundary is enforced; right side allows the
+    # word to continue (plural "s", suffixed forms like "webhooks").
+    matched_triggers: list[str] = []
+    for trigger in ASYNC_CHAIN_TRIGGERS:
+        trig_lower = trigger.lower()
+        if " " in trig_lower:
+            # Multi-word phrase: substring is fine (phrase is already specific)
+            if trig_lower in desc_lower:
+                matched_triggers.append(trigger)
+        else:
+            # Single word: left word-boundary, right may extend (plurals, etc.)
+            if re.search(rf"\b{re.escape(trig_lower)}", desc_lower):
+                matched_triggers.append(trigger)
+
+    if not matched_triggers:
+        return ""
+
+    existing = {f.repo for f in ctx.findings}
+    added: list[str] = []
+    for repo in ASYNC_CHAIN_REPOS:
+        if repo in existing:
+            continue
+        # Verify repo exists in index before adding — silent skip for unknown repos
+        row = ctx.conn.execute("SELECT 1 FROM repos WHERE name = ?", (repo,)).fetchone()
+        if not row:
+            continue
+        # Medium confidence — should sit in top-25 but not above strong signals
+        ctx.findings.append(Finding("async_chain", repo, "medium"))
+        added.append(repo)
+
+    if not added:
+        return ""
+
+    output = "## Async-chain Anchor\n\n"
+    output += (
+        f"_Task mentions async-flow triggers ({', '.join(matched_triggers)}); "
+        "injecting async completion / webhook / CDC repos for recall:_\n\n"
+    )
+    for repo in added:
+        output += f"  - **{repo}**\n"
+    output += "\n"
+    return output
+
+
 def run_co_change_rules(ctx: AnalysisContext) -> str:
     """Apply high-confidence co-change rules from conventions.yaml.
 
