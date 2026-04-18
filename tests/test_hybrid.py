@@ -144,3 +144,91 @@ class TestRerank:
         assert result[0]["repo_name"] == "r1"
         assert "combined_score" in result[0]
         assert "rerank_score" in result[0]
+
+
+class TestRerankPenalties:
+    """P4.1: doc/test/guide chunks are down-weighted on code queries."""
+
+    @patch("src.search.hybrid.get_reranker")
+    def test_doc_file_type_penalized(self, mock_get_reranker):
+        # Tied rerank scores — doc should fall behind code after penalty.
+        mock_provider = MagicMock()
+        mock_provider.rerank.return_value = [0.8, 0.8]
+        mock_get_reranker.return_value = (mock_provider, None)
+        items = [
+            {"score": 0.5, "snippet": "doc snippet", "repo_name": "r1",
+             "file_path": "docs/docs/data-layer.md", "file_type": "doc"},
+            {"score": 0.5, "snippet": "code snippet", "repo_name": "r2",
+             "file_path": "libs/payout/handle.js", "file_type": "library"},
+        ]
+        result = rerank("payout handler code", items, limit=2)
+        # Code wins — doc got DOC_PENALTY.
+        assert result[0]["repo_name"] == "r2"
+        assert result[0]["penalty"] == 0.0
+        assert result[1]["penalty"] > 0
+
+    @patch("src.search.hybrid.get_reranker")
+    def test_spec_path_penalized(self, mock_get_reranker):
+        mock_provider = MagicMock()
+        mock_provider.rerank.return_value = [0.8, 0.8]
+        mock_get_reranker.return_value = (mock_provider, None)
+        items = [
+            {"score": 0.5, "snippet": "spec", "repo_name": "r1",
+             "file_path": "libs/foo.spec.js", "file_type": "library"},
+            {"score": 0.5, "snippet": "code", "repo_name": "r2",
+             "file_path": "libs/foo.js", "file_type": "library"},
+        ]
+        result = rerank("policy handler", items, limit=2)
+        assert result[0]["repo_name"] == "r2"
+        assert result[1]["penalty"] > 0
+
+    @patch("src.search.hybrid.get_reranker")
+    def test_ai_coding_guide_strongest_penalty(self, mock_get_reranker):
+        mock_provider = MagicMock()
+        mock_provider.rerank.return_value = [0.8, 0.8, 0.8]
+        mock_get_reranker.return_value = (mock_provider, None)
+        items = [
+            {"score": 0.5, "snippet": "guide", "repo_name": "r1",
+             "file_path": "AI-CODING-GUIDE.md", "file_type": "doc"},
+            {"score": 0.5, "snippet": "spec", "repo_name": "r2",
+             "file_path": "foo.spec.js", "file_type": "library"},
+            {"score": 0.5, "snippet": "code", "repo_name": "r3",
+             "file_path": "libs/handler.js", "file_type": "library"},
+        ]
+        result = rerank("handler pattern", items, limit=3)
+        assert result[0]["repo_name"] == "r3"  # code wins
+        # Guide penalty >= spec penalty.
+        guide = next(r for r in result if r["repo_name"] == "r1")
+        spec = next(r for r in result if r["repo_name"] == "r2")
+        assert guide["penalty"] >= spec["penalty"]
+
+    @patch("src.search.hybrid.get_reranker")
+    def test_penalty_skipped_when_query_asks_for_docs(self, mock_get_reranker):
+        mock_provider = MagicMock()
+        mock_provider.rerank.return_value = [0.9, 0.5]
+        mock_get_reranker.return_value = (mock_provider, None)
+        items = [
+            {"score": 0.5, "snippet": "doc", "repo_name": "r1",
+             "file_path": "README.md", "file_type": "doc"},
+            {"score": 0.5, "snippet": "code", "repo_name": "r2",
+             "file_path": "libs/foo.js", "file_type": "library"},
+        ]
+        result = rerank("how to docs for README guide", items, limit=2)
+        # Query contains "docs" / "README" / "guide" — no penalty applied.
+        for r in result:
+            assert r["penalty"] == 0.0
+
+    @patch("src.search.hybrid.get_reranker")
+    def test_production_code_not_penalized(self, mock_get_reranker):
+        mock_provider = MagicMock()
+        mock_provider.rerank.return_value = [0.7, 0.7]
+        mock_get_reranker.return_value = (mock_provider, None)
+        items = [
+            {"score": 0.5, "snippet": "handler", "repo_name": "r1",
+             "file_path": "libs/webhooks/handle.js", "file_type": "library"},
+            {"score": 0.5, "snippet": "method", "repo_name": "r2",
+             "file_path": "src/methods/payout.js", "file_type": "grpc_method"},
+        ]
+        result = rerank("webhook handler", items, limit=2)
+        for r in result:
+            assert r["penalty"] == 0.0

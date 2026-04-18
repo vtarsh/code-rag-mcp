@@ -15,10 +15,66 @@ from __future__ import annotations
 
 import re
 
-from src.config import DICTIONARY_BOOST, GOTCHAS_BOOST, KEYWORD_WEIGHT, REFERENCE_BOOST, RRF_K
+from src.config import (
+    DICTIONARY_BOOST,
+    DOC_PENALTY,
+    GOTCHAS_BOOST,
+    GUIDE_PENALTY,
+    KEYWORD_WEIGHT,
+    REFERENCE_BOOST,
+    RRF_K,
+    TEST_PENALTY,
+)
 from src.container import db_connection, get_reranker
 from src.search.fts import fts_search
 from src.search.vector import vector_search
+
+# File types considered "documentation-like" — penalized unless query asks for docs.
+# Matches user spec (P4.1): doc/task/gotchas/reference. Extended with dictionary,
+# provider_doc, and flow_annotation because in practice these are derived-knowledge
+# chunks that dominate keyword matches for code queries but are not production code.
+_DOC_FILE_TYPES: frozenset[str] = frozenset(
+    {"doc", "docs", "task", "gotchas", "reference", "dictionary", "provider_doc", "flow_annotation"}
+)
+
+# Regex patterns for path-based classification. Compiled once at import.
+_TEST_PATH_RE = re.compile(
+    r"(?:\.spec\.(?:js|ts|tsx|jsx)$|\.test\.(?:js|ts|tsx|jsx|py)$|_test\.py$|/tests?/)"
+)
+_GUIDE_PATH_RE = re.compile(
+    r"(?:/AI-CODING-GUIDE\.md$|/CLAUDE\.md$|/README\.md$|^AI-CODING-GUIDE\.md$|^CLAUDE\.md$|^README\.md$)",
+    re.IGNORECASE,
+)
+
+# Query keywords that disable penalties (user explicitly asked for docs/tests).
+_DOC_QUERY_RE = re.compile(
+    r"\b(test|tests|spec|specs|docs?|documentation|readme|guide|guides|tutorial)\b",
+    re.IGNORECASE,
+)
+
+
+def _query_wants_docs(query: str) -> bool:
+    """Return True if query explicitly asks for docs/tests/guides."""
+    return bool(_DOC_QUERY_RE.search(query or ""))
+
+
+def _classify_penalty(file_type: str, file_path: str) -> float:
+    """Return the penalty delta (in normalized score units) for a result.
+
+    Priority order (strongest penalty wins):
+      1. Guide-like paths (AI-CODING-GUIDE.md / CLAUDE.md / README.md) -> GUIDE_PENALTY
+      2. Test paths (*.spec.js, *.test.py, /tests/...) -> TEST_PENALTY
+      3. Doc-ish file_type (doc, task, gotchas, reference) -> DOC_PENALTY
+    Returns 0.0 for production code (unchanged).
+    """
+    path = file_path or ""
+    if _GUIDE_PATH_RE.search(path):
+        return GUIDE_PENALTY
+    if _TEST_PATH_RE.search(path):
+        return TEST_PENALTY
+    if (file_type or "") in _DOC_FILE_TYPES:
+        return DOC_PENALTY
+    return 0.0
 
 
 def rerank(query: str, results: list[dict], limit: int = 10) -> list[dict]:
@@ -56,11 +112,20 @@ def rerank(query: str, results: list[dict], limit: int = 10) -> list[dict]:
     min_rrf = min(r["score"] for r in results) if results else 0
     rrf_range = max_rrf - min_rrf if max_rrf != min_rrf else 1
 
+    # Skip doc/test penalties when the query explicitly asks for them.
+    apply_penalties = not _query_wants_docs(query)
+
     for i, r in enumerate(results):
         rrf_norm = (r["score"] - min_rrf) / rrf_range
         rerank_norm = (scores[i] - min_score) / score_range if i < len(scores) else 0
         r["rerank_score"] = float(scores[i]) if i < len(scores) else 0
-        r["combined_score"] = 0.7 * rerank_norm + 0.3 * rrf_norm
+        combined = 0.7 * rerank_norm + 0.3 * rrf_norm
+
+        # P4.1: down-weight doc/test/guide chunks so production code ranks higher
+        # on code-related queries. Stored on result for observability.
+        penalty = _classify_penalty(r.get("file_type", ""), r.get("file_path", "")) if apply_penalties else 0.0
+        r["penalty"] = penalty
+        r["combined_score"] = combined - penalty
 
     results.sort(key=lambda x: x["combined_score"], reverse=True)
     return results[:limit]
