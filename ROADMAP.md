@@ -1,6 +1,8 @@
 # P5 Reranker — Roadmap
 
-**Status (2026-04-20 late evening):** Production = `ms-marco-MiniLM-L-6-v2` (unchanged). 8 FT iterations done. Audit wave concluded; P0 (eval gate fix) + v8 (listwise LambdaLoss) done. v8 is a sidegrade vs v6.2: slightly worse Δr@10 (-0.4pp), better ΔHit@5 (+1.2pp), same latency (2× baseline). Source of truth for what's been tried, what's still worth trying, and what's a dead end.
+**Status (2026-04-20 late evening):** Production = `ms-marco-MiniLM-L-6-v2` (unchanged). 8 FT iterations done. Audit wave concluded; P0 (eval gate fix) + v8 (listwise LambdaLoss) done.
+
+**User priority update 2026-04-20:** quality matters MORE than latency. Previous iterations held back v6.2/v8 from prod citing "2× latency" — that's no longer the dominant consideration. Main open question: do v6.2 or v8 win on RUNTIME query distribution (not just Jira eval) and per-project breakdown? If yes, one of them should ship.
 
 ---
 
@@ -32,14 +34,24 @@ Tests: 316 pass (27 new in `tests/test_eval_verdict.py`, 6 new in `tests/test_li
 
 ## Next steps (post-gate-fix)
 
-Validated by the critic+cross-val wave; ordered by ROI/cost:
+Ordered by ROI given the **quality-over-latency** priority update:
 
-1. **❌ Graph retrieval POC — DONE 2026-04-20, does not ship.** Tested on 100 low-recall tickets: +2.85pp r@10 with α=0.03, hub_cutoff=500 (passes ship criterion on that subset). But on full 832 tickets the gain collapses to +0.33pp r@10 AND Hit@5 regresses by -0.48pp / MRR -0.36pp. Graph signal is selective (good on low-recall, noise on high-recall), not robust enough for blanket application. See `profiles/pay-com/finetune_history/graph_boost_poc_2026-04-20.md` for full results + shelved follow-ups (conditional boost, reranker-stage feature, edge-type weighting).
-2. **Real-query eval** (1-2 days, LLM-assisted labeling). 1,174 unique queries in `logs/tool_calls.jsonl`. Stratify cap 10/session (top-3 sessions = 45% of queries — single-dev workflow-replay, NOT generalization signal). Note: "82% identifier-dense" claim was WRONG (actual token-level 26%). `search_feedback.jsonl` has no click signal (score=0 everywhere). Use as regression guard only.
-3. **✅ v8 FT — DONE 2026-04-20 (listwise LambdaLoss).** Sidegrade vs v6.2: ΔHit@5 +6.9pp (best top-5 ever, +1.2pp over v6.2) but Δr@10 only +3.9pp (-0.4pp vs v6.2). 123 improved / 45 regressed. Latency unchanged (12s p50 = v6.2's). Listwise worked as designed — targeted multi-GT rank-reshuffle regressions and delivered measurable top-5 gain. But not enough r@10 lift to overtake v6.2 outright, so which you prefer depends on whether top-5 browsing or top-10 recall is the priority. Kept in archive as `reranker_ft_gte_v8/`.
-4. **Remaining untried levers (if pursuing more FT):**
+1. **[TOP PRIORITY] Runtime benchmark + per-project parity for v6.2 and v8.**
+   Prior audits warned v6.2 has "mixed or worse" runtime numbers, but that was captured before we fixed the eval gate. Need fresh runs:
+   - `python scripts/benchmark_queries.py` — curated synthetic queries
+   - `python scripts/benchmark_realworld.py` — real-world distribution
+   - Per-project breakdown on `gte_v6_2.json` / `gte_v8.json` (do CORE/BO/PI/HS each net-win, or does one project hide the rest?)
+   If one of v6.2 / v8 passes both, **ship it** — latency is no longer blocking.
+
+2. **Model selection if both pass:** pick v6.2 (best r@10) or v8 (best Hit@5) based on which metric aligns with downstream RAG use-case. Current pipe takes top-10 → v6.2 is the default; but MCP surfaces top-5 to the user often → v8 might be better ergonomically.
+
+3. **❌ Graph retrieval POC — DONE 2026-04-20, does not ship.** +2.85pp r@10 on low-recall 100 tickets but collapses to +0.33pp with Hit@5/MRR regression on full 832. See `graph_boost_poc_2026-04-20.md`.
+
+4. **Real-query eval from `tool_calls.jsonl`** (1-2 days, LLM-assisted labeling). 1,174 unique queries. Stratify cap 10/session (top-3 sessions = 45% of queries — single-dev workflow-replay). Use as regression guard, not primary metric.
+
+5. **If v6.2/v8 do NOT pass runtime benchmarks** (same mixed/negative pattern as prior audit), next untried levers:
    - Freeze bottom 6 ModernBERT layers (62k rows / 149M params is under-regularized).
-   - Dense-neighbor hard negatives (currently ALL negatives come from FTS top-50 — orthogonal axis untried).
+   - Dense-neighbor hard negatives (currently ALL negatives from FTS top-50 — orthogonal axis untried).
    - v8 + longer max-length (128 forced by MPS OOM; on GPU could try 192-256 for listwise).
 
 ---
