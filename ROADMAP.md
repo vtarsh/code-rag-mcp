@@ -1,8 +1,98 @@
 # P5 Reranker — Roadmap
 
-**Status (2026-04-20 late evening):** Production = `ms-marco-MiniLM-L-6-v2` (unchanged). 8 FT iterations done. Audit wave concluded; P0 (eval gate fix) + v8 (listwise LambdaLoss) done.
+**Status (2026-04-20 night):** Production = `ms-marco-MiniLM-L-6-v2` (unchanged). 8 FT iterations done. Audit wave concluded; P0 (eval gate fix) + v8 (listwise LambdaLoss) done.
+Runtime benchmarks on v6.2 + v8 completed (5-critic validation). See §"2026-04-20 night: Runtime validation + critic synthesis" below.
 
 **User priority update 2026-04-20:** quality matters MORE than latency. Previous iterations held back v6.2/v8 from prod citing "2× latency" — that's no longer the dominant consideration. Main open question: do v6.2 or v8 win on RUNTIME query distribution (not just Jira eval) and per-project breakdown? If yes, one of them should ship.
+
+---
+
+## ✅ DONE 2026-04-20 night: Runtime validation + critic synthesis
+
+Five parallel critics (general-purpose / opus) checked 5 claims before any prod swap. Results below.
+
+### 1. Runtime benchmarks (fresh) — 6 JSON snapshots in `profiles/pay-com/benchmarks/`
+
+Setup: `CODERANK_RERANK_MODEL=<path>` env var (short-circuits config). `hybrid_search` runs in-process; daemon on :8742 did NOT restart.
+
+| Model | `benchmark_queries` avg | q PASS | `benchmark_realworld` avg | rw PASS/PART/FAIL | feature cat |
+|---|---:|---:|---:|:---:|---:|
+| baseline (L6) | 0.850 | 3/4 | 0.8222 | 4/2/0 | 0.854 |
+| v6.2 | 0.842 | 3/4 | 0.8222 | 4/2/0 | 0.854 |
+| **v8** | **0.933** (+0.083) | **4/4** | **0.8430** (+0.021) | 4/2/0 | **0.917** (+0.063) |
+
+Per-query v8 wins over baseline: Q1-concept +0.167 (0.833→1.00), Q4-concept +0.167 (0.667→0.833), Q1-rw +0.125 (0.875→1.00). No PASS→FAIL or PASS→PARTIAL regressions. No `benchmark_flows.py` run yet (script exists; 10-query sample limits statistical power regardless).
+
+**Verdict:** v8 clearly wins both runtime benchmarks. v6.2 is indistinguishable from baseline on this sample (10 queries — small, take with salt).
+
+### 2. Per-project parity on Jira eval (breakdown of `gte_v1/v6_2/v8.json`)
+
+| Project | n | v6.2 Δr@10 | v6.2 ΔH@5 | v6.2 net_H5 | v8 Δr@10 | v8 ΔH@5 | v8 net_H5 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| BO | 524 | +0.0711 | +0.0977 | +46 | +0.0630 | +0.1040 | +49 |
+| CORE | 308 | +0.0154 | +0.0211 | +6 | +0.0249 | +0.0493 | +14 |
+| **PI** | 44 | **−0.0055** | **−0.0227** | **−1** | **−0.0248** | **−0.0227** | **−1** |
+| HS | 33 | +0.0455 | +0.0303 | +1 | 0.0000 | +0.0303 | +1 |
+| ALL | 909 | +0.0470 | +0.0625 | +52 | +0.0429 | +0.0757 | +63 |
+
+**Both models regress PI on Hit@5** (net_H5 = −1 each, i.e. ~1 ticket falls out of top-5 that was there in baseline).
+**v8 regresses PI harder on r@10** (−2.48pp ≈ ~1 ticket vs v6.2's ~0.25 ticket).
+BO (58% of eval) dominates aggregate — dropping BO alone fails v8 gate.
+
+### 3. MCP top-K usage (from `logs/tool_calls.jsonl` — 1222 MCP search calls)
+
+- Default limit = 10 (`mcp_server.py:118`, `src/search/service.py:23,43`).
+- median K = 10, p90 = 15, mean = 9.0. Distribution: ≤3: 2.8%, 4–5: 21.0%, 6–10: 64.2%, 11–20: 12.0%.
+- 88% of calls want K≤10 (r@10 aligns) — but 24% want K≤5 (Hit@5 aligns).
+- Caveat: top-5 ordering inside K=10 response is still judged by Hit@5; users who read top-down benefit from Hit@5 wins even at K=10.
+
+### 4. Gate adversarial audit — `scripts/eval_verdict.py`
+
+**Verdict:** SUFFICIENT for FT-iteration filter. INSUFFICIENT as single prod-decision gate. Critical findings:
+
+1. **No holdout.** `profiles/pay-com/finetune_data_v8/manifest.json` has `train=904, test=5`. "Full 909 eval" = 904 train + 5 test. Gate cannot detect overfitting. On the 5-ticket test split, v8 Δr@10 = +0.0000.
+2. **Per-project blind.** Dropping BO alone → v8 fails gate.
+3. **v7 (known-bad) passes gate** with margin — test `test_v7_promotes_on_jira_eval_but_is_known_bad_on_runtime` already captures this.
+4. **Noise floor close to threshold.** Bootstrap 95% CI on v8 Δr@10 ≈ [+0.026, +0.054] — half-width ~1.4pp vs 2pp threshold. Single seed.
+
+Recommended additional guards (ranked): (a) real ≥90/10 holdout fold, (b) per-project floor `Δr@10 ≥ -0.01 ∀ project n≥30`, (c) multi-seed variance check, (d) explicit runtime-benchmark co-gate (now tractable — file snapshots in `profiles/pay-com/benchmarks/`).
+
+### 5. Untried levers (fresh perspective, NOT in ROADMAP)
+
+**STRONG_CANDIDATE_EXISTS — query-parity mismatch never addressed across 8 iterations:**
+
+- `prepare_finetune_data.py::build_query_text` → `summary + description + comments` (v6.2 avg 517 chars).
+- `eval_finetune.py:176` → raw `task["summary"]` (~80 chars).
+- Runtime queries (memory file) → ~61 chars.
+
+Same class of distributional bug that killed v5 (train-diff vs eval-chunk), just on the query side. Not in ROADMAP §Mistakes. Effort 2–3h, HIGH probability.
+
+Other viable (lower ROI): v6.2+v8 ensemble score-average (MED-HIGH), listwise group-size expansion (v8 avg 13.9 docs/group vs cap 32), knowledge distillation GTE→MiniLM (fixes latency directly).
+
+### Decision matrix synthesized
+
+| Criterion | v6.2 | v8 |
+|---|---|---|
+| Runtime queries | tie | **WIN +0.083** |
+| Runtime realworld | tie | **WIN +0.021** |
+| Runtime regressions | none | none |
+| Jira Δr@10 aggregate | +4.30pp | +3.92pp |
+| Jira ΔHit@5 aggregate | +5.7pp | **+6.9pp** |
+| **PI project (n=44)** | −0.55pp r@10, −2.27pp H@5 | **−2.48pp r@10**, −2.27pp H@5 |
+| MCP top-K alignment | 76% (K≥6, r@10) | 24% (K≤5, Hit@5); top-5 ordering at K=10 still benefits |
+| Model size / latency | 149M (≥2× p95) | 285MB bf16 (unverified, faster in this benchmark) |
+| Gate status (new) | PROMOTE | PROMOTE |
+
+### Blockers for immediate deploy
+
+1. **PI regression in BOTH candidates.** NEXT_SESSION_PROMPT rule was "per-project parity OK" → literal reading = block. Magnitude ~1 ticket (n=44 small), but the rule is explicit.
+2. **Gate has no holdout** (test=5, train=904). All PROMOTE claims are in-training-distribution. Critical — needs fix before future FT cycles, but does NOT block current deploy decision since runtime numbers are independent.
+3. **Runtime sample = 10 queries.** Directional but low statistical power.
+
+### What is NOT blocking (resolved by runtime run)
+
+- v6.2/v8 "mixed or worse" runtime claim (from pre-gate-fix audit) → REFUTED for v8 (wins both). For v6.2 → tie not worse.
+- "2× latency" claim → not reproduced in this benchmark (v8 actually finished faster). Dedicated latency micro-bench would need `benchmark_rerank_ab.py` if it exists; not run here.
 
 ---
 
