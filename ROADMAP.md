@@ -33,10 +33,10 @@ Tests: 310 pass (27 new in `tests/test_eval_verdict.py`). Single-process and sha
 
 Validated by the critic+cross-val wave; ordered by ROI/cost:
 
-1. **Graph retrieval POC** (4h notebook, no prod change). Graph has 17k edges (8.7k real repo→repo); 1-hop reachability on v6.2 low-recall tickets ~87%. Added-candidate precision is low (~3.7%) so hub filter required. Ship criterion: `≥+2pp r@10 AND MRR not regressed` on 100 low-recall tickets. Calibrated lift: +1.5 to +3pp (not the roadmap's original +3-5pp). P(≥+3pp) = 25%, P(≥+1pp with neutral MRR) = 60%.
+1. **❌ Graph retrieval POC — DONE 2026-04-20, does not ship.** Tested on 100 low-recall tickets: +2.85pp r@10 with α=0.03, hub_cutoff=500 (passes ship criterion on that subset). But on full 832 tickets the gain collapses to +0.33pp r@10 AND Hit@5 regresses by -0.48pp / MRR -0.36pp. Graph signal is selective (good on low-recall, noise on high-recall), not robust enough for blanket application. See `profiles/pay-com/finetune_history/graph_boost_poc_2026-04-20.md` for full results + shelved follow-ups (conditional boost, reranker-stage feature, edge-type weighting).
 2. **Real-query eval** (1-2 days, LLM-assisted labeling). 1,174 unique queries in `logs/tool_calls.jsonl`. Stratify cap 10/session (top-3 sessions = 45% of queries — single-dev workflow-replay, NOT generalization signal). Note: "82% identifier-dense" claim was WRONG (actual token-level 26%). `search_feedback.jsonl` has no click signal (score=0 everywhere). Use as regression guard only.
 3. **v8 FT — ONE surgical change, post-gate fix only.** 92.5% of v6.2 regressions are rank-reshuffle (fixable by reranker). Candidate levers, isolate one:
-   - Pairwise/listwise loss (currently only pointwise MSE/BCE/Huber in `finetune_reranker.py:195`). Most targeted fix for reshuffle regressions.
+   - Pairwise/listwise loss (currently only pointwise MSE/BCE/Huber in `finetune_reranker.py:195`). Most targeted fix for reshuffle regressions. **Now highest-priority untried lever — graph POC shelved.**
    - Freeze bottom 6 ModernBERT layers (62k rows / 149M params is under-regularized).
    - Dense-neighbor hard negatives (currently ALL negatives come from FTS top-50 — orthogonal axis untried).
 
@@ -126,13 +126,8 @@ See §"DONE 2026-04-20: Verdict gate fix" above.
 - Agent: "What's the cost of manual labeling? Is there a cheaper way (e.g., treat top-returned chunks as weak positives, or use LLM-as-judge)?"
 **Effort:** 1-2 days if manual; could be faster with LLM-assisted labeling.
 
-### P1. Graph-boosted retrieval
-**Claim:** `graph_edges` table has 11k+ typed edges, unused by `hybrid_search`. ~50 LOC addition could give +3-5pp.
-**Validation to run:**
-- Agent: "Which edge types are most useful? How often do they actually connect seed chunks to GT chunks on our eval corpus? What's the expected recall lift before implementation?"
-- Agent (code review): "Proposed implementation in `src/search/hybrid.py::_graph_boost()` — any risks (hub pollution, latency, scoring instability)?"
-- POC: prototype boost on 100 tickets, measure delta without deploying.
-**Effort:** 2h code + 4h POC validation. Low-risk.
+### P1. ~~Graph-boosted retrieval~~ — ❌ POC FAILED 2026-04-20
+Tested blanket 1-hop neighbor boost on FTS top-200. Result: +2.85pp r@10 on low-recall 100 tickets but on full 832 only +0.33pp with Hit@5/MRR regression. Shelved. See `graph_boost_poc_2026-04-20.md`. Conditional boost (apply only when baseline confidence low) remains untried but is a bigger project.
 
 ### P1. Query rewriting / identifier extraction
 **Claim:** Zero experiments. Reranker can't fix queries missed by recall.
@@ -217,8 +212,8 @@ All flags opt-in (default False). Don't use `--dedupe-same-file` (v5 catastrophe
 - `db/tasks.db` (70MB) — `task_history` with 909 Jira tickets (ground truth = `files_changed`, but eval scores repos).
 - `db/knowledge.db` (160MB) — FTS5 + chunk metadata + **`graph_edges` table with 11k+ typed edges (UNUSED by retrieval)**.
 - `db/vectors.lance.coderank/` (11GB LanceDB) — CodeRankEmbed embeddings for hybrid search.
-- `logs/tool_calls.jsonl` — **1,194 real MCP search queries, ~4,262 total tool calls. Unused as training/eval signal.**
-- `logs/search_feedback.jsonl` (17.9M) — may contain click-through data for real positives.
+- `logs/tool_calls.jsonl` — **1,174 unique MCP search queries (1 dev, 43 sessions, 16 days). Unused as training/eval signal.**
+- `logs/search_feedback.jsonl` (17.9M) — no usable click/selection signal (score=0 on all results).
 - `scripts/eval_parallel.sh` — parallel 3-shard eval template (saves ~50% time vs sequential).
 - `scripts/prepare_finetune_data.py` has all v1-v7 flags (all opt-in, default False).
 - `scripts/finetune_reranker.py` — train pipeline with bf16, checkpointing.
