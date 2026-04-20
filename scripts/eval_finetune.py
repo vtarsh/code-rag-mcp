@@ -405,18 +405,27 @@ def main() -> int:
     log.info("loaded %d GT tasks (projects=%s)", len(tasks), projects or "all")
 
     # ---- Shard slicing (horizontal parallelism across multiple processes) ----
-    # Shuffle with a fixed seed so per-shard work is balanced (FTS candidate
-    # counts vary per ticket, so deterministic stride from load order causes
-    # badly skewed shard runtimes — seeded shuffle fixes that while keeping
-    # each process's partition deterministic.)
+    # Seeded shuffle + global stride used to leave heavy-tail projects (e.g.
+    # CORE monster-PRs with ~25s rerank latency) clustered on one unlucky
+    # shard, making that shard ~3x slower than the others. Fix: shuffle once
+    # then stride within each ticket-id prefix group (PI/BO/CORE/HS), so each
+    # shard gets roughly an equal share of every project.
     if args.shard_total > 1:
         if not (0 <= args.shard_index < args.shard_total):
             raise ValueError(f"shard-index={args.shard_index} outside [0,{args.shard_total})")
         import random as _rnd
+        from collections import defaultdict as _dd
         _rng = _rnd.Random(args.seed)
         _rng.shuffle(tasks)
-        tasks = tasks[args.shard_index::args.shard_total]
-        log.info("SHARD %d/%d -> processing %d tasks (seeded shuffle+stride)",
+        by_prefix: dict[str, list[dict]] = _dd(list)
+        for t in tasks:
+            pfx = t["ticket_id"].split("-", 1)[0]
+            by_prefix[pfx].append(t)
+        sharded: list[dict] = []
+        for pfx in sorted(by_prefix):
+            sharded.extend(by_prefix[pfx][args.shard_index::args.shard_total])
+        tasks = sharded
+        log.info("SHARD %d/%d -> processing %d tasks (per-prefix stride)",
                  args.shard_index, args.shard_total, len(tasks))
 
     fts_conn = sqlite3.connect(str(KNOWLEDGE_DB), timeout=30)
