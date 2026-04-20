@@ -1,6 +1,6 @@
 # P5 Reranker — Roadmap
 
-**Status (2026-04-20 evening):** Production = `ms-marco-MiniLM-L-6-v2` (unchanged). 7+ FT iterations exhausted. Audit wave concluded; first P0 ("fix eval methodology") DONE — see §"Verdict gate fix" below. Next: retrieval-stage (graph POC) + real-query eval + single-change v8 FT. Source of truth for what's been tried, what's still worth trying, and what's a dead end.
+**Status (2026-04-20 late evening):** Production = `ms-marco-MiniLM-L-6-v2` (unchanged). 8 FT iterations done. Audit wave concluded; P0 (eval gate fix) + v8 (listwise LambdaLoss) done. v8 is a sidegrade vs v6.2: slightly worse Δr@10 (-0.4pp), better ΔHit@5 (+1.2pp), same latency (2× baseline). Source of truth for what's been tried, what's still worth trying, and what's a dead end.
 
 ---
 
@@ -22,10 +22,11 @@ Re-scored all historical snapshots with the new gate (dry run via `scripts/resco
 | gte_v4 | HOLD | PROMOTE | +0.041 | +0.050 | +74 |
 | **gte_v6_2** | HOLD | **PROMOTE** | +0.043 | +0.057 | +89 |
 | gte_v7 | HOLD | PROMOTE | +0.034 | +0.056 | +73 |
+| **gte_v8** | — | **PROMOTE** | +0.039 | **+0.069** | +78 |
 
 **Interpretation:** All four models look like Jira-eval wins under a sensible gate. The gate is a *necessary* filter on FT iteration cycles. It is NOT sufficient for production swap — runtime benchmarks (latency, realworld/queries) and per-project parity remain separate gates. v7's passage here is precisely why the gate alone is insufficient: v7 has known 2× latency and mixed runtime benchmarks from prior audits.
 
-Tests: 310 pass (27 new in `tests/test_eval_verdict.py`). Single-process and sharded eval now share one verdict function. See `scripts/eval_verdict.py` module docstring for rationale.
+Tests: 316 pass (27 new in `tests/test_eval_verdict.py`, 6 new in `tests/test_listwise_conversion.py` for v8 data converter). Single-process and sharded eval now share one verdict function. See `scripts/eval_verdict.py` module docstring for rationale.
 
 ---
 
@@ -35,10 +36,11 @@ Validated by the critic+cross-val wave; ordered by ROI/cost:
 
 1. **❌ Graph retrieval POC — DONE 2026-04-20, does not ship.** Tested on 100 low-recall tickets: +2.85pp r@10 with α=0.03, hub_cutoff=500 (passes ship criterion on that subset). But on full 832 tickets the gain collapses to +0.33pp r@10 AND Hit@5 regresses by -0.48pp / MRR -0.36pp. Graph signal is selective (good on low-recall, noise on high-recall), not robust enough for blanket application. See `profiles/pay-com/finetune_history/graph_boost_poc_2026-04-20.md` for full results + shelved follow-ups (conditional boost, reranker-stage feature, edge-type weighting).
 2. **Real-query eval** (1-2 days, LLM-assisted labeling). 1,174 unique queries in `logs/tool_calls.jsonl`. Stratify cap 10/session (top-3 sessions = 45% of queries — single-dev workflow-replay, NOT generalization signal). Note: "82% identifier-dense" claim was WRONG (actual token-level 26%). `search_feedback.jsonl` has no click signal (score=0 everywhere). Use as regression guard only.
-3. **v8 FT — ONE surgical change, post-gate fix only.** 92.5% of v6.2 regressions are rank-reshuffle (fixable by reranker). Candidate levers, isolate one:
-   - Pairwise/listwise loss (currently only pointwise MSE/BCE/Huber in `finetune_reranker.py:195`). Most targeted fix for reshuffle regressions. **Now highest-priority untried lever — graph POC shelved.**
+3. **✅ v8 FT — DONE 2026-04-20 (listwise LambdaLoss).** Sidegrade vs v6.2: ΔHit@5 +6.9pp (best top-5 ever, +1.2pp over v6.2) but Δr@10 only +3.9pp (-0.4pp vs v6.2). 123 improved / 45 regressed. Latency unchanged (12s p50 = v6.2's). Listwise worked as designed — targeted multi-GT rank-reshuffle regressions and delivered measurable top-5 gain. But not enough r@10 lift to overtake v6.2 outright, so which you prefer depends on whether top-5 browsing or top-10 recall is the priority. Kept in archive as `reranker_ft_gte_v8/`.
+4. **Remaining untried levers (if pursuing more FT):**
    - Freeze bottom 6 ModernBERT layers (62k rows / 149M params is under-regularized).
    - Dense-neighbor hard negatives (currently ALL negatives come from FTS top-50 — orthogonal axis untried).
+   - v8 + longer max-length (128 forced by MPS OOM; on GPU could try 192-256 for listwise).
 
 ---
 
@@ -53,11 +55,13 @@ Validated by the critic+cross-val wave; ordered by ROI/cost:
 | Artifact | Purpose | Path |
 |---|---|---|
 | `reranker_ft_gte_v4/` (2GB) | Best "simple" FT: +4.06pp aggregate, 41 regressions, val loss 0.0927 | `profiles/pay-com/models/reranker_ft_gte_v4/` |
-| `reranker_ft_gte_v6_2/` (2GB) | Best "with filters" FT: +4.30pp, 40 regressions, val loss 0.0349 | `profiles/pay-com/models/reranker_ft_gte_v6_2/` |
-| `finetune_data_v4/` (104M) | v4 training set (66,522 rows) | `profiles/pay-com/finetune_data_v4/` |
-| `finetune_data_v6_2/` (97M) | v6.2 training set (61,250 rows) | `profiles/pay-com/finetune_data_v6_2/` |
+| `reranker_ft_gte_v6_2/` (2GB) | Best r@10 FT: +4.30pp, 40 regressions, val loss 0.0349 | `profiles/pay-com/models/reranker_ft_gte_v6_2/` |
+| `reranker_ft_gte_v8/` (285MB bf16) | Best Hit@5 FT: Δr@10 +3.9pp, ΔHit@5 +6.9pp, 45 regressions, listwise LambdaLoss | `profiles/pay-com/models/reranker_ft_gte_v8/` |
+| `finetune_data_v4/` (104M) | v4 training set (66,522 pointwise rows) | `profiles/pay-com/finetune_data_v4/` |
+| `finetune_data_v6_2/` (97M) | v6.2 training set (61,250 pointwise rows) | `profiles/pay-com/finetune_data_v6_2/` |
+| `finetune_data_v8/` (16M) | v8 training set (879 listwise groups, derived from v6.2 via convert_to_listwise.py) | `profiles/pay-com/finetune_data_v8/` |
 | `gte_v1.json` | Baseline eval snapshot (needed for `--reuse-baseline-from`) | `profiles/pay-com/finetune_history/` |
-| `gte_v4.json`, `gte_v6_2.json` | Best FT evals | `profiles/pay-com/finetune_history/` |
+| `gte_v4.json`, `gte_v6_2.json`, `gte_v8.json` | Best FT evals | `profiles/pay-com/finetune_history/` |
 | `gte_v7.json` | v7 failure eval (learn-from-mistake artifact) | `profiles/pay-com/finetune_history/` |
 
 Nothing else in `models/`, `finetune_data*/`, `finetune_history/` — prior cleanup freed ~8GB.
@@ -75,8 +79,9 @@ Nothing else in `models/`, `finetune_data*/`, `finetune_history/` — prior clea
 | v5 | v4 + `--dedupe-same-file` + more filters | 0.14 | **-16.67 test** | 176 | **CATASTROPHIC REJECT** | Dedupe (diff-over-chunk) broke train/eval distribution |
 | v6 | revert dedupe, add basename + trivial + min-query-len 50 + PI oversample 3 | — | +3.65 | 51 | HOLD | Cap=120 destroyed CORE monster-PR signal |
 | v6.1 | v6 | 0.0405 | +3.65 | 51 | HOLD | CORE -1.79pp vs v4 |
-| **v6.2** | **v6.1 - skip-empty-desc + drop-generated + max-rows 300 + oversample PI=5 + min-query-len 30** | **0.0349** | **+4.30** | **40** | **HOLD (best FT)** | **Best to date. All runtime benchmarks mixed or worse. 2× latency.** |
+| **v6.2** | **v6.1 - skip-empty-desc + drop-generated + max-rows 300 + oversample PI=5 + min-query-len 30** | **0.0349** | **+4.30** | **40** | **HOLD (best r@10 FT)** | **Best r@10. All runtime benchmarks mixed or worse. 2× latency.** |
 | v7 | v6.2 + `--fe-hard-negatives 4` (inject from FE cluster) | 0.0354 | +3.39 | 52 | REJECT | FE neg injection was 99.7% graphql (first in cluster, FTS broke early). Model learned "avoid graphql" too broadly. Hypothesis (BO→FE leakage) was also likely wrong per audit. |
+| **v8** | **v6.2 data reformatted listwise + `--loss lambdaloss` (NDCG-optim)** | n/a | **+3.92** | **45** | **PROMOTE (sidegrade)** | **Listwise worked as designed on Hit@5: ΔHit@5=+6.9pp (vs v6.2's +5.7pp, best top-5 ever). Δr@10 slightly below v6.2 (-0.4pp). Same 2× latency. Can replace v6.2 if top-5 browsing matters more than top-10 recall.** |
 
 ---
 
@@ -136,18 +141,8 @@ Tested blanket 1-hop neighbor boost on FTS top-200. Result: +2.85pp r@10 on low-
 - Agent: "On our eval set, how many tickets are 'zero recall' (GT not in top-200 FTS output)? If small, query rewrite has low ceiling."
 **Effort:** 1-2 days exploration + small implementation. Biggest untouched axis.
 
-### P2. v8 FT (conditional on P0 done)
-Only if we fix eval first AND have real-query corpus. Candidates from agent 8:
-- Multi-epoch (2-3) + cosine LR decay
-- Mined-hard negatives only (drop random), ratio 1:4
-- Freeze bottom 6 ModernBERT layers (62k rows is small for 149M params)
-- Listwise loss for multi-GT tickets (agent 6 recommendation)
-- Mixed query length: 50% full + 25% title-only + 25% identifier-extracted (agent 7)
-
-**Validation required BEFORE training:**
-- Sample check distribution alignment on new data
-- Fit small subset first (HS project, ~3 min) to verify flag behavior
-- Don't combine 5 changes at once — isolate each (lesson from v5).
+### P2. ✅ v8 FT (listwise LambdaLoss) — DONE 2026-04-20, sidegrade
+See §"Next steps" #3 above for results. Remaining untried levers from the original v8 candidate list: freeze bottom layers, dense-neighbor hard negatives, longer max-length on GPU.
 
 ### SKIP. Reranker model swap
 v4-v7 already explored this space. GTE-modernbert is at ~95% of achievable FT performance. Bigger model = 2-4× latency, marginal gain. Smaller = quality loss.
@@ -212,8 +207,8 @@ All flags opt-in (default False). Don't use `--dedupe-same-file` (v5 catastrophe
 - `db/tasks.db` (70MB) — `task_history` with 909 Jira tickets (ground truth = `files_changed`, but eval scores repos).
 - `db/knowledge.db` (160MB) — FTS5 + chunk metadata + **`graph_edges` table with 11k+ typed edges (UNUSED by retrieval)**.
 - `db/vectors.lance.coderank/` (11GB LanceDB) — CodeRankEmbed embeddings for hybrid search.
-- `logs/tool_calls.jsonl` — **1,174 unique MCP search queries (1 dev, 43 sessions, 16 days). Unused as training/eval signal.**
-- `logs/search_feedback.jsonl` (17.9M) — no usable click/selection signal (score=0 on all results).
+- `logs/tool_calls.jsonl` — **1,194 real MCP search queries, ~4,262 total tool calls. Unused as training/eval signal.**
+- `logs/search_feedback.jsonl` (17.9M) — may contain click-through data for real positives.
 - `scripts/eval_parallel.sh` — parallel 3-shard eval template (saves ~50% time vs sequential).
 - `scripts/prepare_finetune_data.py` has all v1-v7 flags (all opt-in, default False).
 - `scripts/finetune_reranker.py` — train pipeline with bf16, checkpointing.
@@ -227,4 +222,4 @@ All flags opt-in (default False). Don't use `--dedupe-same-file` (v5 catastrophe
 - Daemon on :8742 manages ML models in production. Unload before training (avoids MPS contention).
 - `caffeinate -is -t 86400` to prevent sleep during overnight runs.
 - User is the only dev; commits via `mcp__github__*` tools (gh deny-listed).
-- Test suite (310 tests after 2026-04-20 P0 gate fix) must pass before any changes land: `python3.12 -m pytest tests/ -q`.
+- Test suite (316 tests after 2026-04-20 v8 work) must pass before any changes land: `python3.12 -m pytest tests/ -q`.

@@ -149,7 +149,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    snapshots = sorted(args.history_dir.glob("gte_v*.json"))
+    # Exclude shard partials (e.g. gte_v8.shard0of3.json) — only merged snapshots
+    snapshots = sorted(
+        p for p in args.history_dir.glob("gte_v*.json")
+        if ".shard" not in p.name
+    )
     if not snapshots:
         print(f"no snapshots in {args.history_dir}", file=sys.stderr)
         return 1
