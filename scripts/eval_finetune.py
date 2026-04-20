@@ -41,6 +41,7 @@ from scripts.benchmark_rerank_ab import (  # noqa: E402
     percentile,
     top_k_repos,
 )
+from scripts.eval_verdict import verdict_from_snapshot  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -82,15 +83,22 @@ def pause_daemon(port: int = DAEMON_PORT, timeout: float = 5.0) -> bool:
         return False
 
 
-def load_all_pi_tasks(db_path: Path) -> list[dict]:
-    """Load every PI ticket with non-empty repos_changed (no sampling)."""
+def load_all_gt_tasks(db_path: Path, projects: list[str] | None = None) -> list[dict]:
+    """Load every ticket with non-empty repos_changed (no sampling).
+
+    projects: list of Jira project prefixes ("PI","BO",...) or None = all.
+    """
     conn = sqlite3.connect(str(db_path), timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA query_only = ON")
+    if projects:
+        placeholders = " OR ".join(f"ticket_id LIKE '{p}-%'" for p in projects)
+        where = f"({placeholders}) AND repos_changed IS NOT NULL AND repos_changed != '[]'"
+    else:
+        where = "repos_changed IS NOT NULL AND repos_changed != '[]'"
     rows = conn.execute(
         "SELECT ticket_id, summary, repos_changed FROM task_history "
-        "WHERE ticket_id LIKE 'PI-%' AND repos_changed IS NOT NULL "
-        "AND repos_changed != '[]' ORDER BY ticket_id"
+        f"WHERE {where} ORDER BY ticket_id"
     ).fetchall()
     conn.close()
 
@@ -233,25 +241,28 @@ def aggregate(per_task: dict[str, dict], tickets: list[str]) -> dict:
 
 
 def build_delta(base: dict[str, dict], ft: dict[str, dict]) -> dict[str, dict]:
+    """Per-ticket deltas. Format aligned with merge_eval_shards.build_delta
+    post-2026-04-20 fix: key `rank_of_first_gt_delta` (was ambiguously named
+    `rank_of_first_gt`). None if either baseline or ft didn't find GT.
+    Negative rank delta = ft moved GT up (improvement).
+    """
     out: dict[str, dict] = {}
     for ticket in base:
         if ticket not in ft:
             continue
         b = base[ticket]
         f = ft[ticket]
-        # rank delta: smaller rank = better. None handling: if either is None,
-        # emit null (can't compare).
         b_rank = b.get("rank_of_first_gt")
         f_rank = f.get("rank_of_first_gt")
+        rank_delta: int | None
         if b_rank is None or f_rank is None:
             rank_delta = None
         else:
-            # Negative = ft moved GT up (better).
             rank_delta = f_rank - b_rank
         out[ticket] = {
             "recall_at_10": f["recall_at_10"] - b["recall_at_10"],
             "recall_at_25": f["recall_at_25"] - b["recall_at_25"],
-            "rank_of_first_gt": rank_delta,
+            "rank_of_first_gt_delta": rank_delta,
         }
     return out
 
@@ -272,18 +283,9 @@ def find_regressions(delta: dict[str, dict],
     }
 
 
-def decide_verdict(agg_test_delta_r10: float, regressions: dict) -> tuple[str, str]:
-    n_5pp = regressions["count_r10_drop_gte_5pp"]
-    if agg_test_delta_r10 < 0 or n_5pp >= 3:
-        return ("REJECT",
-                f"delta_test r@10={agg_test_delta_r10:+.3f}, "
-                f"{n_5pp} regressions >=5pp")
-    if agg_test_delta_r10 >= 0.03 and n_5pp == 0:
-        return ("PROMOTE",
-                f"delta_test r@10={agg_test_delta_r10:+.3f}, no regressions")
-    return ("HOLD",
-            f"delta_test r@10={agg_test_delta_r10:+.3f}, "
-            f"{n_5pp} minor regressions")
+# `decide_verdict` lives in scripts/eval_verdict.py — single source of truth.
+# The old test-only gate (delta_test r@10, n=5 tickets) was replaced 2026-04-20
+# with a full-eval gate (Δr@10 + ΔHit@5 + net_improved). See eval_verdict module.
 
 
 def print_console_report(*,
@@ -349,10 +351,23 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--max-length", type=int, default=256)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--no-pause-daemon", action="store_true")
+    p.add_argument("--projects", default="",
+                   help="Comma-separated Jira prefixes (PI,BO,CORE,HS). Empty = all.")
     p.add_argument("--manifest", type=Path,
                    default=Path("profiles/pay-com/finetune_data/manifest.json"))
     p.add_argument("--training-summary", type=Path, default=None,
                    help="Override path; defaults to <ft-model>/training_summary.json")
+    p.add_argument("--shard-index", type=int, default=0,
+                   help="0-based shard index; shard-mode enabled when shard-total > 1.")
+    p.add_argument("--shard-total", type=int, default=1,
+                   help="Total number of shards to run in parallel. Each process slices "
+                        "tasks[shard_index::shard_total] and writes a partial history-out "
+                        "file — no aggregate/verdict computed in shard mode.")
+    p.add_argument("--reuse-baseline-from", type=Path, default=None,
+                   help="Path to a previous history_out JSON that shares base_model, "
+                        "fts_limit, seed. Its per_task_baseline is loaded directly and "
+                        "the baseline pass is skipped. 2x speedup when baseline "
+                        "hasn't changed between runs.")
     return p.parse_args()
 
 
@@ -384,9 +399,25 @@ def main() -> int:
         except Exception as e:
             log.info("training_summary read failed: %s", e)
 
-    # ---- Load all PI tasks ----
-    tasks = load_all_pi_tasks(TASKS_DB)
-    log.info("loaded %d PI tasks with GT", len(tasks))
+    # ---- Load all GT tasks (projects filter optional) ----
+    projects = [x.strip() for x in args.projects.split(",") if x.strip()] or None
+    tasks = load_all_gt_tasks(TASKS_DB, projects=projects)
+    log.info("loaded %d GT tasks (projects=%s)", len(tasks), projects or "all")
+
+    # ---- Shard slicing (horizontal parallelism across multiple processes) ----
+    # Shuffle with a fixed seed so per-shard work is balanced (FTS candidate
+    # counts vary per ticket, so deterministic stride from load order causes
+    # badly skewed shard runtimes — seeded shuffle fixes that while keeping
+    # each process's partition deterministic.)
+    if args.shard_total > 1:
+        if not (0 <= args.shard_index < args.shard_total):
+            raise ValueError(f"shard-index={args.shard_index} outside [0,{args.shard_total})")
+        import random as _rnd
+        _rng = _rnd.Random(args.seed)
+        _rng.shuffle(tasks)
+        tasks = tasks[args.shard_index::args.shard_total]
+        log.info("SHARD %d/%d -> processing %d tasks (seeded shuffle+stride)",
+                 args.shard_index, args.shard_total, len(tasks))
 
     fts_conn = sqlite3.connect(str(KNOWLEDGE_DB), timeout=30)
     fts_conn.row_factory = sqlite3.Row
@@ -395,13 +426,64 @@ def main() -> int:
     try:
         t_eval_start = time.time()
 
-        log.info("=== baseline pass ===")
-        base_per_task, base_lat = eval_one_model(
-            args.base_model, "baseline", tasks, fts_conn,
-            fts_limit=args.fts_limit,
-            batch_size=args.batch_size,
-            max_length=args.max_length,
-        )
+        if args.reuse_baseline_from is not None:
+            reuse_path = args.reuse_baseline_from
+            if not reuse_path.is_absolute():
+                reuse_path = Path(__file__).resolve().parents[1] / reuse_path
+            reuse = json.loads(reuse_path.read_text(encoding="utf-8"))
+            if reuse.get("base_model") != args.base_model:
+                raise ValueError(
+                    f"base_model mismatch: reuse={reuse.get('base_model')!r} "
+                    f"current={args.base_model!r}"
+                )
+            # Check every eval_config field that can change ranking. Previously
+            # only fts_limit was compared, so a batch_size or max_length tweak
+            # would silently mix old baseline numbers with fresh FT numbers.
+            reuse_cfg = reuse.get("eval_config") or {}
+            current_cfg = {
+                "fts_limit": args.fts_limit,
+                "batch_size": args.batch_size,
+                "max_length": args.max_length,
+                "seed": args.seed,
+            }
+            for key, want in current_cfg.items():
+                if reuse_cfg.get(key) != want:
+                    raise ValueError(
+                        f"eval_config.{key} mismatch: reuse={reuse_cfg.get(key)!r} "
+                        f"current={want!r}. Re-run baseline fresh or align configs."
+                    )
+            # Keep only tickets that survive the current shard slice.
+            wanted_ids = {t["ticket_id"] for t in tasks}
+            base_per_task = {
+                tid: v for tid, v in reuse["per_task_baseline"].items()
+                if tid in wanted_ids
+            }
+            base_lat = [
+                v.get("latency_s", 0.0) for v in base_per_task.values()
+            ]
+            missing = wanted_ids - set(base_per_task)
+            log.info("=== baseline reused from %s (%d/%d tickets; %d missing) ===",
+                     reuse_path.name, len(base_per_task), len(wanted_ids), len(missing))
+            if missing:
+                log.warning("reuse missing %d tickets — falling back to fresh baseline for them",
+                            len(missing))
+                missing_tasks = [t for t in tasks if t["ticket_id"] in missing]
+                extra_per_task, extra_lat = eval_one_model(
+                    args.base_model, "baseline", missing_tasks, fts_conn,
+                    fts_limit=args.fts_limit,
+                    batch_size=args.batch_size,
+                    max_length=args.max_length,
+                )
+                base_per_task.update(extra_per_task)
+                base_lat.extend(extra_lat)
+        else:
+            log.info("=== baseline pass ===")
+            base_per_task, base_lat = eval_one_model(
+                args.base_model, "baseline", tasks, fts_conn,
+                fts_limit=args.fts_limit,
+                batch_size=args.batch_size,
+                max_length=args.max_length,
+            )
 
         log.info("=== ft_v1 pass ===")
         ft_per_task, ft_lat = eval_one_model(
@@ -415,6 +497,38 @@ def main() -> int:
         log.info("eval total: %.1fs (%.1f min)", eval_dur, eval_dur / 60.0)
     finally:
         fts_conn.close()
+
+    # ---- Shard mode: write partial snapshot + exit (no aggregate/verdict) ----
+    if args.shard_total > 1:
+        shard_path = args.history_out.with_suffix(
+            f".shard{args.shard_index}of{args.shard_total}.json"
+        )
+        shard_path.parent.mkdir(parents=True, exist_ok=True)
+        shard_snapshot = {
+            "run_id": run_id,
+            "shard": {"index": args.shard_index, "total": args.shard_total},
+            "base_model": args.base_model,
+            "ft_model_path": args.ft_model,
+            "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "hyperparams": hyperparams,
+            "eval_config": {
+                "fts_limit": args.fts_limit,
+                "batch_size": args.batch_size,
+                "max_length": args.max_length,
+                "seed": args.seed,
+            },
+            "evaluated_tickets": [t["ticket_id"] for t in tasks],
+            "per_task_baseline": base_per_task,
+            "per_task_ft_v1": ft_per_task,
+            "latency_baseline": base_lat,
+            "latency_ft_v1": ft_lat,
+        }
+        shard_path.write_text(
+            json.dumps(shard_snapshot, indent=2, default=str, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        log.info("shard snapshot written: %s", shard_path)
+        return 0
 
     # ---- Aggregates (train vs test split) ----
     evaluated_tickets = [t["ticket_id"] for t in tasks]
@@ -453,11 +567,13 @@ def main() -> int:
         },
     }
 
-    # ---- Delta + regressions (test-set focus for verdict, but overall for snapshot) ----
+    # ---- Delta + regressions + verdict (full eval, not 5-ticket test split) ----
     per_task_delta = build_delta(base_per_task, ft_per_task)
     regressions_all = find_regressions(per_task_delta)
 
-    verdict, reason = decide_verdict(agg["delta_test"]["r10"], regressions_all)
+    verdict_result = verdict_from_snapshot(base_per_task, ft_per_task, per_task_delta)
+    verdict = verdict_result.verdict
+    reason = verdict_result.reason
 
     # ---- Build snapshot ----
     snapshot = {
@@ -488,6 +604,7 @@ def main() -> int:
         },
         "verdict": verdict,
         "verdict_reason": reason,
+        "verdict_metrics": verdict_result.metrics,
     }
 
     args.history_out.parent.mkdir(parents=True, exist_ok=True)
