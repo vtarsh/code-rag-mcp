@@ -190,6 +190,22 @@ GOTCHAS_BOOST: float = float(_tuning.get("gotchas_boost", 1.5))
 REFERENCE_BOOST: float = float(_tuning.get("reference_boost", 1.3))
 DICTIONARY_BOOST: float = float(_tuning.get("dictionary_boost", 1.4))
 
+# P0c: boost chunks whose (repo, file) match a code_facts_fts hit (validation
+# guards, joi/zod schemas, env lookups, temporal retries, grpc statuses). These
+# are high-signal structural facts that chunks_fts can miss when content
+# contains large generic blocks. Default 1.15 = +15% on RRF score.
+CODE_FACT_BOOST: float = float(_tuning.get("code_fact_boost", 1.15))
+
+# P0c: weight applied to injected chunks that the chunks_fts pool missed but
+# code_facts_fts matched. Weight in (0, 1] acts as position penalty on RRF
+# score (fresh candidate gets CODE_FACT_INJECT_WEIGHT / (RRF_K + 1)).
+CODE_FACT_INJECT_WEIGHT: float = float(_tuning.get("code_fact_inject_weight", 0.5))
+
+# P0c: boost chunks whose repo appears in env_vars rows matched by an UPPERCASE
+# identifier in the query. Lighter than code_fact_boost (repo-level signal
+# instead of file-level). Default 1.05 = +5%.
+ENV_VAR_BOOST: float = float(_tuning.get("env_var_boost", 1.05))
+
 # --- Rerank pool size (P4.2) — feed more candidates to cross-encoder ---
 # Controls pre-rerank cap. Benchmark (rerank_ab_top200.json) showed 50→200
 # gives +10 pp r@10 for baseline MiniLM-L-6. Env override: CODE_RAG_RERANK_POOL_SIZE.

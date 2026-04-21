@@ -16,8 +16,11 @@ from __future__ import annotations
 import re
 
 from src.config import (
+    CODE_FACT_BOOST,
+    CODE_FACT_INJECT_WEIGHT,
     DICTIONARY_BOOST,
     DOC_PENALTY,
+    ENV_VAR_BOOST,
     GOTCHAS_BOOST,
     GUIDE_PENALTY,
     KEYWORD_WEIGHT,
@@ -27,6 +30,8 @@ from src.config import (
     TEST_PENALTY,
 )
 from src.container import db_connection, get_reranker
+from src.search.code_facts import code_facts_search, fetch_chunks_for_files
+from src.search.env_vars import env_var_search
 from src.search.fts import fts_search
 from src.search.vector import vector_search
 
@@ -132,6 +137,90 @@ def rerank(query: str, results: list[dict], limit: int = 10) -> list[dict]:
     return results[:limit]
 
 
+def _apply_code_facts(
+    scores: dict[int, dict],
+    query: str,
+    repo: str,
+    rrf_k: int,
+    kw_weight: float,
+) -> None:
+    """P0c: Fold code_facts_fts hits into the RRF pool.
+
+    Two effects:
+      1. Boost — for existing (repo, file) pairs already in the pool, multiply
+         the RRF score by CODE_FACT_BOOST. Signals a structural match (e.g. a
+         validation guard whose condition contains a query term).
+      2. Inject — for (repo, file) pairs NOT in the pool, fetch the first chunk
+         from that file and insert it with position-based RRF weight. This is
+         the recall-surface part: chunks the keyword/vector search missed but
+         code_facts matched.
+    """
+    cf_hits = code_facts_search(query, repo, limit=50)
+    if not cf_hits:
+        return
+
+    existing_files: set[tuple[str, str]] = {
+        (data.get("repo_name", ""), data.get("file_path", "")) for data in scores.values()
+    }
+
+    seen_pairs: set[tuple[str, str]] = set()
+    ordered_pairs: list[tuple[str, str]] = []
+    for hit in cf_hits:
+        key = (hit["repo_name"], hit["file_path"])
+        if key not in seen_pairs:
+            seen_pairs.add(key)
+            ordered_pairs.append(key)
+
+    boost_pairs = seen_pairs & existing_files
+    missing_pairs = [p for p in ordered_pairs if p not in existing_files]
+
+    if boost_pairs:
+        for data in scores.values():
+            key = (data.get("repo_name", ""), data.get("file_path", ""))
+            if key in boost_pairs:
+                data["score"] *= CODE_FACT_BOOST
+                if "code_facts" not in data["sources"]:
+                    data["sources"].append("code_facts")
+
+    if missing_pairs:
+        injected = fetch_chunks_for_files(missing_pairs)
+        for rank_idx, chunk in enumerate(injected):
+            rid = chunk["rowid"]
+            if rid in scores:
+                continue
+            rrf_score = (kw_weight * CODE_FACT_INJECT_WEIGHT) / (rrf_k + rank_idx + 1)
+            scores[rid] = {
+                "score": rrf_score,
+                "repo_name": chunk["repo_name"],
+                "file_path": chunk["file_path"],
+                "file_type": chunk["file_type"],
+                "chunk_type": chunk["chunk_type"],
+                "snippet": chunk["snippet"],
+                "sources": ["code_facts"],
+            }
+
+
+def _apply_env_vars(scores: dict[int, dict], query: str) -> None:
+    """P0c: Boost repos that define UPPERCASE env vars in the query.
+
+    Repo-level signal — lighter than code_facts (file-level). Only fires when
+    the query contains at least one UPPERCASE_IDENTIFIER token.
+    """
+    ev_hits = env_var_search(query, limit=30)
+    if not ev_hits:
+        return
+
+    ev_repos: set[str] = {hit["repo"] for hit in ev_hits}
+    if not ev_repos:
+        return
+
+    for data in scores.values():
+        if data.get("repo_name", "") in ev_repos:
+            data["score"] *= ENV_VAR_BOOST
+            if "env_var" not in data["sources"]:
+                data["sources"].append("env_var")
+
+
 def hybrid_search(
     query: str,
     repo: str = "",
@@ -190,6 +279,16 @@ def hybrid_search(
             }
         scores[rid]["score"] += rrf_score
         scores[rid]["sources"].append("vector")
+
+    # P0c: wire code_facts_fts — structured facts (schemas, env lookups, guards,
+    # retry policies) that chunks_fts can miss. Boost chunks whose (repo, file)
+    # match a code_facts hit, and inject a candidate chunk for hits that the
+    # keyword/vector pool missed entirely.
+    _apply_code_facts(scores, query, repo, K, KW_WEIGHT)
+
+    # P0c: wire env_vars — UPPERCASE identifiers in the query resolve to the
+    # repos where those env vars are defined. Light repo-level boost.
+    _apply_env_vars(scores, query)
 
     # Apply content-type boosts — curated knowledge ranks higher
     TASK_BOOST = {
