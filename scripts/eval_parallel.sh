@@ -37,6 +37,12 @@ FTS_FALLBACK_ENRICH="${FTS_FALLBACK_ENRICH:-0}"
 # comparable (retrieval_mode strict-check will refuse to mix). Vector search
 # adds ~0.5s/ticket — expect total ~60-90min vs ~35-45min for fts_only.
 USE_HYBRID_RETRIEVAL="${USE_HYBRID_RETRIEVAL:-0}"
+# LPT shard balancing: path to a previous history_out JSON whose
+# `per_task_baseline[*].latency_s` drives greedy longest-processing-time-first
+# shard split. Eliminates heavy-tail bunching (eval_v8_hybrid first run had
+# shard0 finish baseline while shard2 still on 145/175 BO). Omit for the first
+# hybrid run; once gte_v8_hybrid.json exists, pass it on subsequent runs.
+LATENCY_PROFILE="${LATENCY_PROFILE:-}"
 
 OUT=profiles/pay-com/finetune_history
 mkdir -p logs
@@ -67,6 +73,12 @@ if [ "${USE_HYBRID_RETRIEVAL}" = "1" ] || [ "${USE_HYBRID_RETRIEVAL}" = "true" ]
   HYBRID_FLAG="--use-hybrid-retrieval"
 fi
 
+# Build latency-profile flag for LPT balancing
+LATENCY_FLAG=""
+if [ -n "${LATENCY_PROFILE}" ]; then
+  LATENCY_FLAG="--latency-profile ${LATENCY_PROFILE}"
+fi
+
 # Launch 3 shards in parallel
 PIDS=()
 for i in 0 1 2; do
@@ -85,6 +97,7 @@ for i in 0 1 2; do
       --eval-query-mode "${EVAL_QUERY_MODE}" \
       ${FALLBACK_FLAG} \
       ${HYBRID_FLAG} \
+      ${LATENCY_FLAG} \
       2>&1 | tee "logs/eval_${SLUG}.shard${i}.log"
     echo "=== EVAL_SHARD_DONE slug=${SLUG} shard=${i} ts=$(date +%Y-%m-%dT%H:%M:%S) ==="
   ) &
