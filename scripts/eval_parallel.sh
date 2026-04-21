@@ -31,6 +31,12 @@ EVAL_QUERY_MODE="${EVAL_QUERY_MODE:-summary}"
 # were produced with fallback=False). Rescues ~77 tickets (~8.5% of 909) whose
 # short Jira titles don't match any FTS chunk. 2026-04-21 experiment.
 FTS_FALLBACK_ENRICH="${FTS_FALLBACK_ENRICH:-0}"
+# P0a: route eval through src.search.hybrid.hybrid_search (FTS + vector RRF +
+# code_facts/env_vars wiring + content-type boosts). Aligns eval to production
+# serving pool. Pass BASELINE=skip because old fts_only snapshots aren't
+# comparable (retrieval_mode strict-check will refuse to mix). Vector search
+# adds ~0.5s/ticket — expect total ~60-90min vs ~35-45min for fts_only.
+USE_HYBRID_RETRIEVAL="${USE_HYBRID_RETRIEVAL:-0}"
 
 OUT=profiles/pay-com/finetune_history
 mkdir -p logs
@@ -55,6 +61,12 @@ if [ "${FTS_FALLBACK_ENRICH}" = "1" ] || [ "${FTS_FALLBACK_ENRICH}" = "true" ]; 
   FALLBACK_FLAG="--fts-fallback-enrich"
 fi
 
+# Build hybrid-retrieval flag (P0a)
+HYBRID_FLAG=""
+if [ "${USE_HYBRID_RETRIEVAL}" = "1" ] || [ "${USE_HYBRID_RETRIEVAL}" = "true" ]; then
+  HYBRID_FLAG="--use-hybrid-retrieval"
+fi
+
 # Launch 3 shards in parallel
 PIDS=()
 for i in 0 1 2; do
@@ -72,6 +84,7 @@ for i in 0 1 2; do
       --batch-size "${EVAL_BATCH}" --max-length "${EVAL_MAXLEN}" \
       --eval-query-mode "${EVAL_QUERY_MODE}" \
       ${FALLBACK_FLAG} \
+      ${HYBRID_FLAG} \
       2>&1 | tee "logs/eval_${SLUG}.shard${i}.log"
     echo "=== EVAL_SHARD_DONE slug=${SLUG} shard=${i} ts=$(date +%Y-%m-%dT%H:%M:%S) ==="
   ) &
