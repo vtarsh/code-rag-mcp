@@ -2,57 +2,53 @@
 
 ---
 
-Продовжую `code-rag-mcp` після 2026-04-21 afternoon breakthrough. **Перед будь-якою дією прочитай повністю `ROADMAP.md`** — особливо першу секцію §"2026-04-21 afternoon: Conditional enriched FTS fallback" та старий §"🌙 2026-04-21 overnight" для контексту.
+Продовжую code-rag-mcp після 2026-04-21 evening breakthrough + post-audit.
+Прочитай `ROADMAP.md` — особливо першу секцію з новим next-lever ranking (P0a/b/c, P1a/b, P2).
+Також прочитай пам'ять: `~/.claude-personal/projects/-Users-vaceslavtarsevskij--code-rag-mcp/memory/MEMORY.md`.
 
-Також прочитай пам'ять: `~/.claude-personal/projects/-Users-vaceslavtarsevskij--code-rag-mcp/memory/MEMORY.md` та всі файли за посиланнями.
+## Поточний стан
 
-## Поточний стан (головне)
+- У проді: **v8** (listwise LambdaLoss, 285MB bf16, +5.09pp над baseline з fallback). НЕ чіпай.
+- Canonical baseline: **r@10 = 0.7112 / Hit@5 = 0.8339** (з `--fts-fallback-enrich`).
+- v8 eval: **r@10 = 0.7622 / Hit@5 = 0.9131**. PROMOTE, net=+100, 146 impr / 46 regr.
+- **P0 BUG:** `eval_finetune.py` ≠ `hybrid.py` retrieval (FTS-only vs FTS+vector RRF + boosts). Всі 11 FT ітерацій тюнились на неправильний candidate pool.
+- **Free lunch:** `code_facts_fts` (1659 rows) + `env_vars` (4753 rows) побудовано — не читаються з `src/search/*.py` на query time.
+- **Mini bug:** `src/search/suggestions.py:72` — `node_type` замість `type`. 629 zero-result queries. 5 хвилин фікс.
 
-- **У проді: `reranker_ft_gte_v8`** (listwise LambdaLoss, 285MB bf16). Не змінюй.
-- **Conditional enriched FTS fallback** (`--fts-fallback-enrich`) — ПІДТВЕРДЖЕНО ПОВНИМ EVAL. Baseline r@10=0.7112 (+5.85pp з fallback), v8 r@10=**0.7622** (+6.67pp з fallback). v8 перевага над baseline ЗБЕРЕЖЕНА: Δr@10=**+5.09pp**, ΔHit@5=**+7.92pp**, net=+100 (146 impr / 46 regr). PROMOTE на повному гейті.
-- **Canonical baseline updated**: старі FT порівнювались vs 0.6527 r@10. Нові — vs 0.7112.
-- **Daemon на `:8742`** — може бути unload'нутим через eval. Якщо так, рестартни: `CODE_RAG_HOME=~/.code-rag-mcp ACTIVE_PROFILE=pay-com python3.12 daemon.py &disown`.
-- **Task D (real-query eval)** — sampling готовий (`scripts/sample_real_queries.py`, 400 queries у `profiles/pay-com/real_queries/sampled.jsonl`). Labeling НЕ зроблений — блокує на Anthropic API access або manual LLM-as-judge.
+## Головне питання
 
-## Головне питання сесії
+**"Почати з P0a (eval/prod parity) чи з P0c (wire unused tables)?"**
 
-**"Task D labeling та/або v12 FT з новим baseline як референс?"**
+- P0a розблоковує всі майбутні FT — без неї v12 → глухий кут (тюнить на неправильний пул).
+- P0c — найдешевший recall win, не блокує нічого.
+- P0b — просто фіксни (5 хвилин).
 
-Canonical baseline оновлено: 0.7112 r@10 (замість 0.6527). Будь-який майбутній FT порівнюється на цьому рівні. Gate thresholds (Δr@10 ≥ +0.02, ΔHit@5 ≥ +0.02, net ≥ 20) залишаються релевантними — їх семантика є RELATIVE, не absolute.
-
-## Що НЕ робити
-
-- Не тренуй нову модель до того як побачиш числа full-eval fallback.
-- Не свопай reranker у config.json — v8 все ще винний.
-- Не push через `gh` — тільки `mcp__github__*`, owner=vtarsh.
-- Якщо full-eval впав — НЕ пере-запускай з аналогічним SLUG, спочатку подивись `logs/eval_gte_v8_fallback.shard*.log` на причину.
+Рекомендація: **P0b → P0c → P0a → P1 → (може v12)**.
 
 ## Перший крок
 
-`gte_v8_fallback.json` готовий і в ROADMAP вже реальні числа. Далі варіанти:
-1. **Task D labeling** — 400 queries у `profiles/pay-com/real_queries/sampled.jsonl`. Labeling via API або manual LLM-as-judge. ~$5 + 4h spot-check.
-2. **v12 FT** — якщо плануєш train. Recipe у `Proven FT recipe` нижче. Canonical baseline = 0.7112.
-3. **Runtime query expansion** — аналог fallback для real user queries (LLM rewrite / identifier extraction). Потребує Task D для вимірювання.
-4. Інша ідея — запусти critic agents проти нового baseline якщо не очевидно куди йти.
+1. Пофіксити `src/search/suggestions.py:72` (`node_type` → `type`) + `pytest`.
+2. Прочитати `src/search/hybrid.py` + `scripts/eval_finetune.py` — зрозуміти точну розходженість candidate pool.
+3. Вирішити шлях P0a: updated-eval (eval через hybrid.py) vs pure-hybrid-rerank (production без boost, тільки rerank top-200).
 
-## Правила роботи
+## Що НЕ робити
 
-- **Push через `mcp__github__push_files`** (owner=vtarsh, repo=code-rag-mcp). Локальна git branch розходиться з origin — не merge'и, просто push вперед.
-- **Маленькими кроками**: написати → verify → commit → далі.
-- **Tests must pass** перед push: `python3.12 -m pytest tests/ -q` (зараз 337).
-- **Pre-commit pytest hook** flakey ЛИШЕ під час FT training (не під eval/inference). Якщо падає — перевір manually.
-- **Перед тренуванням** — MANDATORY sample check (5 train/5 test rows, visual compare).
-- **Real holdout ОБОВ'ЯЗКОВО** — `--test-ratio 0.15` для v12+.
+- v12 FT ДО P0a (буде тюнити на неправильний пул знов).
+- Blanket enriched query mode (−15pp на PI, перевірено Phase 1).
+- Push через `gh` — тільки `mcp__github__*`, owner=vtarsh.
+- Train без `--test-ratio 0.15` (real holdout mandatory).
+- `--dedupe-same-file` (v5 catastrophe −16.67pp).
 
-## Що наступного (після підтвердження fallback)
+## Що наступного (після P0)
 
-1. **Task D labeling** (400 queries, ~$5 + 4h calibration). Blocker: API access. Без цього Jira-eval / runtime distribution mismatch нікуди не дінеться.
-2. **v12 FT** з fallback enabled у eval gate. Чи потрібен ще один цикл — вирішувати за числами fallback full-eval.
-3. **Runtime query expansion** (LLM rewrite or identifier extraction) — аналог fallback для real user queries. Потребує Task D для вимірювання.
+1. **P1a — Null_rank rescue** (42 tickets, +2-3pp r@10 est). Glossary injection з `conventions.yaml` / `glossary.yaml`, або Haiku 3.5 LLM rewrite (~$0.0002/query).
+2. **P1b — Top-K churn replay** на 2308 real queries. Baseline vs v8+fallback, порівняти top-10 ranks. 4h daemon, $0, runtime transfer signal.
+3. **P2 — v12 FT** (ТІЛЬКИ після P0a). Agent B recipe: listwise + lr=5e-5 + freeze bottom 6 ModernBERT layers + dense-neg hybrid + fallback-enriched training + real-holdout gate.
 4. ❌ v6.2+v8 ensemble — SKIP (Jaccard 0.918, oracle +0.55pp).
-5. ⏸ Dense retrieval FT — DEFER (12-24h re-embed, розподіл той самий).
+5. ❌ LLM-as-judge full labeling — churn replay дає 80% сигналу за $0.
+6. ⏸ Dense embedding FT — DEFER (12-24h re-embed).
 
-## Proven FT recipe (якщо знадобиться)
+## Proven FT recipe (якщо v12 після P0a)
 
 ```bash
 PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.8 PYTORCH_MPS_LOW_WATERMARK_RATIO=0.4 \
@@ -62,7 +58,7 @@ python3.12 scripts/finetune_reranker.py \
   --base-model Alibaba-NLP/gte-reranker-modernbert-base \
   --out profiles/pay-com/models/reranker_ft_gte_vN \
   --epochs 1 --batch-size 16 --lr 5e-5 --warmup 200 --max-length 256 \
-  --bf16 --optim adamw_torch_fused --loss mse \
+  --bf16 --optim adamw_torch_fused --loss lambdaloss \
   --save-steps 500 --val-ratio 0.10 --early-stopping-patience 2 \
   --resume-from-checkpoint none
 ```
@@ -79,18 +75,26 @@ python3.12 scripts/prepare_finetune_data.py \
   --test-ratio 0.15
 ```
 
-## Critical pitfalls (full list у ROADMAP)
+## Critical pitfalls (full list у ROADMAP §Critical pitfalls)
 
-1. Rerank FT ceiling раніше здавався +3-5pp; afternoon breakthrough показав що 8.5% tickets були недосяжні для FTS. Unlock'нули → +7.21pp Δr@10.
+1. Rerank FT "ceiling" раніше здавався +3-5pp; fallback breakthrough показав 8.5% tickets недосяжні для FTS. Unlock → +7.21pp Δr@10.
 2. Real-holdout MANDATORY (`--test-ratio 0.15`).
 3. `max_length=256 + batch=32` OOMs MPS. Use batch=16.
 4. FTS5 `_FTS_PRECLEAN` must strip all non-word/space/.-/ punctuation.
 5. Reranker path у config.json ABSOLUTE (daemon cwd ≠ repo).
 6. Jira r@10 gains ≠ runtime gains. Завжди перевіряй `benchmark_queries.py` + `benchmark_realworld.py` окремо.
-7. Blanket enriched mode LAME FTS candidates (−15pp на PI). Тільки CONDITIONAL fallback (`--fts-fallback-enrich`) безпечний.
+7. **Eval ≠ prod** (new). `eval_finetune.py` FTS-only, `hybrid.py` FTS+vector+RRF+boosts. Fix P0a перед v12.
+
+## Правила роботи
+
+- **Push через `mcp__github__push_files`** (owner=vtarsh, repo=code-rag-mcp, FULL file content per commit — overwrites remote).
+- **Маленькими кроками**: написати → verify → commit → далі.
+- **Tests must pass** перед push: `python3.12 -m pytest tests/ -q` (337 expected).
+- **Pre-commit pytest hook** flakey ЛИШЕ під час FT training (не під eval/inference).
+- **Перед тренуванням** — MANDATORY sample check (5 train/5 test rows, visual compare).
 
 ## Початковий запит (копіпастуй у новий сеанс)
 
 ```
-Прочитай ROADMAP.md + memory. Вчорашній breakthrough підтверджений: conditional enriched FTS fallback дає +5.09pp v8 Δr@10 (PROMOTE) на повному eval. Canonical baseline тепер 0.7112. Вибір наступного кроку: (1) Task D labeling — 400 queries готові у sampled.jsonl; (2) v12 FT з новим baseline; (3) runtime query expansion; (4) запусти critic agents. Працюй автономно з checkpoints.
+Прочитай ROADMAP.md + memory. Вчорашній breakthrough підтверджений: fallback +5.09pp v8 Δr@10 PROMOTE. Post-audit знайшов P0 BUG (eval ≠ prod), free lunch (unused tables), mini bug. Почни з P0b suggestions.py fix, потім P0c code_facts_fts wiring, потім P0a eval/prod parity. Тільки після цього v12 FT (Agent B recipe у ROADMAP). Працюй автономно з checkpoints.
 ```
