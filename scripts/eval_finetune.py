@@ -159,6 +159,165 @@ def rank_of_first_gt(ranked_repos: list[str], expected: set[str]) -> int | None:
     return None
 
 
+class _CrossEncoderAdapter:
+    """Adapt a sentence_transformers.CrossEncoder to RerankerProvider.rerank(...).
+
+    P0a: hybrid.rerank() expects `reranker.rerank(query, documents, limit)`
+    returning a list of floats. Eval scripts instantiate raw CrossEncoder
+    objects whose predict(pairs) returns a numpy array. This shim bridges the
+    two so hybrid_search can drive the production pipeline with the eval
+    model instead of the daemon-loaded one.
+    """
+
+    def __init__(self, model, *, batch_size: int = 4):
+        self._model = model
+        self._batch_size = batch_size
+
+    @property
+    def provider_name(self) -> str:
+        return "eval_adapter"
+
+    def rerank(self, query: str, documents: list[str], limit: int = 10) -> list[float]:
+        pairs = [(query, doc) for doc in documents]
+        scores = self._model.predict(pairs, batch_size=self._batch_size)
+        return [float(s) for s in scores]
+
+
+def eval_one_model_hybrid(
+    model_name_or_path: str,
+    label: str,
+    tasks: list[dict],
+    *,
+    fts_limit: int,
+    batch_size: int,
+    max_length: int,
+    query_mode: str = "summary",
+) -> tuple[dict[str, dict], list[float]]:
+    """P0a: eval variant that routes candidates through src.search.hybrid.
+
+    Matches the production pipeline:
+      FTS5 (150) + vector (50) → RRF → code_facts boost/inject + env_vars boost
+      → content-type boosts → top RERANK_POOL_SIZE (default 200) → reranker
+      (the eval model here, via _CrossEncoderAdapter).
+
+    `fts_limit` is routed to hybrid.RERANK_POOL_SIZE via env var so the
+    reranker sees the same candidate count the FTS-only path did (default 200).
+
+    No FTS fallback parameter — hybrid.py already uses FTS+vector+code_facts,
+    so the 8.5% "no FTS candidates" bucket is covered structurally by vector
+    + code_facts_fts.
+    """
+    from sentence_transformers import CrossEncoder
+
+    from src.search.hybrid import hybrid_search
+
+    # Route fts_limit to the in-process hybrid rerank pool. hybrid.py reads
+    # RERANK_POOL_SIZE at import time, so we set the env BEFORE the first
+    # hybrid_search call (eval_finetune is a fresh process per shard).
+    os.environ["CODE_RAG_RERANK_POOL_SIZE"] = str(fts_limit)
+
+    log.info("[%s] loading model (hybrid path): %s", label, model_name_or_path)
+    t0 = time.perf_counter()
+    model = CrossEncoder(
+        model_name_or_path,
+        trust_remote_code=True,
+        max_length=max_length,
+    )
+    adapter = _CrossEncoderAdapter(model, batch_size=batch_size)
+    log.info("[%s] loaded in %.1fs", label, time.perf_counter() - t0)
+
+    per_task: dict[str, dict] = {}
+    latencies: list[float] = []
+
+    for task in tasks:
+        ticket = task["ticket_id"]
+        expected = set(task["expected_repos"])
+        entry: dict = {
+            "recall_at_10": 0.0,
+            "recall_at_25": 0.0,
+            "rank_of_first_gt": None,
+            "n_gt_repos": len(expected),
+            "top_10_repos": [],
+            "latency_s": None,
+            "error": None,
+            "fallback_used": False,
+            "retrieval": "hybrid",
+        }
+        query = _resolve_eval_query(task, query_mode)
+        # hybrid.fts_search uses sanitize_fts_query which doesn't strip Jira
+        # punctuation (`:` in "Alias: X" crashes FTS5). preclean_for_fts
+        # normalizes the query the same way prepare_finetune_data.py did for
+        # training rows.
+        query_clean = preclean_for_fts(query) if query_mode == "enriched" else query
+        try:
+            t_q = time.perf_counter()
+            ranked, vec_err, total_candidates = hybrid_search(
+                query_clean,
+                limit=fts_limit,
+                reranker_override=adapter,
+            )
+            lat = time.perf_counter() - t_q
+        except Exception as e:
+            entry["error"] = f"{type(e).__name__}: {e}"
+            per_task[ticket] = entry
+            log.info("[%s] %s: hybrid_search error %s", label, ticket, type(e).__name__)
+            continue
+
+        if not ranked:
+            entry["error"] = "no_hybrid_candidates"
+            if vec_err:
+                entry["error"] += f" (vec_err={vec_err})"
+            per_task[ticket] = entry
+            log.info("[%s] %s: no_hybrid_candidates (total=%d)", label, ticket, total_candidates)
+            continue
+
+        ranked_repos_full: list[str] = []
+        seen_repos: set[str] = set()
+        for r in ranked:
+            repo_name = r.get("repo_name", "")
+            if repo_name and repo_name not in seen_repos:
+                seen_repos.add(repo_name)
+                ranked_repos_full.append(repo_name)
+
+        top10 = ranked_repos_full[:10]
+        top25 = ranked_repos_full[:25]
+        entry.update(
+            {
+                "recall_at_10": compute_recall(top10, expected, 10),
+                "recall_at_25": compute_recall(top25, expected, 25),
+                "rank_of_first_gt": rank_of_first_gt(ranked_repos_full, expected),
+                "top_10_repos": top10,
+                "latency_s": lat,
+            }
+        )
+        latencies.append(lat)
+        per_task[ticket] = entry
+        log.info(
+            "[%s] %s: r@10=%.2f r@25=%.2f first_gt=%s lat=%.2fs (hybrid, cand=%d)",
+            label,
+            ticket,
+            entry["recall_at_10"],
+            entry["recall_at_25"],
+            entry["rank_of_first_gt"],
+            lat,
+            total_candidates,
+        )
+
+    del model, adapter
+    gc.collect()
+    try:
+        import torch
+
+        if torch.backends.mps.is_available():
+            torch.mps.empty_cache()
+        elif torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
+
+    return per_task, latencies
+
+
 def eval_one_model(
     model_name_or_path: str,
     label: str,
@@ -460,7 +619,21 @@ def parse_args() -> argparse.Namespace:
         "with build_query_text (summary+description) and use enriched "
         "query for rerank. Targets the ~8.5%% of tickets (77/909) with "
         "summaries too short/generic for FTS. Applies symmetrically to "
-        "baseline and FT so relative delta is fair.",
+        "baseline and FT so relative delta is fair. IGNORED when "
+        "--use-hybrid-retrieval is set (hybrid.py covers the same bucket "
+        "via FTS+vector+code_facts fusion).",
+    )
+    p.add_argument(
+        "--use-hybrid-retrieval",
+        action="store_true",
+        default=False,
+        help="P0a: route candidates through src.search.hybrid.hybrid_search "
+        "(FTS + vector RRF + code_facts/env_vars wiring + content-type "
+        "boosts) instead of FTS-only. Aligns the eval pool to the "
+        "production serving pool. `--fts-limit` is passed through as "
+        "CODE_RAG_RERANK_POOL_SIZE so the reranker still sees the same "
+        "candidate count. Slower per ticket due to vector search but "
+        "measures what production actually does.",
     )
     return p.parse_args()
 
@@ -545,7 +718,13 @@ def main() -> int:
             # Pre-2026-04-21 snapshots have no query_mode — it defaulted to
             # summary behaviour. Treat missing key as "summary" for back-compat.
             # Pre-2026-04-21-pm snapshots have no fts_fallback_enrich either — treat as False.
-            reuse_cfg_for_check = {"query_mode": "summary", "fts_fallback_enrich": False, **reuse_cfg}
+            # Pre-P0a snapshots have no retrieval_mode — treat as "fts_only".
+            reuse_cfg_for_check = {
+                "query_mode": "summary",
+                "fts_fallback_enrich": False,
+                "retrieval_mode": "fts_only",
+                **reuse_cfg,
+            }
             current_cfg = {
                 "fts_limit": args.fts_limit,
                 "batch_size": args.batch_size,
@@ -553,6 +732,7 @@ def main() -> int:
                 "seed": args.seed,
                 "query_mode": args.eval_query_mode,
                 "fts_fallback_enrich": args.fts_fallback_enrich,
+                "retrieval_mode": "hybrid" if args.use_hybrid_retrieval else "fts_only",
             }
             for key, want in current_cfg.items():
                 if reuse_cfg_for_check.get(key) != want:
@@ -575,10 +755,48 @@ def main() -> int:
             if missing:
                 log.warning("reuse missing %d tickets — falling back to fresh baseline for them", len(missing))
                 missing_tasks = [t for t in tasks if t["ticket_id"] in missing]
-                extra_per_task, extra_lat = eval_one_model(
+                if args.use_hybrid_retrieval:
+                    extra_per_task, extra_lat = eval_one_model_hybrid(
+                        args.base_model,
+                        "baseline",
+                        missing_tasks,
+                        fts_limit=args.fts_limit,
+                        batch_size=args.batch_size,
+                        max_length=args.max_length,
+                        query_mode=args.eval_query_mode,
+                    )
+                else:
+                    extra_per_task, extra_lat = eval_one_model(
+                        args.base_model,
+                        "baseline",
+                        missing_tasks,
+                        fts_conn,
+                        fts_limit=args.fts_limit,
+                        batch_size=args.batch_size,
+                        max_length=args.max_length,
+                        query_mode=args.eval_query_mode,
+                        fts_fallback_enrich=args.fts_fallback_enrich,
+                    )
+                base_per_task.update(extra_per_task)
+                base_lat.extend(extra_lat)
+        else:
+            retrieval_tag = "hybrid" if args.use_hybrid_retrieval else "fts_only"
+            log.info("=== baseline pass (query_mode=%s, retrieval=%s) ===", args.eval_query_mode, retrieval_tag)
+            if args.use_hybrid_retrieval:
+                base_per_task, base_lat = eval_one_model_hybrid(
                     args.base_model,
                     "baseline",
-                    missing_tasks,
+                    tasks,
+                    fts_limit=args.fts_limit,
+                    batch_size=args.batch_size,
+                    max_length=args.max_length,
+                    query_mode=args.eval_query_mode,
+                )
+            else:
+                base_per_task, base_lat = eval_one_model(
+                    args.base_model,
+                    "baseline",
+                    tasks,
                     fts_conn,
                     fts_limit=args.fts_limit,
                     batch_size=args.batch_size,
@@ -586,13 +804,23 @@ def main() -> int:
                     query_mode=args.eval_query_mode,
                     fts_fallback_enrich=args.fts_fallback_enrich,
                 )
-                base_per_task.update(extra_per_task)
-                base_lat.extend(extra_lat)
+
+        retrieval_tag = "hybrid" if args.use_hybrid_retrieval else "fts_only"
+        log.info("=== ft_v1 pass (query_mode=%s, retrieval=%s) ===", args.eval_query_mode, retrieval_tag)
+        if args.use_hybrid_retrieval:
+            ft_per_task, ft_lat = eval_one_model_hybrid(
+                args.ft_model,
+                "ft_v1",
+                tasks,
+                fts_limit=args.fts_limit,
+                batch_size=args.batch_size,
+                max_length=args.max_length,
+                query_mode=args.eval_query_mode,
+            )
         else:
-            log.info("=== baseline pass (query_mode=%s) ===", args.eval_query_mode)
-            base_per_task, base_lat = eval_one_model(
-                args.base_model,
-                "baseline",
+            ft_per_task, ft_lat = eval_one_model(
+                args.ft_model,
+                "ft_v1",
                 tasks,
                 fts_conn,
                 fts_limit=args.fts_limit,
@@ -601,19 +829,6 @@ def main() -> int:
                 query_mode=args.eval_query_mode,
                 fts_fallback_enrich=args.fts_fallback_enrich,
             )
-
-        log.info("=== ft_v1 pass (query_mode=%s) ===", args.eval_query_mode)
-        ft_per_task, ft_lat = eval_one_model(
-            args.ft_model,
-            "ft_v1",
-            tasks,
-            fts_conn,
-            fts_limit=args.fts_limit,
-            batch_size=args.batch_size,
-            max_length=args.max_length,
-            query_mode=args.eval_query_mode,
-            fts_fallback_enrich=args.fts_fallback_enrich,
-        )
 
         eval_dur = time.time() - t_eval_start
         log.info("eval total: %.1fs (%.1f min)", eval_dur, eval_dur / 60.0)
@@ -638,6 +853,7 @@ def main() -> int:
                 "seed": args.seed,
                 "query_mode": args.eval_query_mode,
                 "fts_fallback_enrich": args.fts_fallback_enrich,
+                "retrieval_mode": "hybrid" if args.use_hybrid_retrieval else "fts_only",
             },
             "evaluated_tickets": [t["ticket_id"] for t in tasks],
             "per_task_baseline": base_per_task,
@@ -711,6 +927,7 @@ def main() -> int:
             "seed": args.seed,
             "query_mode": args.eval_query_mode,
             "fts_fallback_enrich": args.fts_fallback_enrich,
+            "retrieval_mode": "hybrid" if args.use_hybrid_retrieval else "fts_only",
         },
         "train_tickets": train_tickets,
         "test_tickets": test_tickets,
