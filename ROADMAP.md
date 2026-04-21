@@ -1,6 +1,46 @@
 # P5 Reranker — Roadmap
 
-**Status (2026-04-21 late-evening):** Production = `reranker_ft_gte_v8`. All P0 items LANDED — P0a (eval/prod parity via `--use-hybrid-retrieval`), P0b (suggestions.py column typo), P0c (code_facts_fts + env_vars wired into hybrid.py). 357/357 tests pass. Pending: measure v8 under `--use-hybrid-retrieval` (hybrid eval not yet rerun; must pass BASELINE=skip because retrieval_mode strict-check refuses to mix fts_only vs hybrid snapshots). After that, decide P1a (null_rank rescue) vs P1b (churn replay) vs P2 (v12 FT with Agent B recipe).
+**Status (2026-04-22 early-morning):** Production = `reranker_ft_gte_v8`. P0a/b/c landed + measured. Full hybrid eval done (`gte_v8_hybrid.json`): baseline r@10 = 0.6284, v8 r@10 = 0.6621 (PROMOTE with Δ+0.034, net=+60). Absolute recall is **-10pp below** fts_only+fallback (0.7622) but gap closes when we remember fts_only+fallback measures a different pool. Investigation into the 103 "lost" tickets (r@10=0 in hybrid, r@10>0 in fts_fallback) disproved three hypotheses; the underlying cause is reranker ranking on short summary queries, not penalties / code_facts / fallback threshold. See §"2026-04-22 investigation".
+
+## 2026-04-22 investigation: hybrid regression on 103 lost tickets
+
+Running `scripts/ab_lost_tickets.py` with three A/B gates on the "lost" subset:
+
+| Variant | r@10 | hits | Conclusion |
+|---|---|---|---|
+| Control (no changes) | 0.0000 | 0/103 | reproduces snapshot |
+| `CODE_RAG_DISABLE_PENALTIES=1` | 0.0049 | 1/103 | **penalties NOT the cause** |
+| `CODE_RAG_DISABLE_CODE_FACTS=1` | 0.0049 | 1/103 | **code_facts/env_vars NOT the cause** |
+| `AB_ENRICHED_ALWAYS=1` on BO-798 only | 1.0000 | 1/1 | enriched query recovers GT |
+
+Partial full-subset run of enriched-always (126 baseline tickets from shard1+2, shard0 hung and was killed — see MPS deadlock note):
+
+| Pipeline | r@10 on same 126 tickets |
+|---|---:|
+| summary hybrid (from gte_v8_hybrid.json) | 0.7920 |
+| **enriched hybrid** | **0.7745** (-1.75pp) |
+| fts_only+fallback | 0.7399 |
+
+Enriched-always rescued 5 tickets (including BO-798 which went 0.00 → 1.00) but lost 10 other tickets — net regression. It is NOT a drop-in cure.
+
+### What the candidate pool tells us
+
+- `cand=50` in the hybrid snapshot means FTS returned 0 and only vector survived. Median pool for the 103 lost tickets was exactly 50.
+- On re-run with the same code, many of those same tickets now report `cand=200-240` (FTS working), yet r@10 is still 0. The lost-subset is non-deterministic at the candidate-pool level, probably due to MPS numerics between runs.
+- This means the "lost" population is not a fixed set of retrieval failures; some of it is reranker sensitivity to short query. Any future fix must target reranker ranking, not just FTS recall.
+
+### Instability notes (for future runs)
+
+- `scripts/ab_lost_tickets.py` hangs at ticket 2+ on enriched path (200-candidate rerank on long query). Killed and restarted twice. For A/B, stay with `--limit 1..20` and be ready to kill.
+- `scripts/eval_parallel.sh` with `USE_HYBRID_RETRIEVAL=1 EVAL_QUERY_MODE=enriched LATENCY_PROFILE=...` hung 2/3 shards on the enriched eval (shard0 at 11/303, shard1 died at 59/303, shard2 at 71/303). 100% CPU, no output for 60+ min → killed. First full hybrid run (summary mode) completed 134 min without issues, so the crash is specific to the enriched+hybrid combination.
+- **Workaround for future full enriched-hybrid eval:** run sequentially (`--shard-total 1`) or lower `batch-size` / `max-length`.
+
+### Decisions
+
+- `fts_fallback_enrich` in `eval_one_model_hybrid` reverted (commit `67f45a2` — A/B disproved it).
+- Investigation env gates (`CODE_RAG_DISABLE_{PENALTIES,CODE_FACTS}`) committed to `src/search/hybrid.py` for future A/B work (commit `155c39e`, default off = prod unchanged).
+- `scripts/ab_lost_tickets.py` committed as tooling for future retrieval-regression investigations (commit `ea6feb7`).
+- v12 FT NOT started — first need a stable measurement. Next agent should investigate why reranker ranks `backoffice-web` low on short BO-tickets (token overlap, model bias?). Possible direction: `freeze bottom 6 ModernBERT layers` from Agent B's recipe, but validate on stable eval first.
 
 ## 2026-04-21 late-evening: P0a+P0b+P0c landed
 
@@ -124,6 +164,8 @@ Overnight v9/v10/v11 lessons: lr=5e-5 > lr=2e-5 (undertrain) ≈ lr=8e-5 (mild o
 15. **MCP push_files requires FULL file content** per commit. Previous session's "push" was partial — file-by-file instead of diff-based. This reconciled today across 9 commits. Never assume origin has the same content as local HEAD.
 16. **Blanket enriched query mode LAMEs FTS candidates** (−15pp on PI in Phase 1 test). Only CONDITIONAL fallback (retry enriched ONLY when FTS=0) is safe.
 17. **The "rerank ceiling" claim after 11 iterations was WRONG.** 8.5% of tickets (77) had 0 FTS candidates — reranker couldn't reach them. Always verify retrieval reaches all eval tickets before concluding rerank saturated.
+18. **Do NOT run eval_parallel.sh with EVAL_QUERY_MODE=enriched + USE_HYBRID_RETRIEVAL=1 + 3 shards.** Confirmed MPS-deadlocks 2/3 shards (2026-04-22). Use `--shard-total 1` sequential, lower `--batch-size`, or reduce `--max-length`.
+19. **Never use `tee` with long-running Python progress output.** stdout through a tee pipe is block-buffered — progress prints stop arriving in the log file even though the process is running. Use `python3.12 -u` with direct `> file` redirection, and put `flush=True` on per-iteration print calls.
 
 ---
 
@@ -153,6 +195,12 @@ Claim: 11 FT iterations capped at +3-5pp, rerank exhausted. Revisit: 8.5% of eva
 ### 8. "Eval pipeline accurately reflects production" (2026-04-21 evening) — UNCLEAR
 Claim: `eval_finetune.py` is the canonical measurement. Revisit: Critic C blind audit found eval uses FTS-only + direct rerank, production uses FTS+vector RRF + content-type boosts + 70/30 rerank:RRF mix. v8's measured +5.09pp may not transfer 1:1 to production. P0a priority: align eval to `hybrid.py` before any further FT.
 
+### 9. "Enriched query fixes hybrid regression" (2026-04-22 00:00) — WRONG
+After hybrid eval showed -10pp absolute recall vs fts_fallback and A/B disproved penalties + code_facts as cause, BO-798 direct test (summary 0.00 → enriched 1.00) suggested enriched-always would recover. Partial 126-ticket subset showed net -1.75pp: enriched rescued 5 tickets but regressed 10. The win on BO-798 was not generalizable. Next investigation must be reranker-ranking-focused, not retrieval-focused.
+
+### 10. "Hybrid eval is stable enough for parallel 3-shard runs" (2026-04-22 01:30) — WRONG
+Summary-hybrid run completed cleanly (134 min). Enriched-hybrid run: shard0 hung at 11/303, shard1 died at 59/303, shard2 hung at 71/303. All three at 100% CPU with no progress for 60+ min. MPS deadlock appears specific to enriched + 200-candidate rerank combination. For future runs: `--shard-total 1` sequential, or reduce `--batch-size` / `--max-length`.
+
 ---
 
 ## Journey — Key iterations (lesson-bearing only)
@@ -164,7 +212,8 @@ Claim: `eval_finetune.py` is the canonical measurement. Revisit: Critic C blind 
 | v6.2 | reverted dedupe, +oversample PI, max-rows 300 | **+4.30pp** | Best Jira r@10 but inflated by memorization. |
 | v7 | `--fe-hard-negatives 4` from FE cluster | +3.39pp | 99.7% graphql in first cluster. Hypothesis unfalsified. |
 | v8 | v6.2 data reformatted listwise + LambdaLoss | +3.92pp | Hit@5 champion (+6.9pp), runtime winner. **In prod.** |
-| fallback (today) | conditional enriched FTS retry on FTS=0 | +6.67pp (v8 absolute) | Rerank ceiling was a retrieval blocker. +5.09pp net v8 over baseline with fallback on both. |
+| fallback (2026-04-21) | conditional enriched FTS retry on FTS=0 | +6.67pp (v8 absolute) | Rerank ceiling was a retrieval blocker. +5.09pp net v8 over baseline with fallback on both. |
+| hybrid (2026-04-22) | P0a eval routed through hybrid.py | +3.37pp Δ (abs -10pp vs fallback) | v8 still wins, but absolute recall regresses because hybrid pool replaces fallback with vector/code_facts and on short BO-queries reranker drops GT. Fix must target reranker ranking on short queries, not retrieval. |
 
 ---
 
@@ -185,7 +234,7 @@ Claim: `eval_finetune.py` is the canonical measurement. Revisit: Critic C blind 
 | `reranker_ft_gte_v8/` (285MB bf16) | **PROD.** Best Hit@5 + runtime + listwise LambdaLoss | `profiles/pay-com/models/reranker_ft_gte_v8/` |
 | `finetune_data_v6_2/` (97M) | v6.2 training set (61,250 pointwise rows) | `profiles/pay-com/finetune_data_v6_2/` |
 | `finetune_data_v8/` (16M) | v8 listwise (879 groups, derived via `convert_to_listwise.py`) | `profiles/pay-com/finetune_data_v8/` |
-| `gte_v1.json`, `gte_v4.json`, `gte_v6_2.json`, `gte_v7.json`, `gte_v8.json`, `gte_v8_fallback.json` | Eval snapshots (reuse via `--reuse-baseline-from`) | `profiles/pay-com/finetune_history/` |
+| `gte_v1.json`, `gte_v4.json`, `gte_v6_2.json`, `gte_v7.json`, `gte_v8.json`, `gte_v8_fallback.json`, `gte_v8_hybrid.json` | Eval snapshots (reuse via `--reuse-baseline-from`) | `profiles/pay-com/finetune_history/` |
 
 ---
 
@@ -243,7 +292,8 @@ Don't use `--dedupe-same-file` (v5 catastrophe).
 - `scripts/eval_parallel.sh` — parallel 3-shard eval template (saves ~50% time).
 - `scripts/prepare_finetune_data.py` — all v1-v8 flags (all opt-in, default False).
 - `scripts/finetune_reranker.py` — train pipeline with bf16, checkpointing, early-stopping.
-- `scripts/eval_finetune.py` — eval with `--shard-index`, `--reuse-baseline-from`, `--fts-fallback-enrich`, and `--use-hybrid-retrieval` (P0a: opt-in, routes through `src.search.hybrid.hybrid_search` for prod parity). Default remains FTS-only for backward-compat with pre-P0a snapshots.
+- `scripts/eval_finetune.py` — eval with `--shard-index`, `--reuse-baseline-from`, `--fts-fallback-enrich`, `--latency-profile` (LPT shard balance), and `--use-hybrid-retrieval` (P0a: opt-in, routes through `src.search.hybrid.hybrid_search` for prod parity). Default remains FTS-only for backward-compat with pre-P0a snapshots.
+- `scripts/ab_lost_tickets.py` — A/B utility for hybrid regression investigation. Env flags `CODE_RAG_DISABLE_{PENALTIES,CODE_FACTS}` short-circuit hybrid.py branches; `AB_FALLBACK_ENRICH`, `AB_ENRICHED_ALWAYS` vary query composition.
 
 ---
 
@@ -253,4 +303,4 @@ Don't use `--dedupe-same-file` (v5 catastrophe).
 - Daemon on :8742 manages ML models in production. Unload before training (avoids MPS contention).
 - `caffeinate -is -t 86400` to prevent sleep during overnight runs.
 - User is the only dev; commits via `mcp__github__*` tools (gh deny-listed).
-- Test suite (357 tests, +20 from P0c wiring) must pass before any changes land: `python3.12 -m pytest tests/ -q`.
+- Test suite (364 tests, +7 LPT tests added 2026-04-21) must pass before any changes land: `python3.12 -m pytest tests/ -q`.
