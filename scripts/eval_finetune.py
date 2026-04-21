@@ -230,6 +230,7 @@ def eval_one_model_hybrid(
     batch_size: int,
     max_length: int,
     query_mode: str = "summary",
+    fts_fallback_enrich: bool = False,
 ) -> tuple[dict[str, dict], list[float]]:
     """P0a: eval variant that routes candidates through src.search.hybrid.
 
@@ -241,9 +242,11 @@ def eval_one_model_hybrid(
     `fts_limit` is routed to hybrid.RERANK_POOL_SIZE via env var so the
     reranker sees the same candidate count the FTS-only path did (default 200).
 
-    No FTS fallback parameter — hybrid.py already uses FTS+vector+code_facts,
-    so the 8.5% "no FTS candidates" bucket is covered structurally by vector
-    + code_facts_fts.
+    `fts_fallback_enrich` is accepted for call-site symmetry with
+    `eval_one_model` but is a no-op here (see investigation notes at the
+    retry site). 2026-04-22: neither conditional (cand≤50) nor unconditional
+    enriched retries universally help — they swap ~5 fixed tickets for ~10
+    newly-regressed ones on the partial hybrid subset.
     """
     from sentence_transformers import CrossEncoder
 
@@ -266,6 +269,7 @@ def eval_one_model_hybrid(
 
     per_task: dict[str, dict] = {}
     latencies: list[float] = []
+    n_fallback_rescued = 0
 
     for task in tasks:
         ticket = task["ticket_id"]
@@ -300,6 +304,18 @@ def eval_one_model_hybrid(
             per_task[ticket] = entry
             log.info("[%s] %s: hybrid_search error %s", label, ticket, type(e).__name__)
             continue
+
+        # 2026-04-22 experiment conclusion: conditional fallback-enrich in
+        # hybrid mode does NOT help. Investigation found:
+        #   (a) most "lost" tickets have cand > 50 (threshold wrong), so the
+        #       gate rarely fires.
+        #   (b) enriched-always on 126-ticket partial subset: -1.75pp baseline
+        #       r@10 vs summary mode (5 recovered / 10 newly lost).
+        # The fts_fallback_enrich parameter is accepted for API symmetry with
+        # eval_one_model but does nothing in hybrid mode (reserved for future
+        # intrinsic-signal-gated retries).
+        _ = fts_fallback_enrich  # intentionally unused here
+        _ = n_fallback_rescued  # unused; kept to preserve function shape
 
         if not ranked:
             entry["error"] = "no_hybrid_candidates"
@@ -653,13 +669,14 @@ def parse_args() -> argparse.Namespace:
         "--fts-fallback-enrich",
         action="store_true",
         default=False,
-        help="When query_mode=summary and FTS returns 0 candidates, retry "
-        "with build_query_text (summary+description) and use enriched "
-        "query for rerank. Targets the ~8.5%% of tickets (77/909) with "
-        "summaries too short/generic for FTS. Applies symmetrically to "
-        "baseline and FT so relative delta is fair. IGNORED when "
-        "--use-hybrid-retrieval is set (hybrid.py covers the same bucket "
-        "via FTS+vector+code_facts fusion).",
+        help="When query_mode=summary and the candidate pool is effectively "
+        "empty (0 FTS hits in fts_only mode), retry with build_query_text "
+        "(summary+description) and use the enriched query for rerank. "
+        "Targets the ~8.5%% of tickets (77/909) with summaries too "
+        "short/generic for FTS. Applies symmetrically to baseline and FT "
+        "so relative delta is fair. No-op in hybrid retrieval mode "
+        "(investigation showed neither conditional nor unconditional "
+        "enriched retries universally help — see eval_one_model_hybrid).",
     )
     p.add_argument(
         "--latency-profile",
@@ -847,6 +864,7 @@ def main() -> int:
                         batch_size=args.batch_size,
                         max_length=args.max_length,
                         query_mode=args.eval_query_mode,
+                        fts_fallback_enrich=args.fts_fallback_enrich,
                     )
                 else:
                     extra_per_task, extra_lat = eval_one_model(
@@ -874,6 +892,7 @@ def main() -> int:
                     batch_size=args.batch_size,
                     max_length=args.max_length,
                     query_mode=args.eval_query_mode,
+                    fts_fallback_enrich=args.fts_fallback_enrich,
                 )
             else:
                 base_per_task, base_lat = eval_one_model(
@@ -899,6 +918,7 @@ def main() -> int:
                 batch_size=args.batch_size,
                 max_length=args.max_length,
                 query_mode=args.eval_query_mode,
+                fts_fallback_enrich=args.fts_fallback_enrich,
             )
         else:
             ft_per_task, ft_lat = eval_one_model(
