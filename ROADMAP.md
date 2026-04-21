@@ -1,6 +1,33 @@
 # P5 Reranker — Roadmap
 
-**Status (2026-04-21 evening):** Production = `reranker_ft_gte_v8` (deployed morning). Canonical baseline r@10 = 0.7112 / Hit@5 = 0.8339 (with `--fts-fallback-enrich`). v8 full-eval: r@10 = 0.7622 / Hit@5 = 0.9131 — Δr@10 = +0.051, ΔHit@5 = +0.079, net = +100. PROMOTE confirmed. 5-agent post-breakthrough re-audit surfaced: P0 BUG (eval pipeline ≠ production retrieval), free lunch (code_facts_fts + env_vars tables built but unused at query time), one mini bug, null_rank rescue opportunity. Next lever = retrieval parity + wire unused tables + null_rank rescue BEFORE any further FT.
+**Status (2026-04-21 late-evening):** Production = `reranker_ft_gte_v8`. All P0 items LANDED — P0a (eval/prod parity via `--use-hybrid-retrieval`), P0b (suggestions.py column typo), P0c (code_facts_fts + env_vars wired into hybrid.py). 357/357 tests pass. Pending: measure v8 under `--use-hybrid-retrieval` (hybrid eval not yet rerun; must pass BASELINE=skip because retrieval_mode strict-check refuses to mix fts_only vs hybrid snapshots). After that, decide P1a (null_rank rescue) vs P1b (churn replay) vs P2 (v12 FT with Agent B recipe).
+
+## 2026-04-21 late-evening: P0a+P0b+P0c landed
+
+Three commits / six commit-sha pushed via MCP (`gh` deny-listed):
+
+| Commit | Scope | Behaviour change |
+|---|---|---|
+| `595a06b` | P0b — `src/search/suggestions.py` | `WHERE node_type='repo'` → drop WHERE. Column was `type`; SQL raised, bare `except` swallowed it, 629 zero-result queries got glossary-only suggestions. |
+| `9dfaac5` | P0c — `src/search/{code_facts.py,env_vars.py}`, `src/search/hybrid.py`, `src/config.py`, 3 tests | `_apply_code_facts` boosts (repo,file) in pool by 1.15× and injects first chunk for missed (repo,file). `_apply_env_vars` boosts repos 1.05× when query has ≥3-char UPPERCASE token. New tuning constants `code_fact_boost`, `code_fact_inject_weight`, `env_var_boost`. 20 new tests. |
+| `51c9181` | P0a — `src/search/hybrid.py` | `rerank()` + `hybrid_search()` accept `reranker_override` kwarg. Default None = get_reranker() (prod unchanged). |
+| `d7aedd3` | P0a — `tests/test_hybrid.py` | Mocks now accept `**_kw` for the new kwarg. |
+| `5b71220` | P0a — `scripts/eval_finetune.py` | Adds `_CrossEncoderAdapter`, `eval_one_model_hybrid()`, `--use-hybrid-retrieval` flag. Under hybrid mode the eval pool becomes FTS+vector RRF + code_facts/env_vars wiring + content-type boosts — identical to prod serving. `eval_config.retrieval_mode` gates `--reuse-baseline-from` so old fts_only snapshots can't poison a hybrid run. |
+| `a286e18` | P0a — `scripts/eval_parallel.sh` | `USE_HYBRID_RETRIEVAL=1` env passthrough. |
+
+Smoke tests done (in-process, 50-candidate limit, ms-marco-MiniLM stub reranker): hybrid query for "FORCE_REDIRECTS_PROVIDERS trustly signature validation" returns 237 candidates; sources include `code_facts` and `env_var` on expected chunks (express-api-callbacks, grpc-apm-trustly, boilerplate-next-web/parse-or-throw.ts). Rep hybrid-path test under `tests/test_hybrid.py::TestCodeFactsWiring` / `TestEnvVarsWiring` exercises boost + injection + gating.
+
+### Not yet done
+
+- Full hybrid eval (baseline + v8 through hybrid pool on 909 tickets). Command (when ready to burn ~60-90min + daemon restart):
+  ```bash
+  USE_HYBRID_RETRIEVAL=1 BASELINE=skip SLUG=gte_v8_hybrid \
+    MODEL=profiles/pay-com/models/reranker_ft_gte_v8 \
+    DATA=profiles/pay-com/finetune_data_v8 \
+    bash scripts/eval_parallel.sh
+  ```
+  Expected: r@10 differs from fts_only (0.7622) because candidate pool is wider (vector, code_facts) and content-type boosts re-order. Direction unknown until measured.
+- `null_rank rescue` (P1a), `churn replay` (P1b), `v12 FT` (P2) — unchanged from prior plan.
 
 ---
 
@@ -207,16 +234,16 @@ Don't use `--dedupe-same-file` (v5 catastrophe).
 ## Known infrastructure
 
 - `db/tasks.db` (70MB) — `task_history` with 909 Jira tickets (ground truth = `files_changed`, eval scores repos).
-- `db/knowledge.db` (160MB) — FTS5 + chunk metadata. Tables: `chunks`, `chunks_fts`, `code_facts`, **`code_facts_fts` (1659 rows — UNUSED at query time)**, **`env_vars` (4753 rows — UNUSED)**, `graph_edges` (11k+ typed edges, UNUSED by retrieval), `graph_nodes`.
+- `db/knowledge.db` (160MB) — FTS5 + chunk metadata. Tables: `chunks`, `chunks_fts`, `code_facts`, `code_facts_fts` (1659 rows — **wired via `src/search/code_facts.py`**, P0c), `env_vars` (4753 rows — **wired via `src/search/env_vars.py`**, P0c), `graph_edges` (11k+ typed edges, UNUSED by retrieval), `graph_nodes`.
 - `db/vectors.lance.coderank/` (11GB LanceDB) — CodeRankEmbed embeddings for hybrid search.
-- **UNUSED-BUT-BUILT artifacts** (see P0c): `code_facts_fts` (built by `src/index/builders/code_facts.py`), `env_vars` (built by `scripts/build_env_index.py`), `graph_edges` (never read at query time).
+- **Still unused**: `graph_edges` (never read at query time).
 - `logs/tool_calls.jsonl` — 2308+ real MCP search queries (post-breakthrough count updated from 1194). Source of truth for P1b churn replay.
 - `logs/search_feedback.jsonl` (17.9M) — no click-through signal (score=0 everywhere).
 - `profiles/pay-com/traces/raw/*.summary.json` — Jaeger runtime traces, not ingested.
 - `scripts/eval_parallel.sh` — parallel 3-shard eval template (saves ~50% time).
 - `scripts/prepare_finetune_data.py` — all v1-v8 flags (all opt-in, default False).
 - `scripts/finetune_reranker.py` — train pipeline with bf16, checkpointing, early-stopping.
-- `scripts/eval_finetune.py` — eval with `--shard-index`, `--reuse-baseline-from`, `--fts-fallback-enrich`. **NOTE: currently uses FTS-only retrieval — diverges from `src/search/hybrid.py` (P0a).**
+- `scripts/eval_finetune.py` — eval with `--shard-index`, `--reuse-baseline-from`, `--fts-fallback-enrich`, and `--use-hybrid-retrieval` (P0a: opt-in, routes through `src.search.hybrid.hybrid_search` for prod parity). Default remains FTS-only for backward-compat with pre-P0a snapshots.
 
 ---
 
@@ -226,4 +253,4 @@ Don't use `--dedupe-same-file` (v5 catastrophe).
 - Daemon on :8742 manages ML models in production. Unload before training (avoids MPS contention).
 - `caffeinate -is -t 86400` to prevent sleep during overnight runs.
 - User is the only dev; commits via `mcp__github__*` tools (gh deny-listed).
-- Test suite (337 tests) must pass before any changes land: `python3.12 -m pytest tests/ -q`.
+- Test suite (357 tests, +20 from P0c wiring) must pass before any changes land: `python3.12 -m pytest tests/ -q`.
