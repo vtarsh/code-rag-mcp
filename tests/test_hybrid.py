@@ -47,7 +47,7 @@ def _make_vr(rowid: int, repo: str = "repo-b") -> dict:
 
 
 class TestHybridSearch:
-    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim: r[:lim])
+    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
     @patch("src.search.hybrid.vector_search", return_value=([], None))
     @patch("src.search.hybrid.fts_search", return_value=[])
     def test_empty_results(self, mock_fts, mock_vec, mock_rerank):
@@ -56,7 +56,7 @@ class TestHybridSearch:
         assert err is None
         assert total == 0
 
-    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim: r[:lim])
+    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
     @patch("src.search.hybrid.vector_search", return_value=([], None))
     @patch("src.search.hybrid.fts_search")
     def test_keyword_only(self, mock_fts, mock_vec, mock_rerank):
@@ -66,7 +66,7 @@ class TestHybridSearch:
         assert err is None
         assert total >= len(results)
 
-    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim: r[:lim])
+    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
     @patch("src.search.hybrid.vector_search")
     @patch("src.search.hybrid.fts_search", return_value=[])
     def test_vector_only(self, mock_fts, mock_vec, mock_rerank):
@@ -75,7 +75,7 @@ class TestHybridSearch:
         assert len(results) == 2
         assert total == 2
 
-    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim: r[:lim])
+    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
     @patch("src.search.hybrid.vector_search")
     @patch("src.search.hybrid.fts_search")
     def test_vector_error_propagated(self, mock_fts, mock_vec, mock_rerank):
@@ -85,7 +85,7 @@ class TestHybridSearch:
         assert err == "LanceDB not found"
         assert total >= 1
 
-    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim: r[:lim])
+    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
     @patch("src.search.hybrid.vector_search")
     @patch("src.search.hybrid.fts_search")
     def test_rrf_fusion_merges_sources(self, mock_fts, mock_vec, mock_rerank):
@@ -97,7 +97,7 @@ class TestHybridSearch:
         assert "keyword" in results[0]["sources"]
         assert "vector" in results[0]["sources"]
 
-    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim: r[:lim])
+    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
     @patch("src.search.hybrid.vector_search")
     @patch("src.search.hybrid.fts_search")
     def test_total_candidates_gte_results(self, mock_fts, mock_vec, mock_rerank):
@@ -107,7 +107,7 @@ class TestHybridSearch:
         assert total == 25
         assert total >= len(results)
 
-    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim: r[:lim])
+    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
     @patch("src.search.hybrid.vector_search")
     @patch("src.search.hybrid.fts_search")
     def test_keyword_weight_higher(self, mock_fts, mock_vec, mock_rerank):
@@ -119,7 +119,7 @@ class TestHybridSearch:
         vector_result = next(r for r in results if "vector" in r["sources"] and "keyword" not in r["sources"])
         assert keyword_result["score"] > vector_result["score"]
 
-    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim: r[:lim])
+    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
     @patch("src.search.hybrid.vector_search", return_value=([], None))
     @patch("src.search.hybrid.fts_search", return_value=[])
     def test_returns_3_tuple(self, mock_fts, mock_vec, mock_rerank):
@@ -134,7 +134,7 @@ class TestCodeFactsWiring:
     @patch("src.search.hybrid.fetch_chunks_for_files", return_value=[])
     @patch("src.search.hybrid.env_var_search", return_value=[])
     @patch("src.search.hybrid.code_facts_search")
-    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim: r[:lim])
+    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
     @patch("src.search.hybrid.vector_search", return_value=([], None))
     @patch("src.search.hybrid.fts_search")
     def test_existing_file_gets_code_fact_boost(
@@ -165,7 +165,7 @@ class TestCodeFactsWiring:
     @patch("src.search.hybrid.env_var_search", return_value=[])
     @patch("src.search.hybrid.fetch_chunks_for_files")
     @patch("src.search.hybrid.code_facts_search")
-    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim: r[:lim])
+    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
     @patch("src.search.hybrid.vector_search", return_value=([], None))
     @patch("src.search.hybrid.fts_search", return_value=[])
     def test_missing_file_injected_from_code_facts(
@@ -201,7 +201,7 @@ class TestCodeFactsWiring:
 
     @patch("src.search.hybrid.env_var_search", return_value=[])
     @patch("src.search.hybrid.code_facts_search", return_value=[])
-    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim: r[:lim])
+    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
     @patch("src.search.hybrid.vector_search", return_value=([], None))
     @patch("src.search.hybrid.fts_search", return_value=[])
     def test_no_code_facts_no_change(self, *_mocks):
@@ -216,7 +216,7 @@ class TestEnvVarsWiring:
 
     @patch("src.search.hybrid.code_facts_search", return_value=[])
     @patch("src.search.hybrid.env_var_search")
-    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim: r[:lim])
+    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
     @patch("src.search.hybrid.vector_search", return_value=([], None))
     @patch("src.search.hybrid.fts_search")
     def test_repo_boosted_when_env_var_matches(
