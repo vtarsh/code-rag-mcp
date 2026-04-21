@@ -187,45 +187,75 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--lr", type=float, default=2e-5)
     p.add_argument("--warmup", type=int, default=100)
     p.add_argument("--max-length", type=int, default=256)
-    p.add_argument("--shuffle-buffer", type=int, default=512,
-                   help="Reservoir shuffle size. 0 = no shuffle.")
+    p.add_argument("--shuffle-buffer", type=int, default=512, help="Reservoir shuffle size. 0 = no shuffle.")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--val-ratio", type=float, default=0.10)
     p.add_argument("--no-pause-daemon", action="store_true")
-    p.add_argument("--loss",
-                   choices=["bce", "mse", "huber", "lambdaloss"], default="bce",
-                   help="Training loss. bce=default (sigmoid+BCE, can saturate); "
-                        "mse=regression on 0/1 labels (avoids score compression); "
-                        "huber=robust MSE; "
-                        "lambdaloss=listwise (requires input data in {query, docs, labels} "
-                        "format — see scripts/convert_to_listwise.py). Directly optimises "
-                        "NDCG, designed to fix rank-reshuffle regressions on multi-GT tickets.")
+    p.add_argument(
+        "--loss",
+        choices=["bce", "mse", "huber", "lambdaloss"],
+        default="bce",
+        help="Training loss. bce=default (sigmoid+BCE, can saturate); "
+        "mse=regression on 0/1 labels (avoids score compression); "
+        "huber=robust MSE; "
+        "lambdaloss=listwise (requires input data in {query, docs, labels} "
+        "format — see scripts/convert_to_listwise.py). Directly optimises "
+        "NDCG, designed to fix rank-reshuffle regressions on multi-GT tickets.",
+    )
     # --- P5 memory-optimised training flags (new HF Trainer code path) ---
-    p.add_argument("--bf16", action="store_true",
-                   help="Enable bfloat16 mixed precision (MPS/CUDA). "
-                        "Halves activation memory. Switches to CrossEncoderTrainer path.")
-    p.add_argument("--fp16", action="store_true",
-                   help="Enable fp16 mixed precision (CUDA only — may be unstable on MPS). "
-                        "Switches to CrossEncoderTrainer path.")
-    p.add_argument("--gradient-checkpointing", action="store_true",
-                   help="Re-compute activations in backward pass. -30-50%% peak memory. "
-                        "Switches to CrossEncoderTrainer path.")
-    p.add_argument("--optim", choices=["adamw", "adamw_torch_fused", "adafactor", "sgd"],
-                   default="adamw",
-                   help="Optimizer. adamw(_torch_fused)=3x memory (default). "
-                        "adafactor=1.2x (slower convergence). sgd=1x.")
-    p.add_argument("--attn-impl", choices=["sdpa", "eager", "flash_attention_2"],
-                   default="sdpa",
-                   help="Attention kernel. 'sdpa' is the PyTorch default; use 'eager' "
-                        "if ModernBERT+MPS+bf16 crashes on scaled_dot_product_attention.")
+    p.add_argument(
+        "--bf16",
+        action="store_true",
+        help="Enable bfloat16 mixed precision (MPS/CUDA). "
+        "Halves activation memory. Switches to CrossEncoderTrainer path.",
+    )
+    p.add_argument(
+        "--fp16",
+        action="store_true",
+        help="Enable fp16 mixed precision (CUDA only — may be unstable on MPS). Switches to CrossEncoderTrainer path.",
+    )
+    p.add_argument(
+        "--gradient-checkpointing",
+        action="store_true",
+        help="Re-compute activations in backward pass. -30-50%% peak memory. Switches to CrossEncoderTrainer path.",
+    )
+    p.add_argument(
+        "--optim",
+        choices=["adamw", "adamw_torch_fused", "adafactor", "sgd"],
+        default="adamw",
+        help="Optimizer. adamw(_torch_fused)=3x memory (default). adafactor=1.2x (slower convergence). sgd=1x.",
+    )
+    p.add_argument(
+        "--attn-impl",
+        choices=["sdpa", "eager", "flash_attention_2"],
+        default="sdpa",
+        help="Attention kernel. 'sdpa' is the PyTorch default; use 'eager' "
+        "if ModernBERT+MPS+bf16 crashes on scaled_dot_product_attention.",
+    )
     # --- P5 checkpoint / resume flags (new HF Trainer code path only) ---
-    p.add_argument("--save-steps", type=int, default=0,
-                   help="Save a checkpoint every N steps (new-trainer path only). "
-                        "0 = disabled. Keeps last 2 checkpoints to bound disk usage.")
-    p.add_argument("--resume-from-checkpoint", type=str, default="",
-                   help="Path to a checkpoint dir to resume from (new-trainer path only). "
-                        "Pass 'none' to force fresh training even if checkpoints exist in --out. "
-                        "Empty (default) = auto-resume from latest checkpoint in --out if any.")
+    p.add_argument(
+        "--save-steps",
+        type=int,
+        default=0,
+        help="Save a checkpoint every N steps (new-trainer path only). "
+        "0 = disabled. Keeps last 2 checkpoints to bound disk usage.",
+    )
+    p.add_argument(
+        "--resume-from-checkpoint",
+        type=str,
+        default="",
+        help="Path to a checkpoint dir to resume from (new-trainer path only). "
+        "Pass 'none' to force fresh training even if checkpoints exist in --out. "
+        "Empty (default) = auto-resume from latest checkpoint in --out if any.",
+    )
+    p.add_argument(
+        "--early-stopping-patience",
+        type=int,
+        default=0,
+        help="Enable EarlyStoppingCallback with this patience (val-loss plateau "
+        "over N evaluations). 0 = disabled (default). Requires --save-steps>0 "
+        "since eval_strategy is locked to save_strategy by HF Trainer.",
+    )
     return p.parse_args()
 
 
@@ -283,9 +313,7 @@ def detect_listwise_format(path: Path) -> bool:
     raise ValueError(f"could not detect data format from {path} (empty or malformed)")
 
 
-def _build_hf_dataset(
-    path: Path, keep_indices: set[int], *, max_doc_chars: int = 1500
-):
+def _build_hf_dataset(path: Path, keep_indices: set[int], *, max_doc_chars: int = 1500):
     """Load the kept rows of a pointwise JSONL file into a `datasets.Dataset`.
 
     We can't use `Dataset.from_json` directly (no row-filtering API), so we
@@ -324,9 +352,7 @@ def _build_hf_dataset(
     return Dataset.from_list(rows)
 
 
-def _build_hf_dataset_listwise(
-    path: Path, keep_indices: set[int], *, max_doc_chars: int = 1500
-):
+def _build_hf_dataset_listwise(path: Path, keep_indices: set[int], *, max_doc_chars: int = 1500):
     """Load listwise rows ({query, docs, labels}) into a `datasets.Dataset`.
 
     LambdaLoss / ListNetLoss expect one row per group; the dataset columns
@@ -355,11 +381,13 @@ def _build_hf_dataset_listwise(
                 continue
             if len(docs) != len(labels) or not docs:
                 continue
-            rows.append({
-                "query": str(q),
-                "docs": [str(d)[:max_doc_chars] for d in docs],
-                "labels": [float(lbl) for lbl in labels],
-            })
+            rows.append(
+                {
+                    "query": str(q),
+                    "docs": [str(d)[:max_doc_chars] for d in docs],
+                    "labels": [float(lbl) for lbl in labels],
+                }
+            )
     return Dataset.from_list(rows)
 
 
@@ -416,14 +444,14 @@ def _run_new_trainer(
                     torch.mps.empty_cache()
             gc.collect()
 
-        def on_substep_end(self, cb_args, state, control, **kwargs):  # noqa: D401,ARG002
+        def on_substep_end(self, cb_args, state, control, **kwargs):
             # Fires between forward and optimizer step when grad accumulation
             # is on, AND also once per step at the end of backward. Cleans
             # mid-step MPS fragmentation that caused OOM during backward().
             self._flush()
             return control
 
-        def on_step_end(self, cb_args, state, control, **kwargs):  # noqa: D401,ARG002
+        def on_step_end(self, cb_args, state, control, **kwargs):
             self._flush()
             return control
 
@@ -443,14 +471,14 @@ def _run_new_trainer(
             fp16 = False
         else:
             log.warning(
-                "fp16 enabled. Some MPS ops have numerical issues with fp16 — "
-                "use --bf16 on MPS if you hit NaNs."
+                "fp16 enabled. Some MPS ops have numerical issues with fp16 — use --bf16 on MPS if you hit NaNs."
             )
 
     # --- load model with optional attn impl ---
     log.info(
         "loading base model (new trainer path): %s (attn_impl=%s)",
-        args.base_model, args.attn_impl,
+        args.base_model,
+        args.attn_impl,
     )
     model_kwargs: dict = {}
     if args.attn_impl and args.attn_impl != "sdpa":
@@ -489,7 +517,7 @@ def _run_new_trainer(
 
     # --- build datasets (memory-bounded: filter while reading) ---
     log.info("building HF datasets from JSONL (train=%d val=%d)", len(train_idx), len(val_idx))
-    is_listwise = (args.loss == "lambdaloss")
+    is_listwise = args.loss == "lambdaloss"
     if is_listwise:
         train_ds = _build_hf_dataset_listwise(train_path, train_idx)
         val_ds = _build_hf_dataset_listwise(train_path, val_idx)
@@ -528,9 +556,17 @@ def _run_new_trainer(
     log.info(
         "training (new trainer): epochs=%d batch=%d steps/epoch=%d total=%d "
         "warmup=%d lr=%g max_len=%d bf16=%s fp16=%s grad_ckpt=%s optim=%s",
-        args.epochs, args.batch_size, steps_per_epoch, total_steps,
-        args.warmup, args.lr, args.max_length,
-        bf16, fp16, args.gradient_checkpointing, optim_name,
+        args.epochs,
+        args.batch_size,
+        steps_per_epoch,
+        total_steps,
+        args.warmup,
+        args.lr,
+        args.max_length,
+        bf16,
+        fp16,
+        args.gradient_checkpointing,
+        optim_name,
     )
 
     # Checkpointing: only enabled when --save-steps > 0. Keep last 2 to
@@ -561,7 +597,11 @@ def _run_new_trainer(
         save_strategy=save_strategy,
         save_steps=save_steps if save_steps else 500,  # HF requires >0 even when unused
         save_total_limit=save_total_limit,
-        eval_strategy="no",
+        eval_strategy=save_strategy if args.early_stopping_patience > 0 else "no",
+        eval_steps=save_steps if save_steps else 500,
+        load_best_model_at_end=args.early_stopping_patience > 0,
+        metric_for_best_model="eval_loss" if args.early_stopping_patience > 0 else None,
+        greater_is_better=False if args.early_stopping_patience > 0 else None,
         logging_strategy="steps",
         logging_steps=max(1, steps_per_epoch // 10),
         report_to=[],
@@ -570,8 +610,19 @@ def _run_new_trainer(
         disable_tqdm=False,
     )
 
+    from transformers import TrainerCallback
+
     hygiene_active = args.gradient_checkpointing or torch.backends.mps.is_available()
-    callbacks = [MpsCacheHygieneCallback(active=hygiene_active)]
+    callbacks: list[TrainerCallback] = [MpsCacheHygieneCallback(active=hygiene_active)]
+    if args.early_stopping_patience > 0:
+        from transformers import EarlyStoppingCallback
+
+        callbacks.append(
+            EarlyStoppingCallback(
+                early_stopping_patience=args.early_stopping_patience,
+            )
+        )
+        log.info("early-stopping enabled: patience=%d evals on eval_loss", args.early_stopping_patience)
 
     trainer = CrossEncoderTrainer(
         model=model,
@@ -613,7 +664,7 @@ def _run_new_trainer(
                     labels = torch.tensor(chunk["label"], dtype=torch.float32, device=device)
                     # Mimic what CE losses do internally (tokenize + forward).
                     tokens = model.tokenizer(
-                        list(zip(q, d)),
+                        list(zip(q, d, strict=False)),
                         padding=True,
                         truncation=True,
                         return_tensors="pt",
@@ -677,10 +728,14 @@ def _run_legacy_fit(
     steps_per_epoch = (len(train_idx) + args.batch_size - 1) // args.batch_size
     total_steps = steps_per_epoch * args.epochs
     log.info(
-        "training (legacy fit): epochs=%d batch=%d steps/epoch=%d total=%d "
-        "warmup=%d lr=%g max_len=%d",
-        args.epochs, args.batch_size, steps_per_epoch, total_steps,
-        args.warmup, args.lr, args.max_length,
+        "training (legacy fit): epochs=%d batch=%d steps/epoch=%d total=%d warmup=%d lr=%g max_len=%d",
+        args.epochs,
+        args.batch_size,
+        steps_per_epoch,
+        total_steps,
+        args.warmup,
+        args.lr,
+        args.max_length,
     )
 
     loss_map = {
@@ -758,9 +813,7 @@ def main() -> int:
 
     # Silence the noisy tokenizer "Token indices sequence length is longer than..."
     # warning that fires before HF applies the truncation we always request.
-    warnings.filterwarnings(
-        "ignore", message="Token indices sequence length is longer than the specified maximum"
-    )
+    warnings.filterwarnings("ignore", message="Token indices sequence length is longer than the specified maximum")
     logging.getLogger("transformers.tokenization_utils_base").setLevel(logging.ERROR)
 
     # Seed BEFORE any model instantiation so weight init is reproducible.
@@ -785,11 +838,10 @@ def main() -> int:
     rng = random.Random(args.seed)
     all_idx = list(range(total_rows))
     rng.shuffle(all_idx)
-    n_val = max(1, int(round(total_rows * args.val_ratio)))
+    n_val = max(1, round(total_rows * args.val_ratio))
     val_idx = set(all_idx[:n_val])
     train_idx = set(all_idx[n_val:])
-    log.info("split indices: train=%d val=%d (val_ratio=%.2f)",
-             len(train_idx), len(val_idx), args.val_ratio)
+    log.info("split indices: train=%d val=%d (val_ratio=%.2f)", len(train_idx), len(val_idx), args.val_ratio)
 
     device = pick_device()
     log.info("device: %s", device)
@@ -909,9 +961,7 @@ def main() -> int:
         "resumed_from_checkpoint": resumed_from,
         "mps_watermark_ratio": os.environ.get("PYTORCH_MPS_HIGH_WATERMARK_RATIO", ""),
     }
-    (out_dir / "training_summary.json").write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    (out_dir / "training_summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
 
     # Reload smoke
     log.info("reload smoke: CrossEncoder(%s)", out_dir)
@@ -920,13 +970,18 @@ def main() -> int:
     score_val = float(score[0]) if hasattr(score, "__len__") else float(score)
     log.info("reload smoke score: %s", score_val)
 
-    print(json.dumps({
-        "status": "ok",
-        "out_dir": str(out_dir),
-        "duration_seconds": round(dur, 2),
-        "final_val_loss": final_val_loss,
-        "reload_smoke_score": score_val,
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "status": "ok",
+                "out_dir": str(out_dir),
+                "duration_seconds": round(dur, 2),
+                "final_val_loss": final_val_loss,
+                "reload_smoke_score": score_val,
+            },
+            indent=2,
+        )
+    )
     return 0
 
 
