@@ -1,62 +1,102 @@
-# Prompt for next session (copy-paste below into new Claude Code session)
+# Prompt for next session (copy-paste below)
 
 ---
 
-Продовжую P5 reranker у `code-rag-mcp`. Перед будь-якою дією **прочитай повністю `ROADMAP.md`** — там вся історія 8 FT ітерацій (v1→v8), що зараз у прод, P0 fix gate (DONE), Graph POC (FAILED), v8 listwise (PROMOTE sidegrade), і критично — **новий пріоритет "якість > швидкість"**.
+Продовжую `code-rag-mcp` після нічного прогону (2026-04-21). **Перед будь-якою дією прочитай повністю `ROADMAP.md`** — особливо §"🌙 2026-04-21 overnight" та §"Where we think we should go next".
 
-Також прочитай пам'ять: `~/.claude-personal/projects/-Users-vaceslavtarsevskij--code-rag-mcp/memory/MEMORY.md` + всі файли за посиланнями.
+Також прочитай пам'ять: `~/.claude-personal/projects/-Users-vaceslavtarsevskij--code-rag-mcp/memory/MEMORY.md` та всі файли за посиланнями.
 
-## Вектор напрямку
+## Поточний стан (головне)
 
-**Головне питання сесії:** "чи v6.2 / v8 справді варто поставити в прод, чи вони виграють тільки на Jira eval?"
+- **У проді: `reranker_ft_gte_v8`** (listwise LambdaLoss, 285MB bf16). Swap зроблений 2026-04-21, config.json абсолютний шлях. Працює.
+- **11 FT ітерацій досягли ceiling +3-5pp Jira r@10.** Далі rerank-тюнінг — diminishing returns.
+- **Тільки v8 реально покращив runtime benchmarks** (+8.3pp queries, +2.1pp realworld). v6.2, v10, v11 = tie з baseline на runtime. Jira r@10 gains НЕ транслюються в реальні MCP queries.
+- **Daemon на `:8742` тримає ~2.7-2.8GB** (CodeRankEmbed 1GB + LanceDB mmap 500MB-1GB + reranker 400MB + runtime). Це постійне, не залежить від reranker vendor.
 
-Новий пріоритет користувача: **якість важливіша за швидкість**. Попередні сесії тримали v6.2/v8 у архіві через 2× latency — **ця причина більше не головна**. Якщо модель справді краща на runtime query distribution + не має схованих per-project регресій — deploy.
+## Головне питання сесії
 
-## Що НЕ робити одразу
+**"Де далі шукати реальне покращення якості пошуку, якщо rerank FT витиснений?"**
 
-Не тренуй нову модель, не чіпай `src/config.py`, не свопай reranker. Ми вже 8 разів повторювали одну помилку: діяли на непідтверджених гіпотезах.
+Rerank — polish. Recall bottleneck = FTS5+dense stage. Real breakthrough має бути **поза reranker'ом**.
+
+## Що НЕ робити
+
+- Не тренуй ще одну rerank FT без чіткого falsification plan. 11 ітерацій вже вичерпали простір.
+- Не спамуй hyperparam sweep (lr/batch/loss) — сезі запущено.
+- Не міняй `profiles/pay-com/config.json` без explicit user ask.
+- Не push через `gh` — тільки `mcp__github__*`, owner=vtarsh.
 
 ## Перший крок — ОБОВ'ЯЗКОВО
 
-Запусти **3-5 паралельних критиків-агентів** (`general-purpose`, `model: opus`) щоб перевірити ключові claims ПЕРЕД дією. Конкретні теми:
+Запусти **3-5 паралельних критиків-агентів** (`general-purpose`, `model: opus`) щоб перевірити які untried axes реально мають потенціал ДО будь-яких дій. Конкретні теми:
 
-1. **Runtime benchmarks — чи v6.2 і v8 справді кращі на `benchmark_queries.py` + `benchmark_realworld.py`?**
-   Критик має запустити обидва benchmarks (окремо на v6.2 та v8), порівняти з baseline (ms-marco-MiniLM-L-6-v2), і report: win/tie/lose кожен з 2 бенчмарків, на кожній моделі. Попередній audit казав "mixed or worse" — перевір чи це ще так після fix gate.
+1. **Query rewriting — реальний impact на нашу recall метрику?** Прочитай existing Jira eval snapshots (`gte_v1.json` baseline); для скількох tickets GT файл взагалі НЕ у top-200 FTS+dense? Якщо <10%, query rewrite має низьку стелю. Якщо >30%, це найбільший lever.
 
-2. **Per-project parity у Jira eval** — break down `gte_v6_2.json` і `gte_v8.json` по prefix (PI / BO / CORE / HS). Кожен проект net-wins? Чи CORE регресує а BO домінує aggregate? Critic має compute per-project Δr@10 + ΔHit@5 + net з existing snapshot data (no training).
+2. **Dense retrieval FT — варто зробити CodeRankEmbed FT?** Прочитай `scripts/build_vectors_coderank.py`, `src/search/vector.py`. Є можливість FT embedding model на наших (query, chunk, label) парах? Estimated effort? Community recipe?
 
-3. **v8 vs v6.2 — який правильний для MCP use-case?** Current pipe: user calls `search` MCP tool → отримує top-10 results → часто дивиться top-5. v6.2 краще на r@10, v8 краще на Hit@5. Критик має перевірити ЯКИЙ фактичний top-K використовує MCP (read `mcp_server.py` + `src/search/hybrid.py`), і порекомендувати.
+3. **v8 + v10 ensemble score-average.** v10 видалений локально, але є `gte_v10.json`. Агент має sanity-check — чи передбачувані per-ticket errors v8/v10 uncorrelated (clean pairing). Якщо так — ensemble ймовірно +1-2pp за дешево. Якщо errors correlated — скіп.
 
-4. **Чи наш новий gate (`Δr@10 ≥ 0.02 AND ΔHit@5 ≥ 0.02 AND net_improved ≥ 20`) достатньо надійний для prod-decision?** Або треба додаткові guards (e.g. "no project below baseline", "variance-checked re-runs")? Критик — adversarial, шукає pathologies які gate пропустить.
+4. **Real-query eval з `logs/tool_calls.jsonl`.** 1,194 unique queries з production. Скільки labeled для ground-truth треба щоб eval був statistically meaningful? LLM-as-judge чи manual? Cost estimate.
 
-5. **Чи є ще один untried lever (post-audit) який дав би clear upgrade над v6.2/v8?** Перевір fresh, не покладайся на попередні recommendations. Кандидати з ROADMAP: freeze bottom 6 layers, dense-neighbor hard negatives, v8+longer max-length на GPU.
+5. **Bugs + technical debt.** Прочитай git diff, daemon.py, pre-commit hook (зараз flakey під MPS навантаженням). Шукай:
+   - `fts_index.db` — 0 байтів, dead file. Видалити?
+   - `knowledge.db.bak-p7` (149MB) — старий бекап. Потрібен?
+   - Pre-commit pytest падає коли daemon тримає MPS — repeatable? fixable (split test suite, lighter hook)?
+   - `knowledge.db` (177MB) vs `.bak-p7` (149MB) — різниця актуальна?
 
-Запусти agents паралельно (single message, multiple `Agent` tool calls), **кожен з `model: opus`**, чекай результати, потім синтез. **Не запускай train/deploy до синтезу.**
+Запусти всі 5 паралельно (single message, multiple `Agent` tool calls), `model: opus`, чекай усі, синтез, потім пропонуй конкретну дію.
 
-## Після синтезу
+## Правила роботи
 
-На базі висновків критиків:
-- Якщо v6.2 (або v8) passes runtime benchmarks І per-project parity OK → **deploy** (змінити `profiles/pay-com/config.json::reranker_model` + restart daemon). Дочекайся validation.
-- Якщо не passes → вирішуй: або інший lever (freeze layers / dense negs), або real-query eval.
+- **Маленькими кроками**: написати → verify → commit → далі.
+- **Checkpoint commit** після кожного значущого кроку.
+- **Tests must pass** перед push: `python3.12 -m pytest tests/ -q` (зараз 325).
+- **Push через `mcp__github__push_files`** (owner=vtarsh, repo=code-rag-mcp).
+- **Pre-commit pytest hook** flakey під MPS — якщо падає з "11 errors" під час training/eval background job, це false positive. Перевір manually, тоді commit.
+- **Перед тренуванням** — MANDATORY sample check (5 train/5 test rows, visual compare).
+- **Real holdout ОБОВ'ЯЗКОВО** — `--test-ratio 0.15` для v12+. Full-eval з train-in-test = memorization-inflated (цей урок коштував нам 11 ітерацій).
+- **Jira r@10 gains ≠ runtime gains.** Завжди перевіряй `benchmark_queries.py` + `benchmark_realworld.py` окремо.
 
-## Правила роботи (автономність з checkpoints)
+## Proven FT recipe (якщо все ж треба тренувати щось нове)
 
-- **Маленькими кроками:** спочатку написати код → перевірити напрямок → commit → далі.
-- **Checkpoint commit після кожного значущого кроку** (не накопичувати). Якщо щось ламається — відкат до попереднього commit.
-- **Tests must pass** перед push: `python3.12 -m pytest tests/ -q` (зараз 316).
-- **Push тільки через `mcp__github__*`** (`gh` deny-listed). Owner = `vtarsh`.
-- **Train/eval параметри** — див. ROADMAP §"Proven settings" та §"Critical pitfalls".
-- **Shard eval** — тепер балансується per-prefix (CORE/BO/PI/HS) автоматично у `eval_finetune.py`. `EVAL_BATCH=2 EVAL_MAXLEN=256` у `eval_parallel.sh` — не міняй.
+```bash
+PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.8 PYTORCH_MPS_LOW_WATERMARK_RATIO=0.4 \
+python3.12 scripts/finetune_reranker.py \
+  --train profiles/pay-com/finetune_data_vN/train.jsonl \
+  --test profiles/pay-com/finetune_data_vN/test.jsonl \
+  --base-model Alibaba-NLP/gte-reranker-modernbert-base \
+  --out profiles/pay-com/models/reranker_ft_gte_vN \
+  --epochs 1 --batch-size 16 --lr 5e-5 --warmup 200 --max-length 256 \
+  --bf16 --optim adamw_torch_fused --loss mse \
+  --save-steps 500 --val-ratio 0.10 --early-stopping-patience 2 \
+  --resume-from-checkpoint none
+```
 
-## Production state (коротко)
+**Data prep (real holdout):**
+```bash
+python3.12 scripts/prepare_finetune_data.py \
+  --projects PI,BO,CORE,HS --min-files 1 --seed 42 \
+  --out profiles/pay-com/finetune_data_vN/ \
+  --use-description --use-diff-positives --diff-snippet-max-chars 1500 \
+  --drop-noisy-basenames --drop-generated --drop-trivial-positives \
+  --min-query-len 30 --oversample PI=5 \
+  --drop-popular-files 25 --max-rows-per-ticket 300 \
+  --test-ratio 0.15
+```
 
-- Reranker у проді: `cross-encoder/ms-marco-MiniLM-L-6-v2` (22M, baseline).
-- Archive models (не видаляти, всі PROMOTE по Jira gate):
-  - `reranker_ft_gte_v4/` — +4.06pp r@10
-  - `reranker_ft_gte_v6_2/` — +4.30pp r@10 (best r@10)
-  - `reranker_ft_gte_v8/` — +3.92pp r@10, +6.9pp Hit@5 (best top-5), listwise LambdaLoss
-- 3 datasets (v4, v6.2 pointwise, v8 listwise), 5 eval snapshots.
+Don't use `--dedupe-same-file` (v5 catastrophe). Don't use `lr=8e-5 + batch=16` (v11 CORE overfits).
 
-## Початковий запит (копіпастуй)
+## Critical pitfalls (коротко, full list в ROADMAP)
 
-"Прочитай `ROADMAP.md` + memory. Запусти 3-5 критиків-агентів паралельно на 5 claims із секції 'Перший крок' в `NEXT_SESSION_PROMPT.md`. Зроби синтез і тільки тоді пропонуй наступну дію. Без коду до синтезу. Після синтезу — працюй автономно з checkpoints (commit на кожному значущому кроці), не чекай підтвердження на кожну дрібницю."
+1. Rerank FT ceiling = +3-5pp on Jira, ~nothing on runtime (except listwise LambdaLoss v8).
+2. Real-holdout MANDATORY (`--test-ratio 0.15`).
+3. `max_length=256 + batch=32` OOMs MPS. Use batch=16.
+4. FTS5 `_FTS_PRECLEAN` must strip all non-word/space/.-/ punctuation.
+5. Reranker path у config.json ABSOLUTE (daemon cwd ≠ repo).
+6. Pre-commit pytest падає під MPS контенцією — не зупиняйся через це, verify manually.
+
+## Початковий запит (копіпастуй у новий сеанс)
+
+```
+Прочитай ROADMAP.md + memory. Поточний prod = v8, rerank витиснений. Запусти 5 критиків-агентів паралельно на 5 питань із секції 'Перший крок' у NEXT_SESSION_PROMPT.md. Зроби синтез ДО будь-якої дії. Фокус — де шукати real breakthrough поза rerank FT. Без коду до синтезу. Після синтезу — працюй автономно з checkpoints, не чекай підтвердження на кожну дрібницю.
+```
