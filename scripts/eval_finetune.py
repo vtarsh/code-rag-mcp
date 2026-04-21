@@ -159,6 +159,44 @@ def rank_of_first_gt(ranked_repos: list[str], expected: set[str]) -> int | None:
     return None
 
 
+def _lpt_schedule(
+    tasks: list[dict],
+    latency_profile: dict[str, float],
+    n_shards: int,
+    shard_index: int,
+) -> list[dict]:
+    """Longest-Processing-Time greedy shard split.
+
+    Sorts tasks by descending estimated latency, then assigns each to the
+    currently least-loaded shard. Result: each shard gets a roughly equal sum
+    of latency estimates rather than equal ticket count. Shard bound becomes
+    ~max_ticket + avg_sum_per_shard instead of worst-case (sum of unlucky
+    heavy tail on one shard).
+
+    Tickets missing from the profile fall back to the median of known
+    estimates (robust to outliers), or 10s if the profile is empty.
+
+    First-time runs (no profile) should use the per-prefix stride path.
+    """
+    known = [v for v in latency_profile.values() if v is not None and v > 0]
+    default = sorted(known)[len(known) // 2] if known else 10.0
+
+    def estimate(task: dict) -> float:
+        v = latency_profile.get(task["ticket_id"])
+        return float(v) if v is not None and v > 0 else default
+
+    sorted_tasks = sorted(tasks, key=estimate, reverse=True)
+
+    shard_loads = [0.0] * n_shards
+    shard_tasks: list[list[dict]] = [[] for _ in range(n_shards)]
+    for task in sorted_tasks:
+        min_shard = min(range(n_shards), key=lambda s: shard_loads[s])
+        shard_loads[min_shard] += estimate(task)
+        shard_tasks[min_shard].append(task)
+
+    return shard_tasks[shard_index]
+
+
 class _CrossEncoderAdapter:
     """Adapt a sentence_transformers.CrossEncoder to RerankerProvider.rerank(...).
 
@@ -624,6 +662,18 @@ def parse_args() -> argparse.Namespace:
         "via FTS+vector+code_facts fusion).",
     )
     p.add_argument(
+        "--latency-profile",
+        type=Path,
+        default=None,
+        help="Path to a previous history_out JSON used to LPT-balance shard "
+        "assignment. The `per_task_baseline[*].latency_s` field drives a "
+        "greedy longest-processing-time-first split instead of per-prefix "
+        "stride. Eliminates heavy-tail bunching on slow shards (eval_v8_hybrid "
+        "saw shard0 finish baseline while shard2 still on 145/175 BO due to "
+        "20-25s outliers). Tickets missing from the profile get the median "
+        "estimate. Absent flag → falls back to per-prefix stride.",
+    )
+    p.add_argument(
         "--use-hybrid-retrieval",
         action="store_true",
         default=False,
@@ -672,30 +722,63 @@ def main() -> int:
     log.info("loaded %d GT tasks (projects=%s)", len(tasks), projects or "all")
 
     # ---- Shard slicing (horizontal parallelism across multiple processes) ----
-    # Seeded shuffle + global stride used to leave heavy-tail projects (e.g.
-    # CORE monster-PRs with ~25s rerank latency) clustered on one unlucky
-    # shard, making that shard ~3x slower than the others. Fix: shuffle once
-    # then stride within each ticket-id prefix group (PI/BO/CORE/HS), so each
-    # shard gets roughly an equal share of every project.
+    # When --latency-profile is given, use LPT scheduling (balances wall time);
+    # otherwise fall back to per-prefix stride (balances ticket count — OK for
+    # first-ever hybrid run where no latency profile exists yet).
     if args.shard_total > 1:
         if not (0 <= args.shard_index < args.shard_total):
             raise ValueError(f"shard-index={args.shard_index} outside [0,{args.shard_total})")
-        import random as _rnd
-        from collections import defaultdict as _dd
 
-        _rng = _rnd.Random(args.seed)
-        _rng.shuffle(tasks)
-        by_prefix: dict[str, list[dict]] = _dd(list)
-        for t in tasks:
-            pfx = t["ticket_id"].split("-", 1)[0]
-            by_prefix[pfx].append(t)
-        sharded: list[dict] = []
-        for pfx in sorted(by_prefix):
-            sharded.extend(by_prefix[pfx][args.shard_index :: args.shard_total])
-        tasks = sharded
-        log.info(
-            "SHARD %d/%d -> processing %d tasks (per-prefix stride)", args.shard_index, args.shard_total, len(tasks)
-        )
+        if args.latency_profile is not None:
+            # LPT-balanced split using a previous snapshot's per-ticket latency.
+            prof_path = args.latency_profile
+            if not prof_path.is_absolute():
+                prof_path = Path(__file__).resolve().parents[1] / prof_path
+            prof_data = json.loads(prof_path.read_text(encoding="utf-8"))
+            latency_map: dict[str, float] = {}
+            for ticket_id, entry in (prof_data.get("per_task_baseline") or {}).items():
+                lat = entry.get("latency_s") if isinstance(entry, dict) else None
+                if lat is not None and lat > 0:
+                    latency_map[ticket_id] = float(lat)
+            log.info(
+                "latency profile: loaded %d entries from %s (total tasks=%d)",
+                len(latency_map),
+                prof_path.name,
+                len(tasks),
+            )
+            tasks = _lpt_schedule(tasks, latency_map, args.shard_total, args.shard_index)
+            est_load = sum(latency_map.get(t["ticket_id"], 0.0) for t in tasks)
+            log.info(
+                "SHARD %d/%d -> processing %d tasks (LPT-balanced, est_load=%.1fs)",
+                args.shard_index,
+                args.shard_total,
+                len(tasks),
+                est_load,
+            )
+        else:
+            # Per-prefix stride fallback (first-ever run, no profile available).
+            # Shuffle once + stride within each ticket-id prefix group so each
+            # shard gets roughly an equal share of every project. Heavy-tail
+            # still clusters by latency — use --latency-profile on repeat runs.
+            import random as _rnd
+            from collections import defaultdict as _dd
+
+            _rng = _rnd.Random(args.seed)
+            _rng.shuffle(tasks)
+            by_prefix: dict[str, list[dict]] = _dd(list)
+            for t in tasks:
+                pfx = t["ticket_id"].split("-", 1)[0]
+                by_prefix[pfx].append(t)
+            sharded: list[dict] = []
+            for pfx in sorted(by_prefix):
+                sharded.extend(by_prefix[pfx][args.shard_index :: args.shard_total])
+            tasks = sharded
+            log.info(
+                "SHARD %d/%d -> processing %d tasks (per-prefix stride)",
+                args.shard_index,
+                args.shard_total,
+                len(tasks),
+            )
 
     fts_conn = sqlite3.connect(str(KNOWLEDGE_DB), timeout=30)
     fts_conn.row_factory = sqlite3.Row
