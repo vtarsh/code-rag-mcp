@@ -10,7 +10,7 @@ repos:
     hooks:
       - id: pytest
         name: pytest
-        entry: /usr/local/bin/python3 -m pytest tests/ -q --tb=short
+        entry: /usr/local/bin/python3.12 -m pytest tests/ -q --tb=short
         language: system
         pass_filenames: false
         always_run: true

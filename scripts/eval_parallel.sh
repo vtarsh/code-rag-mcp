@@ -21,6 +21,11 @@ BASE_MODEL="${BASE_MODEL:-Alibaba-NLP/gte-reranker-modernbert-base}"
 # the strict config check. gte_v1.json was produced with batch_size=2.
 EVAL_BATCH="${EVAL_BATCH:-2}"
 EVAL_MAXLEN="${EVAL_MAXLEN:-256}"
+# Query composition mode for eval. 'summary' matches legacy runs (gte_v1..v8);
+# 'enriched' uses build_query_text (matches training distribution).
+# When switching to 'enriched', pass BASELINE=skip because old snapshots were
+# produced with query_mode=summary and reuse-config-check will refuse to mix.
+EVAL_QUERY_MODE="${EVAL_QUERY_MODE:-summary}"
 
 OUT=profiles/pay-com/finetune_history
 mkdir -p logs
@@ -33,6 +38,12 @@ echo "DATA=${DATA}"
 pkill -9 -f "daemon.py" 2>/dev/null || true
 sleep 2
 
+# Build reuse flag (empty when BASELINE=skip)
+REUSE_FLAG=""
+if [ "${BASELINE}" != "skip" ]; then
+  REUSE_FLAG="--reuse-baseline-from ${BASELINE}"
+fi
+
 # Launch 3 shards in parallel
 PIDS=()
 for i in 0 1 2; do
@@ -44,10 +55,11 @@ for i in 0 1 2; do
       --ft-model "${MODEL}" \
       --history-out "${OUT}/${SLUG}.json" \
       --shard-index ${i} --shard-total 3 \
-      --reuse-baseline-from "${BASELINE}" \
+      ${REUSE_FLAG} \
       --manifest "${DATA}/manifest.json" \
       --training-summary "${MODEL}/training_summary.json" \
       --batch-size "${EVAL_BATCH}" --max-length "${EVAL_MAXLEN}" \
+      --eval-query-mode "${EVAL_QUERY_MODE}" \
       2>&1 | tee "logs/eval_${SLUG}.shard${i}.log"
     echo "=== EVAL_SHARD_DONE slug=${SLUG} shard=${i} ts=$(date +%Y-%m-%dT%H:%M:%S) ==="
   ) &
