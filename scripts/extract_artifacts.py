@@ -63,6 +63,100 @@ SKIP_FILES = {
     "pnpm-lock.yaml",
 }
 
+# Frontend source extraction (src_frontend artifact type)
+FE_EXTS = {".ts", ".tsx", ".js", ".jsx", ".mjs"}
+FE_SKIP_DIRS = {
+    "__tests__",
+    "__mocks__",
+    "__snapshots__",
+    "generated",  # auto-generated code (GraphQL codegen, OpenAPI, etc.)
+    "stories",
+}
+# Extra suffixes to skip for FE pass (tests, stories, generated types)
+FE_SKIP_SUFFIXES = (
+    ".test.ts",
+    ".test.tsx",
+    ".test.js",
+    ".test.jsx",
+    ".spec.ts",
+    ".spec.tsx",
+    ".spec.js",
+    ".spec.jsx",
+    ".stories.ts",
+    ".stories.tsx",
+    ".stories.js",
+    ".stories.jsx",
+    ".d.ts",
+)
+
+
+def _fe_is_skippable(path: Path) -> bool:
+    """FE-specific skip: honors base filters plus test/stories/generated."""
+    if is_skippable(path):
+        return True
+    parts = set(path.parts)
+    if parts & FE_SKIP_DIRS:
+        return True
+    name = path.name
+    return any(name.endswith(suf) for suf in FE_SKIP_SUFFIXES)
+
+
+def _iter_src_roots(repo_dir: Path):
+    """Yield (src_root, rel_prefix) pairs to scan for frontend source.
+
+    Strategy:
+    - Top-level `src/`  -> prefix `src`
+    - Monorepo `packages/*/src/` -> prefix `packages/<pkg>/src`
+    - Monorepo `apps/*/src/`    -> prefix `apps/<app>/src`
+
+    `rel_prefix` is the path under extracted/{repo}/ where files are written,
+    preserving files_changed path shape (e.g. backoffice-web/src/Pages/X.tsx).
+    """
+    top_src = repo_dir / "src"
+    if top_src.is_dir():
+        yield top_src, Path("src")
+
+    for mono in ("packages", "apps"):
+        mono_dir = repo_dir / mono
+        if not mono_dir.is_dir():
+            continue
+        for sub in mono_dir.iterdir():
+            if not sub.is_dir() or sub.name.startswith("."):
+                continue
+            sub_src = sub / "src"
+            if sub_src.is_dir():
+                yield sub_src, Path(mono) / sub.name / "src"
+
+
+def extract_src_frontend(repo_dir: Path, out_dir: Path) -> int:
+    """Copy frontend source (.ts/.tsx/.js/.jsx/.mjs) from src/ trees.
+
+    Preserves relative structure under extracted/{repo}/{src|packages/<p>/src|...}
+    so Jira files_changed entries like `backoffice-web/src/Pages/X.tsx` resolve
+    to `extracted/backoffice-web/src/Pages/X.tsx`.
+
+    Auto-detect: only runs if repo has at least one src/ tree (top-level or
+    inside packages/apps monorepo).
+    """
+    count = 0
+    any_root = False
+    for src_root, rel_prefix in _iter_src_roots(repo_dir):
+        any_root = True
+        for f in src_root.rglob("*"):
+            if not f.is_file():
+                continue
+            if f.suffix not in FE_EXTS:
+                continue
+            if _fe_is_skippable(f):
+                continue
+            rel = f.relative_to(src_root)
+            dst = out_dir / rel_prefix / rel
+            safe_copy(f, dst)
+            count += 1
+    if not any_root:
+        return 0
+    return count
+
 
 def is_skippable(path: Path) -> bool:
     """Check if path should be skipped."""
@@ -97,6 +191,7 @@ def extract_repo(repo_dir: Path, out_dir: Path) -> dict:
         "handlers": 0,
         "utils": 0,
         "consts": 0,
+        "src_frontend": 0,
     }
 
     if not repo_dir.is_dir():
@@ -284,6 +379,13 @@ def extract_repo(repo_dir: Path, out_dir: Path) -> dict:
             if ci.is_file() and ci.suffix in (".yml", ".yaml", ".template"):
                 safe_copy(ci, out_dir / "ci" / ci.name)
                 stats["ci"] += 1
+
+    # --- Frontend source (src_frontend) ---
+    # Auto-detect: copy all .ts/.tsx/.js/.jsx/.mjs under src/ (and monorepo
+    # packages/*/src, apps/*/src), preserving relative paths so Jira
+    # files_changed entries resolve 1:1 to extracted paths. Training relies
+    # on this for FE tickets (backoffice-web, graphql, next-web-*, etc.).
+    stats["src_frontend"] += extract_src_frontend(repo_dir, out_dir)
 
     return stats
 
