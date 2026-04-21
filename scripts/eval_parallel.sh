@@ -26,6 +26,11 @@ EVAL_MAXLEN="${EVAL_MAXLEN:-256}"
 # When switching to 'enriched', pass BASELINE=skip because old snapshots were
 # produced with query_mode=summary and reuse-config-check will refuse to mix.
 EVAL_QUERY_MODE="${EVAL_QUERY_MODE:-summary}"
+# Conditional enriched fallback for summary-mode tickets with 0 FTS candidates.
+# Set FTS_FALLBACK_ENRICH=1 to enable; also pass BASELINE=skip (old snapshots
+# were produced with fallback=False). Rescues ~77 tickets (~8.5% of 909) whose
+# short Jira titles don't match any FTS chunk. 2026-04-21 experiment.
+FTS_FALLBACK_ENRICH="${FTS_FALLBACK_ENRICH:-0}"
 
 OUT=profiles/pay-com/finetune_history
 mkdir -p logs
@@ -44,6 +49,12 @@ if [ "${BASELINE}" != "skip" ]; then
   REUSE_FLAG="--reuse-baseline-from ${BASELINE}"
 fi
 
+# Build fallback flag
+FALLBACK_FLAG=""
+if [ "${FTS_FALLBACK_ENRICH}" = "1" ] || [ "${FTS_FALLBACK_ENRICH}" = "true" ]; then
+  FALLBACK_FLAG="--fts-fallback-enrich"
+fi
+
 # Launch 3 shards in parallel
 PIDS=()
 for i in 0 1 2; do
@@ -60,6 +71,7 @@ for i in 0 1 2; do
       --training-summary "${MODEL}/training_summary.json" \
       --batch-size "${EVAL_BATCH}" --max-length "${EVAL_MAXLEN}" \
       --eval-query-mode "${EVAL_QUERY_MODE}" \
+      ${FALLBACK_FLAG} \
       2>&1 | tee "logs/eval_${SLUG}.shard${i}.log"
     echo "=== EVAL_SHARD_DONE slug=${SLUG} shard=${i} ts=$(date +%Y-%m-%dT%H:%M:%S) ==="
   ) &

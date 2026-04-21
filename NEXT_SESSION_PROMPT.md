@@ -2,62 +2,55 @@
 
 ---
 
-Продовжую `code-rag-mcp` після нічного прогону (2026-04-21). **Перед будь-якою дією прочитай повністю `ROADMAP.md`** — особливо §"🌙 2026-04-21 overnight" та §"Where we think we should go next".
+Продовжую `code-rag-mcp` після 2026-04-21 afternoon breakthrough. **Перед будь-якою дією прочитай повністю `ROADMAP.md`** — особливо першу секцію §"2026-04-21 afternoon: Conditional enriched FTS fallback" та старий §"🌙 2026-04-21 overnight" для контексту.
 
 Також прочитай пам'ять: `~/.claude-personal/projects/-Users-vaceslavtarsevskij--code-rag-mcp/memory/MEMORY.md` та всі файли за посиланнями.
 
 ## Поточний стан (головне)
 
-- **У проді: `reranker_ft_gte_v8`** (listwise LambdaLoss, 285MB bf16). Swap зроблений 2026-04-21, config.json абсолютний шлях. Працює.
-- **11 FT ітерацій досягли ceiling +3-5pp Jira r@10.** Далі rerank-тюнінг — diminishing returns.
-- **Тільки v8 реально покращив runtime benchmarks** (+8.3pp queries, +2.1pp realworld). v6.2, v10, v11 = tie з baseline на runtime. Jira r@10 gains НЕ транслюються в реальні MCP queries.
-- **Daemon на `:8742` тримає ~2.7-2.8GB** (CodeRankEmbed 1GB + LanceDB mmap 500MB-1GB + reranker 400MB + runtime). Це постійне, не залежить від reranker vendor.
+- **У проді: `reranker_ft_gte_v8`** (listwise LambdaLoss, 285MB bf16). Не змінюй.
+- **NEW: Conditional enriched FTS fallback** (`--fts-fallback-enrich`) — діагностика на 77 no_fts tickets дала **+6.33pp baseline / +7.21pp v8 Δr@10** у перерахунку на 909. Це БІЛЬШЕ за будь-який single FT iteration.
+- **Повний 909-ticket eval з fallback у background.** Подивись на `profiles/pay-com/finetune_history/gte_v8_fallback.json` — якщо він вже існує та повний, знайди реальні числа. Якщо ні — eval ще біжить або впав. Перевір `logs/eval_gte_v8_fallback_full.log`.
+- **Daemon на `:8742`** — може бути unload'нутим через eval. Якщо так, рестартни: `CODE_RAG_HOME=~/.code-rag-mcp ACTIVE_PROFILE=pay-com python3.12 daemon.py &disown`.
+- **Task D (real-query eval)** — sampling готовий (`scripts/sample_real_queries.py`, 400 queries у `profiles/pay-com/real_queries/sampled.jsonl`). Labeling НЕ зроблений — блокує на Anthropic API access або manual LLM-as-judge.
 
 ## Головне питання сесії
 
-**"Де далі шукати реальне покращення якості пошуку, якщо rerank FT витиснений?"**
+**"Підтвердити +7.21pp v8 Δr@10 у повному eval, оновити baseline для майбутніх FT ітерацій, почати Task D labeling?"**
 
-Rerank — polish. Recall bottleneck = FTS5+dense stage. Real breakthrough має бути **поза reranker'ом**.
+Очікуй: абсолютні числа змістяться +6-7pp вгору, але відносна перевага v8 над baseline збережеться. Якщо так — це НОВИЙ canonical baseline для future FT work. Всі наступні гейти слід переглянути (old: Δr@10 ≥ +0.02 проти 0.6527; new: проти ~0.72).
 
 ## Що НЕ робити
 
-- Не тренуй ще одну rerank FT без чіткого falsification plan. 11 ітерацій вже вичерпали простір.
-- Не спамуй hyperparam sweep (lr/batch/loss) — сезі запущено.
-- Не міняй `profiles/pay-com/config.json` без explicit user ask.
+- Не тренуй нову модель до того як побачиш числа full-eval fallback.
+- Не свопай reranker у config.json — v8 все ще винний.
 - Не push через `gh` — тільки `mcp__github__*`, owner=vtarsh.
+- Якщо full-eval впав — НЕ пере-запускай з аналогічним SLUG, спочатку подивись `logs/eval_gte_v8_fallback.shard*.log` на причину.
 
-## Перший крок — ОБОВ'ЯЗКОВО
+## Перший крок
 
-Запусти **3-5 паралельних критиків-агентів** (`general-purpose`, `model: opus`) щоб перевірити які untried axes реально мають потенціал ДО будь-яких дій. Конкретні теми:
-
-1. **Query rewriting — реальний impact на нашу recall метрику?** Прочитай existing Jira eval snapshots (`gte_v1.json` baseline); для скількох tickets GT файл взагалі НЕ у top-200 FTS+dense? Якщо <10%, query rewrite має низьку стелю. Якщо >30%, це найбільший lever.
-
-2. **Dense retrieval FT — варто зробити CodeRankEmbed FT?** Прочитай `scripts/build_vectors_coderank.py`, `src/search/vector.py`. Є можливість FT embedding model на наших (query, chunk, label) парах? Estimated effort? Community recipe?
-
-3. **v8 + v10 ensemble score-average.** v10 видалений локально, але є `gte_v10.json`. Агент має sanity-check — чи передбачувані per-ticket errors v8/v10 uncorrelated (clean pairing). Якщо так — ensemble ймовірно +1-2pp за дешево. Якщо errors correlated — скіп.
-
-4. **Real-query eval з `logs/tool_calls.jsonl`.** 1,194 unique queries з production. Скільки labeled для ground-truth треба щоб eval був statistically meaningful? LLM-as-judge чи manual? Cost estimate.
-
-5. **Bugs + technical debt.** Прочитай git diff, daemon.py, pre-commit hook (зараз flakey під MPS навантаженням). Шукай:
-   - `fts_index.db` — 0 байтів, dead file. Видалити?
-   - `knowledge.db.bak-p7` (149MB) — старий бекап. Потрібен?
-   - Pre-commit pytest падає коли daemon тримає MPS — repeatable? fixable (split test suite, lighter hook)?
-   - `knowledge.db` (177MB) vs `.bak-p7` (149MB) — різниця актуальна?
-
-Запусти всі 5 паралельно (single message, multiple `Agent` tool calls), `model: opus`, чекай усі, синтез, потім пропонуй конкретну дію.
+Перевір `profiles/pay-com/finetune_history/gte_v8_fallback.json`:
+- Якщо існує та валідний JSON зі `verdict: PROMOTE/HOLD/REJECT` — числа готові. Додай їх у ROADMAP §"2026-04-21 afternoon" замість estimates.
+- Якщо ні — `tail logs/eval_gte_v8_fallback*.log`. Якщо процеси ще живі (`pgrep -f eval_finetune.py`) — зачекай. Якщо мертві — збери shard snapshots (`shardNof3.json`), запусти `scripts/merge_eval_shards.py` вручну.
 
 ## Правила роботи
 
+- **Push через `mcp__github__push_files`** (owner=vtarsh, repo=code-rag-mcp). Локальна git branch розходиться з origin — не merge'и, просто push вперед.
 - **Маленькими кроками**: написати → verify → commit → далі.
-- **Checkpoint commit** після кожного значущого кроку.
-- **Tests must pass** перед push: `python3.12 -m pytest tests/ -q` (зараз 325).
-- **Push через `mcp__github__push_files`** (owner=vtarsh, repo=code-rag-mcp).
-- **Pre-commit pytest hook** flakey під MPS — якщо падає з "11 errors" під час training/eval background job, це false positive. Перевір manually, тоді commit.
+- **Tests must pass** перед push: `python3.12 -m pytest tests/ -q` (зараз 337).
+- **Pre-commit pytest hook** flakey ЛИШЕ під час FT training (не під eval/inference). Якщо падає — перевір manually.
 - **Перед тренуванням** — MANDATORY sample check (5 train/5 test rows, visual compare).
-- **Real holdout ОБОВ'ЯЗКОВО** — `--test-ratio 0.15` для v12+. Full-eval з train-in-test = memorization-inflated (цей урок коштував нам 11 ітерацій).
-- **Jira r@10 gains ≠ runtime gains.** Завжди перевіряй `benchmark_queries.py` + `benchmark_realworld.py` окремо.
+- **Real holdout ОБОВ'ЯЗКОВО** — `--test-ratio 0.15` для v12+.
 
-## Proven FT recipe (якщо все ж треба тренувати щось нове)
+## Що наступного (після підтвердження fallback)
+
+1. **Task D labeling** (400 queries, ~$5 + 4h calibration). Blocker: API access. Без цього Jira-eval / runtime distribution mismatch нікуди не дінеться.
+2. **v12 FT** з fallback enabled у eval gate. Чи потрібен ще один цикл — вирішувати за числами fallback full-eval.
+3. **Runtime query expansion** (LLM rewrite or identifier extraction) — аналог fallback для real user queries. Потребує Task D для вимірювання.
+4. ❌ v6.2+v8 ensemble — SKIP (Jaccard 0.918, oracle +0.55pp).
+5. ⏸ Dense retrieval FT — DEFER (12-24h re-embed, розподіл той самий).
+
+## Proven FT recipe (якщо знадобиться)
 
 ```bash
 PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.8 PYTORCH_MPS_LOW_WATERMARK_RATIO=0.4 \
@@ -84,19 +77,18 @@ python3.12 scripts/prepare_finetune_data.py \
   --test-ratio 0.15
 ```
 
-Don't use `--dedupe-same-file` (v5 catastrophe). Don't use `lr=8e-5 + batch=16` (v11 CORE overfits).
+## Critical pitfalls (full list у ROADMAP)
 
-## Critical pitfalls (коротко, full list в ROADMAP)
-
-1. Rerank FT ceiling = +3-5pp on Jira, ~nothing on runtime (except listwise LambdaLoss v8).
+1. Rerank FT ceiling раніше здавався +3-5pp; afternoon breakthrough показав що 8.5% tickets були недосяжні для FTS. Unlock'нули → +7.21pp Δr@10.
 2. Real-holdout MANDATORY (`--test-ratio 0.15`).
 3. `max_length=256 + batch=32` OOMs MPS. Use batch=16.
 4. FTS5 `_FTS_PRECLEAN` must strip all non-word/space/.-/ punctuation.
 5. Reranker path у config.json ABSOLUTE (daemon cwd ≠ repo).
-6. Pre-commit pytest падає під MPS контенцією — не зупиняйся через це, verify manually.
+6. Jira r@10 gains ≠ runtime gains. Завжди перевіряй `benchmark_queries.py` + `benchmark_realworld.py` окремо.
+7. Blanket enriched mode LAME FTS candidates (−15pp на PI). Тільки CONDITIONAL fallback (`--fts-fallback-enrich`) безпечний.
 
 ## Початковий запит (копіпастуй у новий сеанс)
 
 ```
-Прочитай ROADMAP.md + memory. Поточний prod = v8, rerank витиснений. Запусти 5 критиків-агентів паралельно на 5 питань із секції 'Перший крок' у NEXT_SESSION_PROMPT.md. Зроби синтез ДО будь-якої дії. Фокус — де шукати real breakthrough поза rerank FT. Без коду до синтезу. Після синтезу — працюй автономно з checkpoints, не чекай підтвердження на кожну дрібницю.
+Прочитай ROADMAP.md + memory. Афтернун breakthrough = conditional enriched FTS fallback: +7.21pp v8 Δr@10 estimated. Перевір чи закінчився full-eval (profiles/pay-com/finetune_history/gte_v8_fallback.json). Якщо так — онови ROADMAP з реальними числами замість estimates, потім вирішуй чи треба v12 FT. Якщо ні — подивись progress. Працюй автономно з checkpoints.
 ```
