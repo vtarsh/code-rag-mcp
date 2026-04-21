@@ -83,16 +83,30 @@ def _classify_penalty(file_type: str, file_path: str) -> float:
     return 0.0
 
 
-def rerank(query: str, results: list[dict], limit: int = 10) -> list[dict]:
+def rerank(
+    query: str,
+    results: list[dict],
+    limit: int = 10,
+    *,
+    reranker_override=None,
+) -> list[dict]:
     """Rerank search results with the local CrossEncoder provider.
 
     Takes RRF-fused results and reranks by scoring each snippet
     against the query. Combines: 70% reranker score + 30% normalized RRF score.
+
+    `reranker_override` (P0a): any object with a `rerank(query, documents, limit)`
+    method replaces `get_reranker()` for the duration of this call. Used by
+    `scripts/eval_finetune.py --use-hybrid-retrieval` to score the same RRF pool
+    with an arbitrary CrossEncoder so eval shares the production candidate set.
     """
     if not results or len(results) <= 1:
         return results
 
-    reranker, err = get_reranker()
+    if reranker_override is not None:
+        reranker, err = reranker_override, None
+    else:
+        reranker, err = get_reranker()
     if err or reranker is None:
         return results  # Fallback: return original order
 
@@ -227,11 +241,18 @@ def hybrid_search(
     file_type: str = "",
     exclude_file_types: str = "",
     limit: int = 10,
+    *,
+    reranker_override=None,
 ) -> tuple[list[dict], str | None, int]:
     """Hybrid search: combine FTS5 keyword + vector similarity via RRF.
 
     Keyword results get 2x weight because exact term matches are more
     reliable for code search than semantic similarity alone.
+
+    `reranker_override` (P0a): passed through to `rerank()`. Used by
+    `eval_finetune.py --use-hybrid-retrieval` so each eval model scores the
+    production RRF pool (FTS + vector + code_facts/env_vars + content boosts)
+    instead of a detached FTS-only pool.
 
     Returns (ranked_results, vector_error | None, total_candidates).
     """
@@ -321,8 +342,8 @@ def hybrid_search(
     rerank_cap = max(limit * 2, RERANK_POOL_SIZE)
     ranked = sorted(scores.values(), key=lambda x: x["score"], reverse=True)[:rerank_cap]
 
-    # Rerank with cross-encoder
-    ranked = rerank(query, ranked, limit)
+    # Rerank with cross-encoder (eval path may override with a specific model)
+    ranked = rerank(query, ranked, limit, reranker_override=reranker_override)
 
     # Expand top results with sibling chunks for context
     ranked = _expand_siblings(ranked)
