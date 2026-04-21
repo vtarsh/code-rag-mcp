@@ -13,7 +13,15 @@ presentation layer (search tool output) to control output size.
 
 from __future__ import annotations
 
+import os
 import re
+
+# A/B investigation env gates (post-P0a hybrid eval found 103 tickets lose GT
+# repos vs fts_only+fallback). Default 0 = production behaviour unchanged.
+# Set =1 in eval runs to isolate whether penalties or code_facts/env_vars are
+# responsible for the regression.
+_DISABLE_PENALTIES = os.getenv("CODE_RAG_DISABLE_PENALTIES", "0") == "1"
+_DISABLE_CODE_FACTS = os.getenv("CODE_RAG_DISABLE_CODE_FACTS", "0") == "1"
 
 from src.config import (
     CODE_FACT_BOOST,
@@ -72,7 +80,12 @@ def _classify_penalty(file_type: str, file_path: str) -> float:
       2. Test paths (*.spec.js, *.test.py, /tests/...) -> TEST_PENALTY
       3. Doc-ish file_type (doc, task, gotchas, reference) -> DOC_PENALTY
     Returns 0.0 for production code (unchanged).
+
+    Eval A/B: CODE_RAG_DISABLE_PENALTIES=1 short-circuits to 0.0 so penalties
+    can be isolated as a cause when hybrid-mode eval drops GT repos.
     """
+    if _DISABLE_PENALTIES:
+        return 0.0
     path = file_path or ""
     if _GUIDE_PATH_RE.search(path):
         return GUIDE_PENALTY
@@ -305,11 +318,15 @@ def hybrid_search(
     # retry policies) that chunks_fts can miss. Boost chunks whose (repo, file)
     # match a code_facts hit, and inject a candidate chunk for hits that the
     # keyword/vector pool missed entirely.
-    _apply_code_facts(scores, query, repo, K, KW_WEIGHT)
-
-    # P0c: wire env_vars — UPPERCASE identifiers in the query resolve to the
-    # repos where those env vars are defined. Light repo-level boost.
-    _apply_env_vars(scores, query)
+    #
+    # Eval A/B: CODE_RAG_DISABLE_CODE_FACTS=1 skips both code_facts and env_vars
+    # wiring so the hybrid-mode regression on 103 "lost" tickets can be
+    # attributed (or not) to these candidate-pool injections.
+    if not _DISABLE_CODE_FACTS:
+        _apply_code_facts(scores, query, repo, K, KW_WEIGHT)
+        # P0c: wire env_vars — UPPERCASE identifiers in the query resolve to the
+        # repos where those env vars are defined. Light repo-level boost.
+        _apply_env_vars(scores, query)
 
     # Apply content-type boosts — curated knowledge ranks higher
     TASK_BOOST = {
