@@ -10,7 +10,10 @@ def detect_language(file_path: str) -> str:
     ext = Path(file_path).suffix.lower()
     lang_map = {
         ".js": "javascript",
+        ".jsx": "javascript",
+        ".mjs": "javascript",
         ".ts": "typescript",
+        ".tsx": "typescript",
         ".proto": "protobuf",
         ".md": "markdown",
         ".json": "json",
@@ -54,4 +57,6 @@ def detect_file_type(artifact_type: str, file_name: str) -> str:
         return "handler"
     if artifact_type in ("utils", "consts"):
         return "library"
+    if artifact_type in ("src", "packages", "apps"):
+        return "frontend"
     return "other"

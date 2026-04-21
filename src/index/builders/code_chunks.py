@@ -231,9 +231,9 @@ def chunk_code(content: str, repo_name: str, language: str, file_path: str = "")
             )
         return chunks
 
-    # Try smart chunking for JS/TS files
+    # Try smart chunking for JS/TS files (incl. JSX/TSX)
     ext = Path(file_path).suffix.lower() if file_path else ""
-    if ext in (".js", ".ts", ".mjs"):
+    if ext in (".js", ".jsx", ".ts", ".tsx", ".mjs"):
         smart = _smart_chunk_js(content, file_path)
         if smart:
             # Prefix with repo name and enforce max size

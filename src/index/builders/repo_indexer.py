@@ -28,6 +28,12 @@ def index_repo(conn: sqlite3.Connection, repo_name: str, meta: dict) -> tuple[in
         "handlers",
         "utils",
         "consts",
+        # Frontend source: extract_artifacts.py writes raw src/ files to
+        # extracted/{repo}/src/ (and packages/*/src, apps/*/src) so that
+        # rel_path matches Jira files_changed entries (e.g. src/Pages/X.tsx).
+        "src",
+        "packages",
+        "apps",
     ]
 
     repo_dir = EXTRACTED_DIR / repo_name
