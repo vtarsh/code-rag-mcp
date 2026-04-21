@@ -65,12 +65,10 @@ def suggest_queries(query: str, max_suggestions: int = 5) -> list[str]:
     glossary_matches = _fuzzy_match(query, unique_terms, max_results=3)
     suggestions.extend(glossary_matches)
 
-    # 2. Repo name matches
+    # 2. Repo name matches — every row in graph_nodes is a repo (populated from `repos` table).
     try:
         with db_connection() as conn:
-            rows = conn.execute(
-                "SELECT DISTINCT name FROM graph_nodes WHERE node_type = 'repo' OR node_type IS NULL"
-            ).fetchall()
+            rows = conn.execute("SELECT DISTINCT name FROM graph_nodes").fetchall()
             repo_names = [r["name"] for r in rows]
     except Exception:
         repo_names = []
