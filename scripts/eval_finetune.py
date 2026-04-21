@@ -30,18 +30,19 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.benchmark_rerank_ab import (  # noqa: E402
+from scripts.benchmark_rerank_ab import (
     compute_recall,
     fetch_fts_candidates,
     percentile,
     top_k_repos,
 )
-from scripts.eval_verdict import verdict_from_snapshot  # noqa: E402
+from scripts.eval_verdict import verdict_from_snapshot
+from scripts.prepare_finetune_data import build_query_text, preclean_for_fts
 
 logging.basicConfig(
     level=logging.INFO,
@@ -97,7 +98,8 @@ def load_all_gt_tasks(db_path: Path, projects: list[str] | None = None) -> list[
     else:
         where = "repos_changed IS NOT NULL AND repos_changed != '[]'"
     rows = conn.execute(
-        "SELECT ticket_id, summary, repos_changed FROM task_history "
+        "SELECT ticket_id, summary, description, jira_comments, repos_changed "
+        "FROM task_history "
         f"WHERE {where} ORDER BY ticket_id"
     ).fetchall()
     conn.close()
@@ -110,16 +112,38 @@ def load_all_gt_tasks(db_path: Path, projects: list[str] | None = None) -> list[
             continue
         if not repos:
             continue
-        tasks.append({
-            "ticket_id": r["ticket_id"],
-            "summary": r["summary"] or "",
-            "expected_repos": list(repos),
-        })
+        comments = []
+        raw_comments = r["jira_comments"]
+        if raw_comments:
+            try:
+                comments = json.loads(raw_comments) or []
+            except (TypeError, json.JSONDecodeError):
+                comments = []
+        tasks.append(
+            {
+                "ticket_id": r["ticket_id"],
+                "summary": r["summary"] or "",
+                "description": r["description"] or "",
+                "jira_comments": comments,
+                "expected_repos": list(repos),
+            }
+        )
     return tasks
 
 
-def rerank_with_latency(model, query: str, chunks: list[dict],
-                        *, batch_size: int = 4) -> tuple[list[dict], float]:
+def _resolve_eval_query(task: dict, mode: str) -> str:
+    """Pick query string for eval based on mode.
+
+    mode=summary: raw Jira summary only (backward-compat with pre-2026-04-20 runs).
+    mode=enriched: same composition as build_query_text in prepare_finetune_data.py
+        (summary + description + fallback comments). Matches training distribution.
+    """
+    if mode == "enriched":
+        return build_query_text(task, use_description=True) or task["summary"]
+    return task["summary"]
+
+
+def rerank_with_latency(model, query: str, chunks: list[dict], *, batch_size: int = 4) -> tuple[list[dict], float]:
     pairs = [(query, c["content"][:1000]) for c in chunks]
     t0 = time.perf_counter()
     scores = model.predict(pairs, batch_size=batch_size)
@@ -144,6 +168,8 @@ def eval_one_model(
     fts_limit: int,
     batch_size: int,
     max_length: int,
+    query_mode: str = "summary",
+    fts_fallback_enrich: bool = False,
 ) -> tuple[dict[str, dict], list[float]]:
     """Return (per_task_dict_keyed_by_ticket, latencies_list)."""
     from sentence_transformers import CrossEncoder
@@ -159,6 +185,7 @@ def eval_one_model(
 
     per_task: dict[str, dict] = {}
     latencies: list[float] = []
+    n_fallback_rescued = 0
 
     for task in tasks:
         ticket = task["ticket_id"]
@@ -171,14 +198,46 @@ def eval_one_model(
             "top_10_repos": [],
             "latency_s": None,
             "error": None,
+            "fallback_used": False,
         }
+        query = _resolve_eval_query(task, query_mode)
+        # Enriched query often has "Alias:" / colons / quotes from Jira
+        # descriptions; FTS5 treats `word:` as a column-specifier and crashes
+        # with "no such column". preclean_for_fts strips those reserved
+        # punctuation chars — same function the training pipeline uses.
+        fts_query = preclean_for_fts(query) if query_mode == "enriched" else query
         try:
-            chunks = fetch_fts_candidates(fts_conn, task["summary"], limit=fts_limit)
+            chunks = fetch_fts_candidates(fts_conn, fts_query, limit=fts_limit)
         except ValueError as e:
             entry["error"] = f"empty_query: {e}"
             per_task[ticket] = entry
             log.info("[%s] %s: empty_query", label, ticket)
             continue
+
+        # Conditional enriched fallback: summary-mode tickets whose short Jira
+        # title yields 0 FTS hits get a retry with build_query_text (summary +
+        # description + fallback comments). ~8.5% of eval set (77/909) is pure
+        # no_fts_candidates; most have non-empty descriptions. The blanket
+        # enriched mode tested on PI lost ~15pp on tickets that already had
+        # candidates (FTS pool drift from 80-char → 500+-char queries). The
+        # CONDITIONAL form only triggers where summary already failed — can't
+        # regress those tickets, can only rescue them.
+        if not chunks and query_mode == "summary" and fts_fallback_enrich:
+            enriched_query = build_query_text(task, use_description=True)
+            enriched_fts_query = preclean_for_fts(enriched_query)
+            if enriched_fts_query.strip():
+                try:
+                    chunks = fetch_fts_candidates(fts_conn, enriched_fts_query, limit=fts_limit)
+                except ValueError:
+                    chunks = []
+                if chunks:
+                    # Reranker was trained on enriched queries (build_query_text in
+                    # prepare_finetune_data.py). Feeding it the enriched form
+                    # matches training distribution; summary would be OOD.
+                    query = enriched_query
+                    entry["fallback_used"] = True
+                    n_fallback_rescued += 1
+                    log.info("[%s] %s: fallback→enriched rescued %d chunks", label, ticket, len(chunks))
 
         if not chunks:
             entry["error"] = "no_fts_candidates"
@@ -188,7 +247,10 @@ def eval_one_model(
 
         try:
             ranked, lat = rerank_with_latency(
-                model, task["summary"], chunks, batch_size=batch_size,
+                model,
+                query,
+                chunks,
+                batch_size=batch_size,
             )
         except Exception as e:
             entry["error"] = f"{type(e).__name__}: {e}"
@@ -200,32 +262,41 @@ def eval_one_model(
         ranked_repos_full = top_k_repos(ranked, len(ranked))
         top10 = ranked_repos_full[:10]
         top25 = ranked_repos_full[:25]
-        entry.update({
-            "recall_at_10": compute_recall(top10, expected, 10),
-            "recall_at_25": compute_recall(top25, expected, 25),
-            "rank_of_first_gt": rank_of_first_gt(ranked_repos_full, expected),
-            "top_10_repos": top10,
-            "latency_s": lat,
-        })
+        entry.update(
+            {
+                "recall_at_10": compute_recall(top10, expected, 10),
+                "recall_at_25": compute_recall(top25, expected, 25),
+                "rank_of_first_gt": rank_of_first_gt(ranked_repos_full, expected),
+                "top_10_repos": top10,
+                "latency_s": lat,
+            }
+        )
         latencies.append(lat)
         per_task[ticket] = entry
         log.info(
             "[%s] %s: r@10=%.2f r@25=%.2f first_gt=%s lat=%.2fs",
-            label, ticket,
-            entry["recall_at_10"], entry["recall_at_25"],
-            entry["rank_of_first_gt"], lat,
+            label,
+            ticket,
+            entry["recall_at_10"],
+            entry["recall_at_25"],
+            entry["rank_of_first_gt"],
+            lat,
         )
 
     del model
     gc.collect()
     try:
         import torch
+
         if torch.backends.mps.is_available():
             torch.mps.empty_cache()
         elif torch.cuda.is_available():
             torch.cuda.empty_cache()
     except Exception:
         pass
+
+    if fts_fallback_enrich and n_fallback_rescued:
+        log.info("[%s] fallback→enriched rescued %d/%d tickets", label, n_fallback_rescued, len(tasks))
 
     return per_task, latencies
 
@@ -267,19 +338,14 @@ def build_delta(base: dict[str, dict], ft: dict[str, dict]) -> dict[str, dict]:
     return out
 
 
-def find_regressions(delta: dict[str, dict],
-                     *, r10_drop_5pp: float = -0.05,
-                     r10_drop_10pp: float = -0.10) -> dict:
+def find_regressions(delta: dict[str, dict], *, r10_drop_5pp: float = -0.05, r10_drop_10pp: float = -0.10) -> dict:
     drops_5 = [t for t, d in delta.items() if d["recall_at_10"] <= r10_drop_5pp]
     drops_10 = [t for t, d in delta.items() if d["recall_at_10"] <= r10_drop_10pp]
     drops_5.sort(key=lambda t: delta[t]["recall_at_10"])
     return {
         "count_r10_drop_gte_5pp": len(drops_5),
         "count_r10_drop_gte_10pp": len(drops_10),
-        "tickets_regressed": [
-            {"ticket": t, "r10_delta": round(delta[t]["recall_at_10"], 4)}
-            for t in drops_5
-        ],
+        "tickets_regressed": [{"ticket": t, "r10_delta": round(delta[t]["recall_at_10"], 4)} for t in drops_5],
     }
 
 
@@ -288,11 +354,18 @@ def find_regressions(delta: dict[str, dict],
 # with a full-eval gate (Δr@10 + ΔHit@5 + net_improved). See eval_verdict module.
 
 
-def print_console_report(*,
-                         n_tasks: int, n_train: int, n_test: int,
-                         agg: dict, regressions: dict,
-                         base_lat: list[float], ft_lat: list[float],
-                         verdict: str, verdict_reason: str) -> None:
+def print_console_report(
+    *,
+    n_tasks: int,
+    n_train: int,
+    n_test: int,
+    agg: dict,
+    regressions: dict,
+    base_lat: list[float],
+    ft_lat: list[float],
+    verdict: str,
+    verdict_reason: str,
+) -> None:
     print()
     print("===== P5 eval: baseline vs ft_v1 =====")
     print(f"Tickets evaluated: {n_tasks} ({n_train} train + {n_test} test)")
@@ -322,17 +395,11 @@ def print_console_report(*,
         print("  (none)")
     else:
         for row in regressions["tickets_regressed"]:
-            print(f"  {row['ticket']}: r@10 delta {row['r10_delta']*100:+.1f} pp")
+            print(f"  {row['ticket']}: r@10 delta {row['r10_delta'] * 100:+.1f} pp")
     print()
     print("Latency:")
-    print(
-        f"  baseline p50={percentile(base_lat, 50):.2f}s "
-        f"p95={percentile(base_lat, 95):.2f}s"
-    )
-    print(
-        f"  ft_v1    p50={percentile(ft_lat, 50):.2f}s "
-        f"p95={percentile(ft_lat, 95):.2f}s"
-    )
+    print(f"  baseline p50={percentile(base_lat, 50):.2f}s p95={percentile(base_lat, 95):.2f}s")
+    print(f"  ft_v1    p50={percentile(ft_lat, 50):.2f}s p95={percentile(ft_lat, 95):.2f}s")
     print()
     print(f"Verdict: {verdict}")
     print(f"  {verdict_reason}")
@@ -340,34 +407,61 @@ def print_console_report(*,
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="P5 eval: baseline vs FT reranker")
-    p.add_argument("--base-model",
-                   default="cross-encoder/ms-marco-MiniLM-L-6-v2")
-    p.add_argument("--ft-model", required=True,
-                   help="Path or HF id for fine-tuned reranker")
-    p.add_argument("--history-out", type=Path, required=True,
-                   help="Snapshot JSON for regression tracking")
+    p.add_argument("--base-model", default="cross-encoder/ms-marco-MiniLM-L-6-v2")
+    p.add_argument("--ft-model", required=True, help="Path or HF id for fine-tuned reranker")
+    p.add_argument("--history-out", type=Path, required=True, help="Snapshot JSON for regression tracking")
     p.add_argument("--fts-limit", type=int, default=200)
     p.add_argument("--batch-size", type=int, default=4)
     p.add_argument("--max-length", type=int, default=256)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--no-pause-daemon", action="store_true")
-    p.add_argument("--projects", default="",
-                   help="Comma-separated Jira prefixes (PI,BO,CORE,HS). Empty = all.")
-    p.add_argument("--manifest", type=Path,
-                   default=Path("profiles/pay-com/finetune_data/manifest.json"))
-    p.add_argument("--training-summary", type=Path, default=None,
-                   help="Override path; defaults to <ft-model>/training_summary.json")
-    p.add_argument("--shard-index", type=int, default=0,
-                   help="0-based shard index; shard-mode enabled when shard-total > 1.")
-    p.add_argument("--shard-total", type=int, default=1,
-                   help="Total number of shards to run in parallel. Each process slices "
-                        "tasks[shard_index::shard_total] and writes a partial history-out "
-                        "file — no aggregate/verdict computed in shard mode.")
-    p.add_argument("--reuse-baseline-from", type=Path, default=None,
-                   help="Path to a previous history_out JSON that shares base_model, "
-                        "fts_limit, seed. Its per_task_baseline is loaded directly and "
-                        "the baseline pass is skipped. 2x speedup when baseline "
-                        "hasn't changed between runs.")
+    p.add_argument("--projects", default="", help="Comma-separated Jira prefixes (PI,BO,CORE,HS). Empty = all.")
+    p.add_argument("--manifest", type=Path, default=Path("profiles/pay-com/finetune_data/manifest.json"))
+    p.add_argument(
+        "--training-summary",
+        type=Path,
+        default=None,
+        help="Override path; defaults to <ft-model>/training_summary.json",
+    )
+    p.add_argument(
+        "--shard-index", type=int, default=0, help="0-based shard index; shard-mode enabled when shard-total > 1."
+    )
+    p.add_argument(
+        "--shard-total",
+        type=int,
+        default=1,
+        help="Total number of shards to run in parallel. Each process slices "
+        "tasks[shard_index::shard_total] and writes a partial history-out "
+        "file — no aggregate/verdict computed in shard mode.",
+    )
+    p.add_argument(
+        "--reuse-baseline-from",
+        type=Path,
+        default=None,
+        help="Path to a previous history_out JSON that shares base_model, "
+        "fts_limit, seed. Its per_task_baseline is loaded directly and "
+        "the baseline pass is skipped. 2x speedup when baseline "
+        "hasn't changed between runs.",
+    )
+    p.add_argument(
+        "--eval-query-mode",
+        choices=["summary", "enriched"],
+        default="summary",
+        help="Query composition for eval. 'summary' = raw Jira summary "
+        "(pre-2026-04-20 default; mismatches training distribution). "
+        "'enriched' = build_query_text(summary+description+comments), "
+        "matches prepare_finetune_data.py training query.",
+    )
+    p.add_argument(
+        "--fts-fallback-enrich",
+        action="store_true",
+        default=False,
+        help="When query_mode=summary and FTS returns 0 candidates, retry "
+        "with build_query_text (summary+description) and use enriched "
+        "query for rerank. Targets the ~8.5%% of tickets (77/909) with "
+        "summaries too short/generic for FTS. Applies symmetrically to "
+        "baseline and FT so relative delta is fair.",
+    )
     return p.parse_args()
 
 
@@ -415,6 +509,7 @@ def main() -> int:
             raise ValueError(f"shard-index={args.shard_index} outside [0,{args.shard_total})")
         import random as _rnd
         from collections import defaultdict as _dd
+
         _rng = _rnd.Random(args.seed)
         _rng.shuffle(tasks)
         by_prefix: dict[str, list[dict]] = _dd(list)
@@ -423,10 +518,11 @@ def main() -> int:
             by_prefix[pfx].append(t)
         sharded: list[dict] = []
         for pfx in sorted(by_prefix):
-            sharded.extend(by_prefix[pfx][args.shard_index::args.shard_total])
+            sharded.extend(by_prefix[pfx][args.shard_index :: args.shard_total])
         tasks = sharded
-        log.info("SHARD %d/%d -> processing %d tasks (per-prefix stride)",
-                 args.shard_index, args.shard_total, len(tasks))
+        log.info(
+            "SHARD %d/%d -> processing %d tasks (per-prefix stride)", args.shard_index, args.shard_total, len(tasks)
+        )
 
     fts_conn = sqlite3.connect(str(KNOWLEDGE_DB), timeout=30)
     fts_conn.row_factory = sqlite3.Row
@@ -441,65 +537,82 @@ def main() -> int:
                 reuse_path = Path(__file__).resolve().parents[1] / reuse_path
             reuse = json.loads(reuse_path.read_text(encoding="utf-8"))
             if reuse.get("base_model") != args.base_model:
-                raise ValueError(
-                    f"base_model mismatch: reuse={reuse.get('base_model')!r} "
-                    f"current={args.base_model!r}"
-                )
+                raise ValueError(f"base_model mismatch: reuse={reuse.get('base_model')!r} current={args.base_model!r}")
             # Check every eval_config field that can change ranking. Previously
             # only fts_limit was compared, so a batch_size or max_length tweak
             # would silently mix old baseline numbers with fresh FT numbers.
             reuse_cfg = reuse.get("eval_config") or {}
+            # Pre-2026-04-21 snapshots have no query_mode — it defaulted to
+            # summary behaviour. Treat missing key as "summary" for back-compat.
+            # Pre-2026-04-21-pm snapshots have no fts_fallback_enrich either — treat as False.
+            reuse_cfg_for_check = {"query_mode": "summary", "fts_fallback_enrich": False, **reuse_cfg}
             current_cfg = {
                 "fts_limit": args.fts_limit,
                 "batch_size": args.batch_size,
                 "max_length": args.max_length,
                 "seed": args.seed,
+                "query_mode": args.eval_query_mode,
+                "fts_fallback_enrich": args.fts_fallback_enrich,
             }
             for key, want in current_cfg.items():
-                if reuse_cfg.get(key) != want:
+                if reuse_cfg_for_check.get(key) != want:
                     raise ValueError(
-                        f"eval_config.{key} mismatch: reuse={reuse_cfg.get(key)!r} "
+                        f"eval_config.{key} mismatch: reuse={reuse_cfg_for_check.get(key)!r} "
                         f"current={want!r}. Re-run baseline fresh or align configs."
                     )
             # Keep only tickets that survive the current shard slice.
             wanted_ids = {t["ticket_id"] for t in tasks}
-            base_per_task = {
-                tid: v for tid, v in reuse["per_task_baseline"].items()
-                if tid in wanted_ids
-            }
-            base_lat = [
-                v.get("latency_s", 0.0) for v in base_per_task.values()
-            ]
+            base_per_task = {tid: v for tid, v in reuse["per_task_baseline"].items() if tid in wanted_ids}
+            base_lat = [v.get("latency_s", 0.0) for v in base_per_task.values()]
             missing = wanted_ids - set(base_per_task)
-            log.info("=== baseline reused from %s (%d/%d tickets; %d missing) ===",
-                     reuse_path.name, len(base_per_task), len(wanted_ids), len(missing))
+            log.info(
+                "=== baseline reused from %s (%d/%d tickets; %d missing) ===",
+                reuse_path.name,
+                len(base_per_task),
+                len(wanted_ids),
+                len(missing),
+            )
             if missing:
-                log.warning("reuse missing %d tickets — falling back to fresh baseline for them",
-                            len(missing))
+                log.warning("reuse missing %d tickets — falling back to fresh baseline for them", len(missing))
                 missing_tasks = [t for t in tasks if t["ticket_id"] in missing]
                 extra_per_task, extra_lat = eval_one_model(
-                    args.base_model, "baseline", missing_tasks, fts_conn,
+                    args.base_model,
+                    "baseline",
+                    missing_tasks,
+                    fts_conn,
                     fts_limit=args.fts_limit,
                     batch_size=args.batch_size,
                     max_length=args.max_length,
+                    query_mode=args.eval_query_mode,
+                    fts_fallback_enrich=args.fts_fallback_enrich,
                 )
                 base_per_task.update(extra_per_task)
                 base_lat.extend(extra_lat)
         else:
-            log.info("=== baseline pass ===")
+            log.info("=== baseline pass (query_mode=%s) ===", args.eval_query_mode)
             base_per_task, base_lat = eval_one_model(
-                args.base_model, "baseline", tasks, fts_conn,
+                args.base_model,
+                "baseline",
+                tasks,
+                fts_conn,
                 fts_limit=args.fts_limit,
                 batch_size=args.batch_size,
                 max_length=args.max_length,
+                query_mode=args.eval_query_mode,
+                fts_fallback_enrich=args.fts_fallback_enrich,
             )
 
-        log.info("=== ft_v1 pass ===")
+        log.info("=== ft_v1 pass (query_mode=%s) ===", args.eval_query_mode)
         ft_per_task, ft_lat = eval_one_model(
-            args.ft_model, "ft_v1", tasks, fts_conn,
+            args.ft_model,
+            "ft_v1",
+            tasks,
+            fts_conn,
             fts_limit=args.fts_limit,
             batch_size=args.batch_size,
             max_length=args.max_length,
+            query_mode=args.eval_query_mode,
+            fts_fallback_enrich=args.fts_fallback_enrich,
         )
 
         eval_dur = time.time() - t_eval_start
@@ -509,22 +622,22 @@ def main() -> int:
 
     # ---- Shard mode: write partial snapshot + exit (no aggregate/verdict) ----
     if args.shard_total > 1:
-        shard_path = args.history_out.with_suffix(
-            f".shard{args.shard_index}of{args.shard_total}.json"
-        )
+        shard_path = args.history_out.with_suffix(f".shard{args.shard_index}of{args.shard_total}.json")
         shard_path.parent.mkdir(parents=True, exist_ok=True)
         shard_snapshot = {
             "run_id": run_id,
             "shard": {"index": args.shard_index, "total": args.shard_total},
             "base_model": args.base_model,
             "ft_model_path": args.ft_model,
-            "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "hyperparams": hyperparams,
             "eval_config": {
                 "fts_limit": args.fts_limit,
                 "batch_size": args.batch_size,
                 "max_length": args.max_length,
                 "seed": args.seed,
+                "query_mode": args.eval_query_mode,
+                "fts_fallback_enrich": args.fts_fallback_enrich,
             },
             "evaluated_tickets": [t["ticket_id"] for t in tasks],
             "per_task_baseline": base_per_task,
@@ -589,13 +702,15 @@ def main() -> int:
         "run_id": run_id,
         "base_model": args.base_model,
         "ft_model_path": args.ft_model,
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "hyperparams": hyperparams,
         "eval_config": {
             "fts_limit": args.fts_limit,
             "batch_size": args.batch_size,
             "max_length": args.max_length,
             "seed": args.seed,
+            "query_mode": args.eval_query_mode,
+            "fts_fallback_enrich": args.fts_fallback_enrich,
         },
         "train_tickets": train_tickets,
         "test_tickets": test_tickets,
