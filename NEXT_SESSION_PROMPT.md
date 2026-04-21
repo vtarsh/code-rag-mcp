@@ -9,16 +9,16 @@
 ## Поточний стан (головне)
 
 - **У проді: `reranker_ft_gte_v8`** (listwise LambdaLoss, 285MB bf16). Не змінюй.
-- **NEW: Conditional enriched FTS fallback** (`--fts-fallback-enrich`) — діагностика на 77 no_fts tickets дала **+6.33pp baseline / +7.21pp v8 Δr@10** у перерахунку на 909. Це БІЛЬШЕ за будь-який single FT iteration.
-- **Повний 909-ticket eval з fallback у background.** Подивись на `profiles/pay-com/finetune_history/gte_v8_fallback.json` — якщо він вже існує та повний, знайди реальні числа. Якщо ні — eval ще біжить або впав. Перевір `logs/eval_gte_v8_fallback_full.log`.
+- **Conditional enriched FTS fallback** (`--fts-fallback-enrich`) — ПІДТВЕРДЖЕНО ПОВНИМ EVAL. Baseline r@10=0.7112 (+5.85pp з fallback), v8 r@10=**0.7622** (+6.67pp з fallback). v8 перевага над baseline ЗБЕРЕЖЕНА: Δr@10=**+5.09pp**, ΔHit@5=**+7.92pp**, net=+100 (146 impr / 46 regr). PROMOTE на повному гейті.
+- **Canonical baseline updated**: старі FT порівнювались vs 0.6527 r@10. Нові — vs 0.7112.
 - **Daemon на `:8742`** — може бути unload'нутим через eval. Якщо так, рестартни: `CODE_RAG_HOME=~/.code-rag-mcp ACTIVE_PROFILE=pay-com python3.12 daemon.py &disown`.
 - **Task D (real-query eval)** — sampling готовий (`scripts/sample_real_queries.py`, 400 queries у `profiles/pay-com/real_queries/sampled.jsonl`). Labeling НЕ зроблений — блокує на Anthropic API access або manual LLM-as-judge.
 
 ## Головне питання сесії
 
-**"Підтвердити +7.21pp v8 Δr@10 у повному eval, оновити baseline для майбутніх FT ітерацій, почати Task D labeling?"**
+**"Task D labeling та/або v12 FT з новим baseline як референс?"**
 
-Очікуй: абсолютні числа змістяться +6-7pp вгору, але відносна перевага v8 над baseline збережеться. Якщо так — це НОВИЙ canonical baseline для future FT work. Всі наступні гейти слід переглянути (old: Δr@10 ≥ +0.02 проти 0.6527; new: проти ~0.72).
+Canonical baseline оновлено: 0.7112 r@10 (замість 0.6527). Будь-який майбутній FT порівнюється на цьому рівні. Gate thresholds (Δr@10 ≥ +0.02, ΔHit@5 ≥ +0.02, net ≥ 20) залишаються релевантними — їх семантика є RELATIVE, не absolute.
 
 ## Що НЕ робити
 
@@ -29,9 +29,11 @@
 
 ## Перший крок
 
-Перевір `profiles/pay-com/finetune_history/gte_v8_fallback.json`:
-- Якщо існує та валідний JSON зі `verdict: PROMOTE/HOLD/REJECT` — числа готові. Додай їх у ROADMAP §"2026-04-21 afternoon" замість estimates.
-- Якщо ні — `tail logs/eval_gte_v8_fallback*.log`. Якщо процеси ще живі (`pgrep -f eval_finetune.py`) — зачекай. Якщо мертві — збери shard snapshots (`shardNof3.json`), запусти `scripts/merge_eval_shards.py` вручну.
+`gte_v8_fallback.json` готовий і в ROADMAP вже реальні числа. Далі варіанти:
+1. **Task D labeling** — 400 queries у `profiles/pay-com/real_queries/sampled.jsonl`. Labeling via API або manual LLM-as-judge. ~$5 + 4h spot-check.
+2. **v12 FT** — якщо плануєш train. Recipe у `Proven FT recipe` нижче. Canonical baseline = 0.7112.
+3. **Runtime query expansion** — аналог fallback для real user queries (LLM rewrite / identifier extraction). Потребує Task D для вимірювання.
+4. Інша ідея — запусти critic agents проти нового baseline якщо не очевидно куди йти.
 
 ## Правила роботи
 
@@ -90,5 +92,5 @@ python3.12 scripts/prepare_finetune_data.py \
 ## Початковий запит (копіпастуй у новий сеанс)
 
 ```
-Прочитай ROADMAP.md + memory. Афтернун breakthrough = conditional enriched FTS fallback: +7.21pp v8 Δr@10 estimated. Перевір чи закінчився full-eval (profiles/pay-com/finetune_history/gte_v8_fallback.json). Якщо так — онови ROADMAP з реальними числами замість estimates, потім вирішуй чи треба v12 FT. Якщо ні — подивись progress. Працюй автономно з checkpoints.
+Прочитай ROADMAP.md + memory. Вчорашній breakthrough підтверджений: conditional enriched FTS fallback дає +5.09pp v8 Δr@10 (PROMOTE) на повному eval. Canonical baseline тепер 0.7112. Вибір наступного кроку: (1) Task D labeling — 400 queries готові у sampled.jsonl; (2) v12 FT з новим baseline; (3) runtime query expansion; (4) запусти critic agents. Працюй автономно з checkpoints.
 ```

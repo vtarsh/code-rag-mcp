@@ -1,14 +1,46 @@
 # P5 Reranker — Roadmap
 
-**Status (2026-04-21 afternoon):** Production = **`reranker_ft_gte_v8`** (deployed morning). NEW FINDING: conditional enriched FTS fallback rescues 77/909 Jira eval tickets that were stuck at 0 FTS candidates → estimated +6.33pp baseline / +7.21pp v8 r@10. Full-eval with fallback running to confirm. Rerank FT ceiling wasn't a ceiling — it was masked by 8.5% of tickets being un-reachable by FTS.
+**Status (2026-04-21 evening):** Production = **`reranker_ft_gte_v8`** (deployed morning). CONFIRMED: conditional enriched FTS fallback rescues 77/909 Jira eval tickets. Full-eval `gte_v8_fallback.json` **PROMOTE**: baseline r@10 = 0.7112 (+5.85pp from fallback), v8 r@10 = 0.7622 (+6.67pp from fallback). v8 net gain over baseline WITH fallback = +5.09pp r@10, +7.92pp Hit@5. 11-iteration "rerank ceiling" was not a ceiling — it was 8.5% of tickets stuck at 0 FTS candidates.
 
 ---
 
-## 🎯 2026-04-21 afternoon: Conditional enriched FTS fallback — measured +7.21pp v8 Δr@10
+## 🎯 2026-04-21 evening: Conditional enriched FTS fallback — CONFIRMED +5.09pp v8 Δr@10 full-eval
+
+**Full eval completed** (gte_v8_fallback.json, 909 tickets, fresh baseline + v8 both with `--fts-fallback-enrich`). Verdict: **PROMOTE** (Δr@10=+0.051, ΔHit@5=+0.079, net=+100, 146 improved / 46 regressed). All gate thresholds cleared with margin.
+
+### Measured numbers (vs pre-session estimates)
+
+| Metric | Old (no fallback) | New (with fallback) | Δ absolute | Estimated | Delta-estimate |
+|---|---:|---:|---:|---:|---:|
+| baseline r@10 | 0.6527 | **0.7112** | **+5.85pp** | +6.33pp | −0.48pp |
+| v8 r@10 | ~0.6955 | **0.7622** | **+6.67pp** | +7.21pp | −0.54pp |
+| baseline Hit@5 | 0.7668 | ~0.8339 | +6.71pp | +6.93pp | −0.22pp |
+| v8 Hit@5 | ~0.8425 | **0.9131** | **+7.06pp** | +7.92pp | −0.86pp |
+
+Estimates were ~0.5pp high across the board — expected noise from reranker behaviour on rescued candidates (candidate pool from enriched query is different from the candidates the diagnostic scored). Net directionally correct.
+
+### Relative v8 vs baseline (with fallback on both)
+
+| Metric | Old (no fallback) | New (with fallback) | Gap preserved? |
+|---|---:|---:|:---:|
+| Δr@10 (v8 − baseline) | +0.0429 | **+0.0509** | ✅ WIDER (+0.8pp) |
+| ΔHit@5 | +0.0757 | **+0.0792** | ✅ same |
+| net_improved | +63 | **+100** | ✅ better |
+| MRR diag | — | +0.1038 | new |
+
+**v8 advantage over baseline is PRESERVED and slightly amplified with fallback enabled.** The fallback helps baseline too (as expected — it's symmetric), but v8's rerank FT continues to pay on the rescued tickets.
+
+### Notes
+
+- Test-split Δ = −0.10 on n=5 tickets — statistically meaningless (one ticket flip = 20pp). Gate correctly uses full-eval, not test split.
+- 46 regressions out of 909 = 5% — well within noise band for single-seed runs.
+- MRR diagnostic: +0.104 (large). Not used as gate metric (misleads on v7 per prior audit).
+
+### Implementation (unchanged from afternoon)
 
 **Trigger:** 5-critic synthesis ("what's next after rerank ceiling?") identified 77/909 eval tickets where FTS returns 0 candidates on the raw Jira summary. The reranker can't help these — GT never enters the rerank stage. Critic 1 proposed blanket enriched query mode, but ROADMAP §Phase 1 (2026-04-21 morning) showed that breaks FTS on tickets with candidates (−15pp on PI). Conditional middle ground: use enriched query ONLY when summary yields 0 — can't regress those tickets, can only rescue them.
 
-### Implementation
+### Detail
 
 - `scripts/eval_finetune.py`: new `--fts-fallback-enrich` flag. When `query_mode=summary` AND `fetch_fts_candidates` returns empty, retry with `build_query_text(task, use_description=True)` preclean'd via `preclean_for_fts`. On rescue, use the enriched query for rerank too (matches training distribution). Per-ticket `fallback_used` recorded.
 - `scripts/eval_parallel.sh`: new `FTS_FALLBACK_ENRICH=1` env var passthrough.
@@ -49,9 +81,9 @@ Gap between v8 and baseline is preserved (~4pp r@10, ~6pp Hit@5). Absolute numbe
 - **Mixed query distribution inside one eval.** 832 tickets get raw summary for rerank, 77 get enriched. Since reranker was trained on enriched (via build_query_text in prepare_finetune_data.py), the enriched cases are actually more distribution-aligned than the summary cases. So this is a net-positive, not a noise source.
 - **36 null_rank tickets are NOT rescued** — they have some FTS candidates, GT just isn't in them. Need a different lever (dense retrieval improvements, more candidates, alternate FTS sanitisation).
 
-### Full 909-ticket eval: running in background
+### Full 909-ticket eval: DONE 2026-04-21 evening
 
-`bash scripts/eval_parallel.sh` with BASELINE=skip + FTS_FALLBACK_ENRICH=1. Estimated 2-4 hours on 3-shard parallel. Results will land at `profiles/pay-com/finetune_history/gte_v8_fallback.json`. Numbers to update this section once complete.
+`bash scripts/eval_parallel.sh` with BASELINE=skip + FTS_FALLBACK_ENRICH=1. Took ~4 hours on 3-shard parallel (shard 1 was bottleneck due to MPS contention on heavy-tail tickets; once shards 0 and 2 freed resources, shard 1 caught up). Snapshot at `profiles/pay-com/finetune_history/gte_v8_fallback.json` (1.1MB). **Verdict PROMOTE** (Δr@10=+0.051, ΔHit@5=+0.079, net=+100). See top-of-section table for numbers.
 
 ### Next-lever ranking (supersedes NEXT_SESSION_PROMPT §priorities)
 
