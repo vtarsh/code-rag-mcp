@@ -81,7 +81,8 @@ def section_bulk_providers(ctx: AnalysisContext) -> str:
         return ""
 
     output = f"## Bulk Provider Change ({len(routed)} providers)\n\n"
-    output += "_Task targets all providers — listing all routed repos:_\n\n"
+    if not ctx.brief:
+        output += "_Task targets all providers — listing all routed repos:_\n\n"
     for r in routed:
         ctx.findings.append(Finding("provider", r["target"], "high"))
         output += f"  - **{r['target']}**\n"
@@ -107,6 +108,12 @@ def section_provider(ctx: AnalysisContext) -> str:
         method_names = [Path(m["file_path"]).stem for m in methods]
         output += f"**{repo_name}** ({repo['type']})\n  Methods: {', '.join(method_names)}\n\n"
         ctx.findings.append(Finding("provider", repo_name, "high"))
+
+        # In brief mode, skip the per-keyword FTS snippet dump — the method
+        # list above is the main signal; snippets are secondary grep-fodder
+        # that bloat the response.
+        if ctx.brief:
+            continue
 
         for keyword in ctx.words:
             if len(keyword) > 4 and keyword not in _KEYWORD_STOP_WORDS:
@@ -152,6 +159,29 @@ def section_webhooks(ctx: AnalysisContext) -> str:
         return ""
 
     output = "## 3. Webhook Handling\n\n"
+    # In brief mode, list files without FTS snippets — repo + path is
+    # enough for sub-agents to locate the file; the 100+ char snippet per
+    # line is mostly noise for this section.
+    if ctx.brief:
+        webhook_chunks = ctx.conn.execute(
+            "SELECT DISTINCT repo_name, file_path "
+            "FROM chunks WHERE chunks MATCH ? AND repo_name LIKE '%webhook%' ORDER BY rank LIMIT 10",
+            (f'"{ctx.provider}"',),
+        ).fetchall()
+        if not webhook_chunks:
+            return output + "No webhook handling found for this provider.\n\n"
+
+        repos_seen: set[str] = set()
+        for row in webhook_chunks:
+            rname = row["repo_name"]
+            if rname not in repos_seen:
+                repos_seen.add(rname)
+                output += f"**{rname}**\n"
+                ctx.findings.append(Finding("webhook", rname, "high"))
+            output += f"  `{row['file_path']}`\n"
+        output += "\n"
+        return output
+
     webhook_chunks = ctx.conn.execute(
         "SELECT repo_name, file_path, snippet(chunks, 0, '>>>', '<<<', '...', 25) as snippet "
         "FROM chunks WHERE chunks MATCH ? AND repo_name LIKE '%webhook%' ORDER BY rank LIMIT 10",
@@ -185,10 +215,25 @@ def section_impact(ctx: AnalysisContext) -> str:
             "SELECT target, edge_type FROM graph_edges WHERE source = ? AND target NOT LIKE 'pkg:%'", (repo_name,)
         ).fetchall()
         if deps:
-            output += f"**{repo_name}** depends on:\n"
-            for d in deps:
-                output += f"  - {d['target']} ({d['edge_type']})\n"
-            output += "\n"
+            # In brief mode, filter out tooling/infra proto-message entries
+            # (msg:..., envoy.*, opencensus.*) that are noise for change impact.
+            if ctx.brief:
+                filtered = [
+                    d for d in deps
+                    if not d["target"].startswith("msg:")
+                    and d["edge_type"] not in ("npm_dep_tooling", "proto_message_usage")
+                ]
+                if not filtered:
+                    continue
+                output += f"**{repo_name}** depends on:\n"
+                for d in filtered:
+                    output += f"  - {d['target']} ({d['edge_type']})\n"
+                output += "\n"
+            else:
+                output += f"**{repo_name}** depends on:\n"
+                for d in deps:
+                    output += f"  - {d['target']} ({d['edge_type']})\n"
+                output += "\n"
     return output
 
 
@@ -199,6 +244,12 @@ def section_change_impact(ctx: AnalysisContext) -> str:
 
     output = "## 9. Change Impact (Method Consumers)\n\n"
     provider_repos = [f.repo for f in ctx.findings if f.ftype == "provider"]
+
+    # The gw_callers list depends on GATEWAY_REPO, not on the provider repo —
+    # so in non-brief mode it's emitted identically under every provider. In
+    # brief mode, emit it once (after all direct consumers) and list which
+    # providers are routed via the gateway.
+    brief_gateway_providers: list[str] = []
 
     for repo in provider_repos:
         consumers = ctx.conn.execute(
@@ -226,16 +277,35 @@ def section_change_impact(ctx: AnalysisContext) -> str:
                 (GATEWAY_REPO, repo),
             ).fetchall()
             if gateway_routes:
-                gw_callers = ctx.conn.execute(
-                    """SELECT DISTINCT source, detail FROM graph_edges
-                       WHERE target = ? AND edge_type = 'grpc_method_call'""",
-                    (GATEWAY_REPO,),
-                ).fetchall()
-                if gw_callers:
-                    output += f"**{repo}** via gateway ({GATEWAY_REPO}):\n"
-                    for gc in gw_callers[:10]:
-                        output += f"  - {gc['source']}: {gc['detail']}\n"
-                    output += "\n"
+                if ctx.brief:
+                    brief_gateway_providers.append(repo)
+                else:
+                    gw_callers = ctx.conn.execute(
+                        """SELECT DISTINCT source, detail FROM graph_edges
+                           WHERE target = ? AND edge_type = 'grpc_method_call'""",
+                        (GATEWAY_REPO,),
+                    ).fetchall()
+                    if gw_callers:
+                        output += f"**{repo}** via gateway ({GATEWAY_REPO}):\n"
+                        for gc in gw_callers[:10]:
+                            output += f"  - {gc['source']}: {gc['detail']}\n"
+                        output += "\n"
+
+    # Brief mode: emit gateway consumers once, with the list of providers
+    # routed through the gateway. Same information, ~75% less output for
+    # multi-provider bulk tasks.
+    if ctx.brief and brief_gateway_providers and GATEWAY_REPO:
+        gw_callers = ctx.conn.execute(
+            """SELECT DISTINCT source, detail FROM graph_edges
+               WHERE target = ? AND edge_type = 'grpc_method_call'""",
+            (GATEWAY_REPO,),
+        ).fetchall()
+        if gw_callers:
+            providers_str = ", ".join(f"**{p}**" for p in brief_gateway_providers)
+            output += f"**Via gateway ({GATEWAY_REPO})** for {providers_str}:\n"
+            for gc in gw_callers[:10]:
+                output += f"  - {gc['source']}: {gc['detail']}\n"
+            output += "\n"
 
     if WEBHOOK_REPOS:
         dispatch_repo = WEBHOOK_REPOS.get("dispatch", "")
@@ -413,11 +483,12 @@ def section_provider_checklist(ctx: AnalysisContext) -> str:
 
     if critical_items:
         output += "### ⚠️ Critical for this task (keyword-matched)\n\n"
-        output += (
-            "_Keyword triggers for these repos fired against the task description. "
-            "Read them BEFORE designing your solution — skipping leads to reinventing "
-            "existing infrastructure (token storage, vault flows, verification pipelines)._\n\n"
-        )
+        if not ctx.brief:
+            output += (
+                "_Keyword triggers for these repos fired against the task description. "
+                "Read them BEFORE designing your solution — skipping leads to reinventing "
+                "existing infrastructure (token storage, vault flows, verification pipelines)._\n\n"
+            )
         for item, matched in critical_items:
             output += _render(item, show_note=True, matched_triggers=matched)
         if ctx.provider:

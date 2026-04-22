@@ -63,8 +63,8 @@ def summary(calls: list[dict]) -> None:
     all_tools = {
         "search", "find_dependencies", "trace_impact", "trace_flow",
         "trace_chain", "trace_field", "repo_overview", "list_repos",
-        "analyze_task", "context_builder", "health_check", "visualize_graph",
-        "diff_provider_config", "search_task_history",
+        "analyze_task", "context_builder", "health_check",
+        "trace_internal", "provider_type_map",
     }
     never_used = all_tools - set(tool_counts.keys())
     if never_used:

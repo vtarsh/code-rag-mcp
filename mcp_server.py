@@ -115,7 +115,14 @@ def _call_daemon(tool_name: str, args: dict) -> str:
 
 
 @mcp.tool()
-def search(query: str, repo: str = "", file_type: str = "", exclude_file_types: str = "", limit: int = 10) -> str:
+def search(
+    query: str,
+    repo: str = "",
+    file_type: str = "",
+    exclude_file_types: str = "",
+    limit: int = 10,
+    brief: bool = False,
+) -> str:
     """Search the knowledge base using keyword + semantic hybrid search.
 
     Works for both keyword queries ("settlement account", "webhook callback")
@@ -129,6 +136,9 @@ def search(query: str, repo: str = "", file_type: str = "", exclude_file_types: 
         file_type: Optional - filter by type: proto, docs, config, env, k8s, grpc_method, library, workflow, ci, gotchas
         exclude_file_types: Optional - comma-separated file types to exclude from results (e.g. "gotchas,task")
         limit: Max results to return (default 10, max 20)
+        brief: When True, drop "Found N of M candidates for 'query'" header
+            (re-echoes query), strip >>><<< highlight markers, and drop
+            [keyword+vector] source tags. Default False preserves current output.
     """
     return _call_daemon(
         "search",
@@ -138,12 +148,13 @@ def search(query: str, repo: str = "", file_type: str = "", exclude_file_types: 
             "file_type": file_type,
             "exclude_file_types": exclude_file_types,
             "limit": limit,
+            "brief": brief,
         },
     )
 
 
 @mcp.tool()
-def trace_impact(repo_name: str = "", max_depth: int = 2, target: str = "") -> str:
+def trace_impact(repo_name: str, max_depth: int = 2) -> str:
     """Trace transitive impact: which repos depend on this one (transitively).
 
     For "what breaks if I change repo X" analysis before PRs. Also replaces the
@@ -152,10 +163,8 @@ def trace_impact(repo_name: str = "", max_depth: int = 2, target: str = "") -> s
     Args:
         repo_name: Repo to trace impact from (e.g., "providers-proto", "node-libs-types")
         max_depth: How many levels deep to trace (default 2, max 4). Use 1 for direct deps only.
-        target: Deprecated alias for repo_name (keeps old callers working).
     """
-    effective = repo_name or target
-    return _call_daemon("trace_impact", {"repo_name": effective, "max_depth": max_depth})
+    return _call_daemon("trace_impact", {"repo_name": repo_name, "max_depth": max_depth})
 
 
 @mcp.tool()
@@ -213,19 +222,24 @@ def repo_overview(repo_name: str) -> str:
 
 
 @mcp.tool()
-def list_repos(type: str = "", has_dep: str = "", limit: int = 30) -> str:
+def list_repos(type: str = "", has_dep: str = "", limit: int = 30, include_deps: bool = False) -> str:
     """List repos filtered by type or dependency.
 
     Args:
         type: Filter by repo type: grpc-service-js, grpc-service-ts, temporal-workflow, library, boilerplate, node-service, ci-actions, gitops
         has_dep: Filter repos that depend on this package (e.g., "providers-proto", "types", "temporal")
         limit: Max results (default 30)
+        include_deps: When True (or when has_dep is set), append "— N org deps"
+            count to each row. Default False drops the suffix.
     """
-    return _call_daemon("list_repos", {"type": type, "has_dep": has_dep, "limit": limit})
+    return _call_daemon(
+        "list_repos",
+        {"type": type, "has_dep": has_dep, "limit": limit, "include_deps": include_deps},
+    )
 
 
 @mcp.tool()
-def analyze_task(description: str, provider: str = "") -> str:
+def analyze_task(description: str, provider: str = "", exclude_task_id: str = "", brief: bool = False) -> str:
     """FIRST TOOL for any review/audit/investigation task. Returns relevant repos, files, dependencies, PRs, and a top-of-output SHARED FILE IMPACT warning that names cross-provider consumers of changed files.
 
     Use for review ("did we break X?"), new-feature scoping, and bug investigation.
@@ -235,10 +249,16 @@ def analyze_task(description: str, provider: str = "") -> str:
     Args:
         description: Task description or user's review prompt, verbatim
         provider: Optional provider name to focus on (e.g., "trustly", "paypal")
+        exclude_task_id: Optional task ID to exclude from task_history — used for blind eval.
+        brief: When True, drop repeated preamble/disclaimer prose and echo of
+            description to reduce response size (~40-50%). Section headers and
+            body content preserved. Default False preserves current verbose output.
     """
     return _call_daemon("analyze_task", {
         "description": description,
         "provider": provider,
+        "exclude_task_id": exclude_task_id,
+        "brief": brief,
     })
 
 

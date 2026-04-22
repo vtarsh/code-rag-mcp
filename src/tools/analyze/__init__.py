@@ -308,38 +308,65 @@ def _section_npm_dep_scan(ctx: AnalysisContext) -> str:
         ctx.findings.append(Finding("npm_dep_scan", repo, "low"))
 
     output = "## npm Dependency Scan\n\n"
-    output += (
-        "_Shared libraries with task-keyword matches (via npm_dep edges, ranked by distinct matched keywords):_\n\n"
-    )
+    if not ctx.brief:
+        output += (
+            "_Shared libraries with task-keyword matches (via npm_dep edges, ranked by distinct matched keywords):_\n\n"
+        )
     for repo, (via, kws) in shown:
         kws_str = ", ".join(f"`{k}`" for k in kws[:3])
         more = f" (+{len(kws) - 3})" if len(kws) > 3 else ""
         output += f"  - **{repo}** — {kws_str}{more} found (dep of {via})\n"
     if hidden:
-        output += f"\n<details>\n<summary>…and {len(hidden)} more (collapsed)</summary>\n\n"
-        for repo, (via, kws) in hidden:
-            kws_str = ", ".join(f"`{k}`" for k in kws[:3])
-            more = f" (+{len(kws) - 3})" if len(kws) > 3 else ""
-            output += f"  - **{repo}** — {kws_str}{more} found (dep of {via})\n"
-        output += "\n</details>\n"
+        if ctx.brief:
+            # Sub-agents don't render <details>/<summary> — and the hidden
+            # entries are low-confidence per-repo noise. Just show a name list.
+            hidden_names = ", ".join(f"**{r}**" for r, _ in hidden[:30])
+            output += f"\n…and {len(hidden)} more: {hidden_names}"
+            if len(hidden) > 30:
+                output += f" (+{len(hidden) - 30} more)"
+            output += "\n"
+        else:
+            output += f"\n<details>\n<summary>…and {len(hidden)} more (collapsed)</summary>\n\n"
+            for repo, (via, kws) in hidden:
+                kws_str = ", ".join(f"`{k}`" for k in kws[:3])
+                more = f" (+{len(kws) - 3})" if len(kws) > 3 else ""
+                output += f"  - **{repo}** — {kws_str}{more} found (dep of {via})\n"
+            output += "\n</details>\n"
     output += "\n"
     return output
 
 
 @require_db
-def analyze_task_tool(description: str, provider: str = "", exclude_task_id: str = "") -> str:
+def analyze_task_tool(
+    description: str,
+    provider: str = "",
+    exclude_task_id: str = "",
+    brief: bool = False,
+) -> str:
     """Analyze a development task and find ALL relevant repos, files, and dependencies.
 
     Args:
         description: Task description (e.g., "implement DirectDebitMandate verification for Trustly")
         provider: Optional provider name to focus on (e.g., "trustly", "paypal")
         exclude_task_id: Optional task ID to exclude from task_history lookups (for blind eval)
+        brief: When True, drop repeated preamble/disclaimer prose and echo of task
+            description to reduce response size (~50%). Section headers and body
+            content preserved. Default False preserves current verbose output.
     """
     with db_connection() as conn:
-        return _analyze_task_impl(conn, description, provider, exclude_task_id=exclude_task_id)
+        return _analyze_task_impl(
+            conn, description, provider, exclude_task_id=exclude_task_id, brief=brief
+        )
 
 
-def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str, *, exclude_task_id: str = "") -> str:
+def _analyze_task_impl(
+    conn: sqlite3.Connection,
+    description: str,
+    provider: str,
+    *,
+    exclude_task_id: str = "",
+    brief: bool = False,
+) -> str:
     """Orchestrate task analysis. Dispatches to shared + domain-specific sections."""
     import sys
 
@@ -363,6 +390,7 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
         words=words,
         provider=provider,
         exclude_task_id=exclude_task_id,
+        brief=brief,
     )
 
     # Track section failures for end-of-output warning
@@ -380,7 +408,11 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
     # Extract repo names from GitHub URLs and description text
     repo_refs_output = _run_section("repo_refs", _extract_repo_refs, ctx)
 
-    header = f"# Task Analysis\n\n**Task**: {description}\n"
+    header = "# Task Analysis\n\n"
+    if not brief:
+        # Echoes the description (already present in caller's tool-call args).
+        # Dropped in brief mode to save tokens.
+        header += f"**Task**: {description}\n"
     header += f"**Domain**: {classification.domain}"
     if classification.confidence > 0:
         header += f" ({classification.confidence:.0%} confidence)"
@@ -503,4 +535,11 @@ def _analyze_task_impl(conn: sqlite3.Connection, description: str, provider: str
     summary = f"**Repos found**: {n_core} core + {n_related} related + {n_peripheral} peripheral"
     header = header.replace("SUMMARY_PLACEHOLDER", summary)
 
-    return header + output
+    final = header + output
+
+    if brief:
+        # Strip FTS highlight markers (>>><<<) — sub-agents don't render markdown
+        # emphasis from them, they're just noise. Same rationale as search(brief=True).
+        final = final.replace(">>>", "").replace("<<<", "")
+
+    return final

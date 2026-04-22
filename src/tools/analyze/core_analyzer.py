@@ -108,10 +108,11 @@ def run_async_chain_anchor(ctx: AnalysisContext) -> str:
         return ""
 
     output = "## Async-chain Anchor\n\n"
-    output += (
-        f"_Task mentions async-flow triggers ({', '.join(matched_triggers)}); "
-        "injecting async completion / webhook / CDC repos for recall:_\n\n"
-    )
+    if not ctx.brief:
+        output += (
+            f"_Task mentions async-flow triggers ({', '.join(matched_triggers)}); "
+            "injecting async completion / webhook / CDC repos for recall:_\n\n"
+        )
     for repo in added:
         output += f"  - **{repo}**\n"
     output += "\n"
@@ -350,19 +351,27 @@ def _section_cascade(ctx: AnalysisContext, classification: TaskClassification) -
 
     # Format upstream output
     if all_affected:
-        output += "_Upstream (repos that depend on seeds):_\n\n"
+        if not ctx.brief:
+            output += "_Upstream (repos that depend on seeds):_\n\n"
+        else:
+            output += "### Upstream\n"
         by_edge: dict[str, list[tuple[str, str]]] = {}
         for repo, (seed, etype) in all_affected.items():
             by_edge.setdefault(etype, []).append((repo, seed))
         for etype, repos in sorted(by_edge.items(), key=lambda x: len(x[1]), reverse=True):
             output += f"**{etype}** ({len(repos)} repos):\n"
+            # In brief mode, show fewer detailed entries and widen the
+            # overflow summary — the full list is already captured in
+            # ctx.findings for the Completeness Report downstream.
+            detail_limit = 5 if ctx.brief else 15
+            overflow_limit = 40 if ctx.brief else 20
             for i, (repo, seed) in enumerate(sorted(repos)):
                 ctx.findings.append(Finding("cascade", repo, "medium"))
-                if i < 15:
+                if i < detail_limit:
                     output += f"  - **{repo}** (via {seed})\n"
-            if len(repos) > 15:
-                overflow = [f"**{r}**" for r, _ in sorted(repos)[15:]]
-                output += f"  - ... and {len(overflow)} more: {', '.join(overflow[:20])}\n"
+            if len(repos) > detail_limit:
+                overflow = [f"**{r}**" for r, _ in sorted(repos)[detail_limit:]]
+                output += f"  - ... and {len(overflow)} more: {', '.join(overflow[:overflow_limit])}\n"
             output += "\n"
 
     # Format downstream output
@@ -391,20 +400,45 @@ def _section_cascade(ctx: AnalysisContext, classification: TaskClassification) -
             repo: info for repo, info in relevant_hubs.items() if not any(tp in repo for tp in tooling_patterns)
         }
 
-        output += "_Downstream (shared infrastructure seeds depend on):_\n\n"
-        for repo, (seed, etype, in_deg) in sorted(relevant_hubs.items(), key=lambda x: x[1][2], reverse=True)[:15]:
-            ctx.findings.append(Finding("downstream", repo, "medium"))
-            output += f"  - **{repo}** ({in_deg} dependents, via {seed}/{etype})\n"
+        if not ctx.brief:
+            output += "_Downstream (shared infrastructure seeds depend on):_\n\n"
+        else:
+            output += "### Downstream\n"
+        # In brief mode, show only top 5 hubs (non-brief shows 15). The full
+        # list is already populated into findings via the loop below so
+        # Completeness captures them.
+        down_limit = 5 if ctx.brief else 15
+        sorted_hubs = sorted(relevant_hubs.items(), key=lambda x: x[1][2], reverse=True)
+        for i, (repo, (seed, etype, in_deg)) in enumerate(sorted_hubs):
+            if i < down_limit:
+                ctx.findings.append(Finding("downstream", repo, "medium"))
+                output += f"  - **{repo}** ({in_deg} dependents, via {seed}/{etype})\n"
+            elif i < 15:
+                # Legacy non-brief path only added top-15 to findings
+                ctx.findings.append(Finding("downstream", repo, "medium"))
+                if not ctx.brief:
+                    output += f"  - **{repo}** ({in_deg} dependents, via {seed}/{etype})\n"
         output += "\n"
 
     # Phase 3: Reverse cascade (must run after upstream/downstream add to ctx.findings)
     reverse_found = _reverse_cascade(ctx, seed_set, all_affected, downstream_hubs_map)
 
     if reverse_found:
-        output += "_Reverse cascade (targets called/handled by found repos):_\n\n"
-        for repo, (via, etype) in sorted(reverse_found.items()):
+        if not ctx.brief:
+            output += "_Reverse cascade (targets called/handled by found repos):_\n\n"
+        else:
+            output += "### Reverse cascade\n"
+        # In brief mode, cap the inline list at 10 (all still added to findings
+        # so Completeness sees the full set); non-brief shows all.
+        rev_limit = 10 if ctx.brief else None
+        sorted_rev = sorted(reverse_found.items())
+        for i, (repo, (via, etype)) in enumerate(sorted_rev):
             ctx.findings.append(Finding("reverse_cascade", repo, "low"))
-            output += f"  - **{repo}** (via {via}/{etype})\n"
+            if rev_limit is None or i < rev_limit:
+                output += f"  - **{repo}** (via {via}/{etype})\n"
+        if rev_limit is not None and len(sorted_rev) > rev_limit:
+            extras = [r for r, _ in sorted_rev[rev_limit:]]
+            output += f"  - ... and {len(extras)} more: {', '.join(f'**{r}**' for r in extras[:15])}\n"
         output += "\n"
 
     total = len(all_affected) + len(downstream_hubs_map) + len(reverse_found)
