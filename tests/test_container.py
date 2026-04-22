@@ -3,6 +3,7 @@
 import os
 import sqlite3
 import tempfile
+import threading
 from pathlib import Path
 from unittest.mock import patch
 
@@ -39,6 +40,80 @@ class TestGetDb:
                 assert row["col1"] == "hello"
                 assert row["col2"] == 42
                 conn.close()
+        finally:
+            os.unlink(tmp_path)
+
+
+class TestWalPragmaThreadSafety:
+    def test_wal_pragma_thread_safe(self):
+        """Run get_db() from 10 threads concurrently; the WAL pragma branch
+        must execute exactly once (i.e. `_wal_set` flips True once, not N
+        times), proving the check-then-act is guarded by the module lock."""
+        import src.container as container_mod
+        from src.container import get_db
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            tmp_path = Path(f.name)
+        try:
+            # sqlite3.Connection is a C type and its `execute` is immutable,
+            # so we cannot monkey-patch it directly. Instead, wrap
+            # sqlite3.connect and count WAL-pragma invocations on the
+            # returned connection via an __getattribute__-backed proxy.
+            pragma_runs = {"count": 0}
+            pragma_lock = threading.Lock()
+            real_connect = sqlite3.connect
+
+            class _Proxy:
+                def __init__(self, conn: sqlite3.Connection) -> None:
+                    object.__setattr__(self, "_conn", conn)
+
+                def execute(self, sql, *args, **kwargs):
+                    if isinstance(sql, str) and "journal_mode=WAL" in sql:
+                        with pragma_lock:
+                            pragma_runs["count"] += 1
+                    return self._conn.execute(sql, *args, **kwargs)
+
+                def __getattr__(self, name: str):
+                    return getattr(self._conn, name)
+
+                def __setattr__(self, name: str, value) -> None:
+                    setattr(self._conn, name, value)
+
+            def wrapped_connect(*args, **kwargs):
+                return _Proxy(real_connect(*args, **kwargs))
+
+            barrier = threading.Barrier(10)
+            conns: list = []
+            conns_lock = threading.Lock()
+            errors: list[BaseException] = []
+
+            def worker() -> None:
+                try:
+                    barrier.wait()
+                    c = get_db()
+                    with conns_lock:
+                        conns.append(c)
+                except BaseException as e:
+                    errors.append(e)
+
+            with (
+                patch.object(container_mod, "DB_PATH", tmp_path),
+                patch.object(container_mod, "_wal_set", False),
+                patch("src.container.sqlite3.connect", side_effect=wrapped_connect),
+            ):
+                threads = [threading.Thread(target=worker) for _ in range(10)]
+                for t in threads:
+                    t.start()
+                for t in threads:
+                    t.join()
+
+                assert not errors, f"worker errors: {errors}"
+                assert container_mod._wal_set is True
+                # Exactly one thread should have executed the WAL pragma.
+                assert pragma_runs["count"] == 1, f"expected WAL pragma to run once, got {pragma_runs['count']}"
+
+            for c in conns:
+                c.close()
         finally:
             os.unlink(tmp_path)
 
