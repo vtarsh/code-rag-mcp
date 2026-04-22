@@ -26,16 +26,23 @@ _UPPER_IDENT_RE = re.compile(r"\b[A-Z][A-Z0-9_]{2,}\b")
 def extract_upper_idents(query: str) -> list[str]:
     """Extract UPPERCASE identifiers from a query.
 
-    Returns deduplicated list preserving first-occurrence order. Single
-    short acronyms (URL, API, TLS) still match; downstream LIKE-search over
-    env_vars naturally deprioritizes them by returning many rows per match.
+    Returns deduplicated list preserving first-occurrence order. Filters out
+    short generic acronyms (URL, API, TLS, HTTP, JSON, HTML, XML, ...) that
+    would otherwise trigger repo boost on every web/config query — a match
+    requires an underscore or digit, OR length >= 5.
     """
     seen: set[str] = set()
     idents: list[str] = []
     for match in _UPPER_IDENT_RE.findall(query or ""):
-        if match not in seen:
-            seen.add(match)
-            idents.append(match)
+        if match in seen:
+            continue
+        has_separator = "_" in match or any(c.isdigit() for c in match)
+        # Skip 3-char generic acronyms (URL/API/TLS/XML/SQL/...) that would
+        # spray env_var boost across every config/web query.
+        if not has_separator and len(match) < 4:
+            continue
+        seen.add(match)
+        idents.append(match)
     return idents
 
 
