@@ -16,14 +16,8 @@ from __future__ import annotations
 import os
 import re
 
-# A/B investigation env gates (post-P0a hybrid eval found 103 tickets lose GT
-# repos vs fts_only+fallback). Default 0 = production behaviour unchanged.
-# Set =1 in eval runs to isolate whether penalties or code_facts/env_vars are
-# responsible for the regression.
-_DISABLE_PENALTIES = os.getenv("CODE_RAG_DISABLE_PENALTIES", "0") == "1"
-_DISABLE_CODE_FACTS = os.getenv("CODE_RAG_DISABLE_CODE_FACTS", "0") == "1"
-
 from src.config import (
+    CI_PENALTY,
     CODE_FACT_BOOST,
     CODE_FACT_INJECT_WEIGHT,
     DICTIONARY_BOOST,
@@ -43,6 +37,13 @@ from src.search.env_vars import env_var_search
 from src.search.fts import fts_search
 from src.search.vector import vector_search
 
+# A/B investigation env gates (post-P0a hybrid eval found 103 tickets lose GT
+# repos vs fts_only+fallback). Default 0 = production behaviour unchanged.
+# Set =1 in eval runs to isolate whether penalties or code_facts/env_vars are
+# responsible for the regression.
+_DISABLE_PENALTIES = os.getenv("CODE_RAG_DISABLE_PENALTIES", "0") == "1"
+_DISABLE_CODE_FACTS = os.getenv("CODE_RAG_DISABLE_CODE_FACTS", "0") == "1"
+
 # File types considered "documentation-like" — penalized unless query asks for docs.
 # Matches user spec (P4.1): doc/task/gotchas/reference. Extended with dictionary,
 # provider_doc, and flow_annotation because in practice these are derived-knowledge
@@ -52,17 +53,31 @@ _DOC_FILE_TYPES: frozenset[str] = frozenset(
 )
 
 # Regex patterns for path-based classification. Compiled once at import.
-_TEST_PATH_RE = re.compile(
-    r"(?:\.spec\.(?:js|ts|tsx|jsx)$|\.test\.(?:js|ts|tsx|jsx|py)$|_test\.py$|/tests?/)"
-)
+_TEST_PATH_RE = re.compile(r"(?:\.spec\.(?:js|ts|tsx|jsx)$|\.test\.(?:js|ts|tsx|jsx|py)$|_test\.py$|/tests?/)")
 _GUIDE_PATH_RE = re.compile(
     r"(?:/AI-CODING-GUIDE\.md$|/CLAUDE\.md$|/README\.md$|^AI-CODING-GUIDE\.md$|^CLAUDE\.md$|^README\.md$)",
     re.IGNORECASE,
 )
+# P1c 2026-04-22: CI/deploy yaml files are neither docs nor service code. v8
+# FT reranker systematically surfaces them on short repo queries (e.g. "ach
+# provider service integration repo" -> 5x workflow-ach-*::ci/deploy.yml).
+# Treat them as doc-level noise on code-intent queries.
+_CI_PATH_RE = re.compile(
+    r"(?:^|/)(?:ci/deploy\.ya?ml|k8s/\.github/workflows/)",
+    re.IGNORECASE,
+)
 
-# Query keywords that disable penalties (user explicitly asked for docs/tests).
+# Query keywords that disable penalties (user explicitly asked for docs/tests
+# or for a named doc artifact). P1c 2026-04-22: extended with doc-artifact
+# tokens (checklist/framework/matrix/severity/sandbox/overview/reference/rules)
+# after Opus-judge pass showed 11 of 19 base-win pairs failed on these tokens
+# because v8's doc-penalty demoted the exact doc file the user asked for.
 _DOC_QUERY_RE = re.compile(
-    r"\b(test|tests|spec|specs|docs?|documentation|readme|guide|guides|tutorial)\b",
+    r"\b("
+    r"test|tests|spec|specs|"
+    r"docs?|documentation|readme|guide|guides|tutorial|"
+    r"checklist|framework|matrix|severity|sandbox|overview|reference|rules"
+    r")\b",
     re.IGNORECASE,
 )
 
@@ -78,7 +93,10 @@ def _classify_penalty(file_type: str, file_path: str) -> float:
     Priority order (strongest penalty wins):
       1. Guide-like paths (AI-CODING-GUIDE.md / CLAUDE.md / README.md) -> GUIDE_PENALTY
       2. Test paths (*.spec.js, *.test.py, /tests/...) -> TEST_PENALTY
-      3. Doc-ish file_type (doc, task, gotchas, reference) -> DOC_PENALTY
+      3. CI yaml paths (ci/deploy.yml, k8s/.github/workflows/*) -> CI_PENALTY
+         (stronger than DOC_PENALTY — v8 surfaces 5+ CI files on short repo
+         queries, and DOC_PENALTY=0.15 was insufficient on pair #2).
+      4. Doc-ish file_type (doc, task, gotchas, reference) -> DOC_PENALTY
     Returns 0.0 for production code (unchanged).
 
     Eval A/B: CODE_RAG_DISABLE_PENALTIES=1 short-circuits to 0.0 so penalties
@@ -91,6 +109,8 @@ def _classify_penalty(file_type: str, file_path: str) -> float:
         return GUIDE_PENALTY
     if _TEST_PATH_RE.search(path):
         return TEST_PENALTY
+    if _CI_PATH_RE.search(path):
+        return CI_PENALTY
     if (file_type or "") in _DOC_FILE_TYPES:
         return DOC_PENALTY
     return 0.0
