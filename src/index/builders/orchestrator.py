@@ -394,11 +394,11 @@ def build_index():
 
         conn.commit()
 
-    # Optimize FTS
+    # Optimize FTS — canonical 2-column form. The prior 8-column form was
+    # misinterpreted by SQLite as a plain row insert, creating a garbage row
+    # with content='' every build (P1 from 13-agent audit 2026-04-22).
     print("Optimizing FTS index...")
-    conn.execute(
-        "INSERT INTO chunks(chunks, rank, content, repo_name, file_path, file_type, chunk_type, language) VALUES('optimize', '', '', '', '', '', '', '')"
-    )
+    conn.execute("INSERT INTO chunks(chunks) VALUES('optimize')")
     conn.commit()
     conn.close()
 
