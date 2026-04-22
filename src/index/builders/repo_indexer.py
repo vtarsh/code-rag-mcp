@@ -109,7 +109,13 @@ def index_repo(conn: sqlite3.Connection, repo_name: str, meta: dict) -> tuple[in
                     source = file_path.read_text(encoding="utf-8", errors="replace")
                     facts = extract_code_facts(source, rel_path, repo_name)
                     for fact in facts:
-                        conn.execute(
+                        # Capture cursor-level lastrowid IMMEDIATELY after the
+                        # direct INSERT, passing it explicitly to code_facts_fts.
+                        # Prior form `VALUES(last_insert_rowid(), ...)` read a
+                        # connection-level rowid that could be shifted by FTS5
+                        # triggers on earlier `chunks` inserts (P0 from
+                        # 13-agent audit 2026-04-22).
+                        cur = conn.execute(
                             "INSERT INTO code_facts(repo_name, file_path, function_name, fact_type, "
                             "condition, message, line_number, raw_snippet) "
                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -124,12 +130,13 @@ def index_repo(conn: sqlite3.Connection, repo_name: str, meta: dict) -> tuple[in
                                 fact["raw_snippet"],
                             ),
                         )
-                        # Also insert into FTS5 for searchability
+                        code_fact_id = cur.lastrowid
                         conn.execute(
                             "INSERT INTO code_facts_fts(rowid, repo_name, file_path, function_name, "
                             "fact_type, condition, message) "
-                            "VALUES (last_insert_rowid(), ?, ?, ?, ?, ?, ?)",
+                            "VALUES (?, ?, ?, ?, ?, ?, ?)",
                             (
+                                code_fact_id,
                                 fact["repo_name"],
                                 fact["file_path"],
                                 fact["function_name"],
