@@ -89,13 +89,53 @@ class TestHybridSearch:
     @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
     @patch("src.search.hybrid.vector_search")
     @patch("src.search.hybrid.fts_search")
-    def test_rrf_fusion_merges_sources(self, mock_fts, mock_vec, mock_rerank):
-        mock_fts.return_value = [_make_sr(42)]
-        mock_vec.return_value = ([_make_vr(42)], None)
+    def test_rrf_fusion_records_both_sources(self, mock_fts, mock_vec, mock_rerank):
+        """P0 2026-04-22: Same rowid=42 from FTS and vector no longer merges
+        into one record. They are kept as distinct entries in the pool.
+        """
+        mock_fts.return_value = [_make_sr(42, repo="repo-a")]
+        mock_vec.return_value = ([_make_vr(42, repo="repo-b")], None)
         results, _err, total = hybrid_search("overlapping")
-        assert total == 1
-        assert "keyword" in results[0]["sources"]
-        assert "vector" in results[0]["sources"]
+        # Two distinct records (not merged into one).
+        assert total == 2
+        repos_seen = {r["repo_name"] for r in results}
+        assert repos_seen == {"repo-a", "repo-b"}
+
+    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
+    @patch("src.search.hybrid.vector_search")
+    @patch("src.search.hybrid.fts_search")
+    def test_rrf_rowid_collision_kept_distinct(self, mock_fts, mock_vec, mock_rerank):
+        """P0 2026-04-22 regression: FTS5 and LanceDB rowid spaces are
+        independent. Before the fix, rowid=42 from both sources silently
+        merged into one corrupted record (keeping whichever hit arrived
+        first for repo/path/snippet and summing both RRF scores).
+        """
+        # Same rowid, DIFFERENT content across sources.
+        mock_fts.return_value = [_make_sr(42, repo="fts-repo", snippet="fts content")]
+        mock_vec.return_value = ([
+            {
+                "rowid": 42,
+                "repo_name": "vec-repo",
+                "file_path": "src/vec-repo/vec.ts",
+                "file_type": "library",
+                "chunk_type": "function",
+                "content_preview": "vector content",
+            }
+        ], None)
+        results, _err, total = hybrid_search("collision test")
+        # Two records, not one.
+        assert total == 2
+        assert len(results) == 2
+        # Each record keeps its own metadata; no cross-source contamination.
+        by_repo = {r["repo_name"]: r for r in results}
+        assert "fts-repo" in by_repo
+        assert "vec-repo" in by_repo
+        # The fts record has keyword source; the vec record has vector source.
+        assert "keyword" in by_repo["fts-repo"]["sources"]
+        assert "vector" in by_repo["vec-repo"]["sources"]
+        # Cross-contamination would have put both sources on one record.
+        assert "vector" not in by_repo["fts-repo"]["sources"]
+        assert "keyword" not in by_repo["vec-repo"]["sources"]
 
     @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
     @patch("src.search.hybrid.vector_search")
