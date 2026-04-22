@@ -285,11 +285,17 @@ def _pick_siblings(used_by: list, provider: str) -> list[str]:
     return [p for p in _FALLBACK_SIBLINGS if p != provider]
 
 
-def _render_shared_file_warning(matches: list[tuple[str, dict]], provider: str) -> str:
-    """Render the SHARED FILE IMPACT warning block."""
+def _render_shared_file_warning(matches: list[tuple[str, dict]], provider: str, brief: bool = False) -> str:
+    """Render the SHARED FILE IMPACT warning block.
+
+    In brief mode: skip the opening/closing disclaimer prose and the
+    "Run now / Also run / Then search" instructional micro-commands. Keep
+    the data (file path, used_by list, risk, convention, check).
+    """
     out = "## ⚠️ SHARED FILE IMPACT — cross-provider check required\n\n"
-    out += "The following changed files are consumed by multiple providers or follow a shared convention. "
-    out += "Before approving the review or editing further, verify your changes do not break other consumers.\n\n"
+    if not brief:
+        out += "The following changed files are consumed by multiple providers or follow a shared convention. "
+        out += "Before approving the review or editing further, verify your changes do not break other consumers.\n\n"
     for fpath, entry in matches:
         out += f"### `{fpath}`\n"
         used_by = entry.get("used_by", [])
@@ -308,28 +314,30 @@ def _render_shared_file_warning(matches: list[tuple[str, dict]], provider: str) 
         if check:
             out += f"- **Check before edit**: {check}\n"
 
-        # Infer method from file name
-        method = ""
-        for m in ("payout", "sale", "refund", "verification", "capture"):
-            if m in fpath.lower():
-                method = m
-                break
+        if not brief:
+            # Infer method from file name
+            method = ""
+            for m in ("payout", "sale", "refund", "verification", "capture"):
+                if m in fpath.lower():
+                    method = m
+                    break
 
-        # Emit concrete tool calls for siblings (always — use fallback list if needed)
-        siblings = _pick_siblings(used_by, provider)
-        if siblings:
-            primary = siblings[0]
-            secondary = siblings[1] if len(siblings) > 1 else ""
-            if method:
-                out += f"- **Run now**: `provider_type_map(\"{primary}\", \"{method}\", \"fields\")` — compare contract for `{method}` method\n"
-                if secondary:
-                    out += f"- **Also run**: `provider_type_map(\"{secondary}\", \"{method}\", \"fields\")`\n"
-                out += f"- **Then search**: `search(\"{primary} {method} {fpath.split('/')[-1]}\")` — see sibling implementation\n"
-            else:
-                out += f"- **Run now**: `provider_type_map(\"{primary}\", \"\", \"overview\")` — see sibling methods\n"
-                out += f"- **Then search**: `search(\"{primary} {fpath.split('/')[-1]}\")` — see sibling file\n"
+            # Emit concrete tool calls for siblings (always — use fallback list if needed)
+            siblings = _pick_siblings(used_by, provider)
+            if siblings:
+                primary = siblings[0]
+                secondary = siblings[1] if len(siblings) > 1 else ""
+                if method:
+                    out += f"- **Run now**: `provider_type_map(\"{primary}\", \"{method}\", \"fields\")` — compare contract for `{method}` method\n"
+                    if secondary:
+                        out += f"- **Also run**: `provider_type_map(\"{secondary}\", \"{method}\", \"fields\")`\n"
+                    out += f"- **Then search**: `search(\"{primary} {method} {fpath.split('/')[-1]}\")` — see sibling implementation\n"
+                else:
+                    out += f"- **Run now**: `provider_type_map(\"{primary}\", \"\", \"overview\")` — see sibling methods\n"
+                    out += f"- **Then search**: `search(\"{primary} {fpath.split('/')[-1]}\")` — see sibling file\n"
         out += "\n"
-    out += "**Do NOT ship until each sibling has been compared.** Generic review conventions like \"run linter\" do not catch cross-provider regressions — only explicit sibling comparison does.\n\n"
+    if not brief:
+        out += "**Do NOT ship until each sibling has been compared.** Generic review conventions like \"run linter\" do not catch cross-provider regressions — only explicit sibling comparison does.\n\n"
     return out
 
 
@@ -345,14 +353,20 @@ def _is_review_mode(description: str) -> bool:
     return any(k in d for k in _REVIEW_KEYWORDS)
 
 
-def _render_review_mode_reminder(provider: str) -> str:
-    """Top-of-output reminder for review/audit tasks — directs to git diff and sibling comparison."""
+def _render_review_mode_reminder(provider: str, brief: bool = False) -> str:
+    """Top-of-output reminder for review/audit tasks — directs to git diff and sibling comparison.
+
+    In brief mode: keep the section header + the shared-file patterns table
+    (those are data), drop the numbered step instructions and the
+    "Example first calls" block (instructional prose).
+    """
     out = "## ⚠️ REVIEW MODE — cross-provider check required\n\n"
-    out += "This task is a review/audit. The #1 cause of review regressions is **cross-provider impact on shared files**. "
-    out += "Before trusting any analysis below, run these steps FIRST:\n\n"
-    out += "1. **List actually changed files**: `git -C <repo> diff main...HEAD --stat` for every repo on the task branch.\n"
-    out += "2. **For each changed file**: check if another provider uses the same file/route/convention.\n"
-    out += "3. **For each shared file found**: compare against 1 sibling provider via `provider_type_map` or `search`.\n\n"
+    if not brief:
+        out += "This task is a review/audit. The #1 cause of review regressions is **cross-provider impact on shared files**. "
+        out += "Before trusting any analysis below, run these steps FIRST:\n\n"
+        out += "1. **List actually changed files**: `git -C <repo> diff main...HEAD --stat` for every repo on the task branch.\n"
+        out += "2. **For each changed file**: check if another provider uses the same file/route/convention.\n"
+        out += "3. **For each shared file found**: compare against 1 sibling provider via `provider_type_map` or `search`.\n\n"
     out += "Shared file patterns to watch for (from conventions.yaml `shared_files`):\n"
     for entry in SHARED_FILES[:8]:
         pattern = entry.get("path_pattern", "")
@@ -360,11 +374,14 @@ def _render_review_mode_reminder(provider: str) -> str:
         if pattern:
             risk_short = risk[:120] + ("..." if len(risk) > 120 else "")
             out += f"- `{pattern}` — {risk_short}\n"
-    out += "\n**Example first calls** (replace with your actual target):\n"
-    out += f"- `provider_type_map(\"paysafe\", \"payout\", \"fields\")`\n"
-    out += f"- `search(\"paysafe interac payout validation\")`\n"
-    out += f"- `search(\"other APM providers methods/payout.js paymentMethod\")`\n\n"
-    out += "**Do not rely on task_history alone** — for in-progress reviews, files_changed may be stale (historical merged PR data, not current open PR). Always verify with live `git diff`.\n\n"
+    if not brief:
+        out += "\n**Example first calls** (replace with your actual target):\n"
+        out += f"- `provider_type_map(\"paysafe\", \"payout\", \"fields\")`\n"
+        out += f"- `search(\"paysafe interac payout validation\")`\n"
+        out += f"- `search(\"other APM providers methods/payout.js paymentMethod\")`\n\n"
+        out += "**Do not rely on task_history alone** — for in-progress reviews, files_changed may be stale (historical merged PR data, not current open PR). Always verify with live `git diff`.\n\n"
+    else:
+        out += "\n"
     return out
 
 
@@ -387,7 +404,7 @@ def section_shared_files_warning(ctx: AnalysisContext) -> str:
 
     # Always show review reminder first when in review mode
     if review_mode:
-        out += _render_review_mode_reminder(ctx.provider)
+        out += _render_review_mode_reminder(ctx.provider, brief=ctx.brief)
 
     # Also try task_history lookup for specific file matches
     task_id = extract_task_id(ctx.description)
@@ -401,7 +418,7 @@ def section_shared_files_warning(ctx: AnalysisContext) -> str:
         if matches:
             if review_mode:
                 out += "### Historical matches from task_history (may be stale for in-progress work)\n\n"
-            out += _render_shared_file_warning(matches, ctx.provider)
+            out += _render_shared_file_warning(matches, ctx.provider, brief=ctx.brief)
     else:
         # No known files (blind LOO, clean prompt, feature description).
         # Use keyword triggers to predict which shared files this task
@@ -411,7 +428,7 @@ def section_shared_files_warning(ctx: AnalysisContext) -> str:
         kw_matches = _match_shared_files_by_keywords(ctx.description, ctx.provider)
         if kw_matches:
             out += "### Predicted shared-file impact (from task description keywords)\n\n"
-            out += _render_shared_file_warning(kw_matches, ctx.provider)
+            out += _render_shared_file_warning(kw_matches, ctx.provider, brief=ctx.brief)
 
     return out
 
@@ -444,7 +461,8 @@ def section_gotchas(ctx: AnalysisContext) -> str:
         return ""
 
     output = "## ⚠️ Known Gotchas (from past reviews & production bugs)\n\n"
-    output += "_These traps are NOT visible from code — read before coding._\n\n"
+    if not ctx.brief:
+        output += "_These traps are NOT visible from code — read before coding._\n\n"
     for row in results[:8]:
         snip = strip_repo_tag(row["snippet"])
         output += f"**{row['repo_name']}** (`{row['file_path']}`):\n{snip}\n\n"
@@ -495,7 +513,8 @@ def section_existing_tasks(ctx: AnalysisContext) -> str:
         return ""
 
     output = "## 📋 Existing Task Documents\n\n"
-    output += "_Found related task context from previous work._\n\n"
+    if not ctx.brief:
+        output += "_Found related task context from previous work._\n\n"
     for row in results[:6]:
         snip = strip_repo_tag(row["snippet"])
         output += f"**{row['repo_name']}** ({row['chunk_type']}): {snip}\n\n"
@@ -575,7 +594,8 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
 
     if similar_tasks:
         output_parts.append("## Historical Task Patterns\n")
-        output_parts.append("_Based on similar past tasks, these repos/files were involved:_\n")
+        if not ctx.brief:
+            output_parts.append("_Based on similar past tasks, these repos/files were involved:_\n")
         existing_finding_repos = {f.repo for f in ctx.findings}
         for t in similar_tasks:
             repos_str = ", ".join(f"**{r}**" for r in t["repos"][:8])
@@ -608,7 +628,8 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
         if not output_parts:
             output_parts.append("## Historical Task Patterns\n")
         output_parts.append("\n### ⚡ Main Flow Repos (frequently missed)\n")
-        output_parts.append("_These repos are part of the main request flow and were missed in many past tasks:_\n")
+        if not ctx.brief:
+            output_parts.append("_These repos are part of the main request flow and were missed in many past tasks:_\n")
         for p in upstream_patterns[:6]:
             output_parts.append(f"- **{p[1]}** — missed in {p[3]} past tasks (avg confidence {p[4]:.0%})\n")
             pattern_repos.append((p[1], "upstream_caller", p[3]))
@@ -633,7 +654,8 @@ def section_task_patterns(ctx: AnalysisContext) -> str:
         if not output_parts:
             output_parts.append("## Historical Task Patterns\n")
         output_parts.append("\n### 🔗 Co-occurrence Patterns\n")
-        output_parts.append("_Repos frequently missed together in past tasks:_\n")
+        if not ctx.brief:
+            output_parts.append("_Repos frequently missed together in past tasks:_\n")
         for p in relevant_co[:5]:
             output_parts.append(f"- {p}\n")
 
@@ -992,26 +1014,79 @@ def section_completeness(
         icon = {"DONE": "[x]", "OK": "[x]", "IN PROGRESS": "[-]"}.get(status, marker)
         return f"| {icon} **{rname}** | {label} | **{status}** | {reason} |\n"
 
+    def _render_row_brief(rname: str, label: str, status: str, reason: str, marker: str) -> str:
+        """Compact row: bullet + key fields only. Skips the Detail column when
+        empty (most rows). Saves ~25 chars/row; at 200+ rows = ~5KB.
+        """
+        icon = {"DONE": "[x]", "OK": "[x]", "IN PROGRESS": "[-]"}.get(status, marker)
+        if reason:
+            return f"- {icon} **{rname}** — {label} — **{status}** ({reason})\n"
+        return f"- {icon} **{rname}** — {label} — **{status}**\n"
+
+    render = _render_row_brief if ctx.brief else _render_row
+
     if high_items:
         output += "### Core repos (high confidence)\n\n"
-        output += "| Repo | Area | Status | Detail |\n|------|------|--------|--------|\n"
+        if not ctx.brief:
+            output += "| Repo | Area | Status | Detail |\n|------|------|--------|--------|\n"
         for r, lbl, s, d in high_items:
-            output += _render_row(r, lbl, s, d, "[x]")
+            output += render(r, lbl, s, d, "[x]")
         output += "\n"
 
     if medium_items:
         output += "### Related repos (medium confidence)\n\n"
-        output += "| Repo | Area | Status | Detail |\n|------|------|--------|--------|\n"
-        for r, lbl, s, d in medium_items:
-            output += _render_row(r, lbl, s, d, "[?]")
+        if not ctx.brief:
+            output += "| Repo | Area | Status | Detail |\n|------|------|--------|--------|\n"
+            for r, lbl, s, d in medium_items:
+                output += render(r, lbl, s, d, "[?]")
+        else:
+            # Brief: group boilerplate rows by label (same logic as peripheral).
+            noise_by_label: dict[str, list[str]] = {}
+            detail_rows: list[tuple[str, str, str, str]] = []
+            for r, lbl, s, d in medium_items:
+                if s == "TODO" and not d:
+                    noise_by_label.setdefault(lbl, []).append(r)
+                else:
+                    detail_rows.append((r, lbl, s, d))
+            for lbl in sorted(noise_by_label.keys()):
+                repos = noise_by_label[lbl]
+                names = ", ".join(f"**{r}**" for r in repos)
+                output += f"- **{lbl}** ({len(repos)}): {names}\n"
+            for r, lbl, s, d in detail_rows:
+                output += render(r, lbl, s, d, "[?]")
         output += "\n"
 
     if low_items:
-        output += f"<details>\n<summary>Peripheral repos (low confidence) — {len(low_items)} repos</summary>\n\n"
-        output += "| Repo | Area | Status | Detail |\n|------|------|--------|--------|\n"
-        for r, lbl, s, d in low_items:
-            output += _render_row(r, lbl, s, d, "[ ]")
-        output += "\n</details>\n\n"
+        if ctx.brief:
+            # Sub-agents don't render <details>/<summary>. Group peripheral
+            # repos by their label (most share a small set of labels like
+            # "Keyword match", "Cascade dependency", "npm dependency") and
+            # emit one line per group. Keeps the repo names (the signal)
+            # but strips the 100+ lines of repeated boilerplate.
+            # Only do this for pure-noise rows (no Detail text, default
+            # status TODO); anything with concrete progress info gets its
+            # own bullet below.
+            noise_by_label: dict[str, list[str]] = {}
+            detail_rows: list[tuple[str, str, str, str]] = []
+            for r, lbl, s, d in low_items:
+                if s == "TODO" and not d:
+                    noise_by_label.setdefault(lbl, []).append(r)
+                else:
+                    detail_rows.append((r, lbl, s, d))
+            output += f"### Peripheral repos (low confidence) — {len(low_items)} repos\n\n"
+            for lbl in sorted(noise_by_label.keys()):
+                repos = noise_by_label[lbl]
+                names = ", ".join(f"**{r}**" for r in repos)
+                output += f"- **{lbl}** ({len(repos)}): {names}\n"
+            for r, lbl, s, d in detail_rows:
+                output += render(r, lbl, s, d, "[ ]")
+            output += "\n"
+        else:
+            output += f"<details>\n<summary>Peripheral repos (low confidence) — {len(low_items)} repos</summary>\n\n"
+            output += "| Repo | Area | Status | Detail |\n|------|------|--------|--------|\n"
+            for r, lbl, s, d in low_items:
+                output += render(r, lbl, s, d, "[ ]")
+            output += "\n</details>\n\n"
 
     return output
 
