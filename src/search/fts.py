@@ -58,51 +58,27 @@ def expand_query(query: str) -> str:
 
 
 def _sanitize_fts_input(query: str) -> str:
-    """Remove FTS5 special operators from user input."""
-    # Remove FTS5 operators that could cause unexpected behavior
-    for op in ["AND", "OR", "NOT", "NEAR"]:
-        query = query.replace(f" {op} ", " ")
+    """Remove FTS5 special operators from user input.
+
+    Uses word boundaries so leading/trailing operators (e.g. "AND foo" or
+    "foo OR") are also stripped — the old ` {op} ` pattern missed them and
+    the resulting FTS5 syntax error was silently swallowed, killing search.
+    """
+    for op in ("AND", "OR", "NOT", "NEAR"):
+        query = re.sub(rf"\b{op}\b", " ", query)
     # Remove special characters
     query = re.sub(r'[*"()]', "", query)
-    return query.strip()
+    # Collapse whitespace
+    return re.sub(r"\s+", " ", query).strip()
 
 
 _STOP_WORDS = frozenset(
     {
-        "add",
-        "get",
-        "set",
-        "use",
-        "new",
-        "the",
-        "for",
-        "and",
-        "with",
-        "from",
-        "how",
-        "does",
-        "what",
-        "this",
-        "that",
-        "into",
-        "make",
-        "call",
-        "need",
-        "want",
-        "help",
-        "show",
-        "find",
-        "look",
-        "check",
-        "support",
-        "change",
-        "update",
-        "create",
-        "delete",
-        "remove",
-        "implement",
-        "about",
-        "where",
+        "add", "get", "set", "use", "new", "the", "for", "and", "with", "from",
+        "how", "does", "what", "this", "that", "into", "make", "call",
+        "need", "want", "help", "show", "find", "look", "check", "support",
+        "change", "update", "create", "delete", "remove", "implement",
+        "about", "where",
     }
 )
 
