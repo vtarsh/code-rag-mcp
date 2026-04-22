@@ -46,13 +46,10 @@ from src.tools.analyze import analyze_task_tool
 from src.tools.context import context_builder_tool
 from src.tools.fields import trace_field_tool
 from src.tools.service import (
-    diff_provider_config_tool,
     health_check_tool,
     list_repos_tool,
     repo_overview_tool,
-    search_task_history_tool,
     trace_internal_tool,
-    visualize_graph_tool,
 )
 from src.tools.shadow_types import provider_type_map_tool
 
@@ -91,11 +88,10 @@ TOOLS: dict[str, Callable[[dict[str, Any]], str]] = {
         args.get("file_type", ""),
         args.get("exclude_file_types", ""),
         args.get("limit", 10),
+        brief=args.get("brief", False),
     ),
     "find_dependencies": lambda args: find_dependencies_tool(args["repo_name"]),
-    "trace_impact": lambda args: trace_impact_tool(
-        args.get("repo_name") or args.get("target", ""), args.get("max_depth", 2)
-    ),
+    "trace_impact": lambda args: trace_impact_tool(args.get("repo_name", ""), args.get("max_depth", 2)),
     "trace_flow": lambda args: (
         trace_flow_tool(args["source"], args["target"], args.get("max_depth", 5))
         if "source" in args and "target" in args
@@ -106,11 +102,17 @@ TOOLS: dict[str, Callable[[dict[str, Any]], str]] = {
         args["start"], args.get("direction", "both"), args.get("max_depth", 4)
     ),
     "repo_overview": lambda args: repo_overview_tool(args["repo_name"]),
-    "list_repos": lambda args: list_repos_tool(args.get("type", ""), args.get("has_dep", ""), args.get("limit", 30)),
+    "list_repos": lambda args: list_repos_tool(
+        args.get("type", ""),
+        args.get("has_dep", ""),
+        args.get("limit", 30),
+        include_deps=args.get("include_deps", False),
+    ),
     "analyze_task": lambda args: analyze_task_tool(
         args["description"],
         args.get("provider", ""),
         exclude_task_id=args.get("exclude_task_id", ""),
+        brief=args.get("brief", False),
     ),
     "context_builder": lambda args: context_builder_tool(
         args["query"],
@@ -120,12 +122,7 @@ TOOLS: dict[str, Callable[[dict[str, Any]], str]] = {
         args.get("search_limit", 8),
     ),
     "health_check": lambda args: health_check_tool(),
-    "visualize_graph": lambda args: visualize_graph_tool(args.get("repo", ""), args.get("edge_type", "")),
     "trace_internal": lambda args: trace_internal_tool(args["repo_name"], args.get("method", "")),
-    "diff_provider_config": lambda args: diff_provider_config_tool(args["provider_a"], args["provider_b"]),
-    "search_task_history": lambda args: search_task_history_tool(
-        args["query"], args.get("developer", ""), args.get("limit", 10)
-    ),
     "trace_field": lambda args: trace_field_tool(args["field"], args.get("provider", ""), args.get("mode", "trace")),
     "provider_type_map": lambda args: provider_type_map_tool(
         args["provider"], args.get("method", ""), args.get("mode", "overview")
