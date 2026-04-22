@@ -55,34 +55,32 @@ logging.basicConfig(
 )
 log = logging.getLogger("finetune_reranker")
 
-
 DAEMON_PORT = 8742
 
-
 def pause_daemon(port: int = DAEMON_PORT, timeout: float = 5.0) -> bool:
-    """Release daemon's resident models (~1 GB) to free RAM before training.
+    """Force-restart daemon (~1 GB resident models) to free RAM before training.
 
-    Same /admin/unload endpoint used by scripts/embed_missing_vectors.py.
-    Daemon exits, launchd restarts it fresh; training sees a clean ~1 GB
-    free vs shared RAM.
+    Same /admin/shutdown endpoint used by scripts/embed_missing_vectors.py —
+    drains in-flight then os._exit(0); launchd KeepAlive respawns fresh.
+    /admin/unload alone drops refs but pymalloc doesn't release arena pages,
+    so we need the full process restart to actually reclaim RSS.
     """
-    url = f"http://127.0.0.1:{port}/admin/unload"
+    url = f"http://127.0.0.1:{port}/admin/shutdown"
     req = urllib.request.Request(url, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             resp.read()
-        log.info("daemon on :%d unloaded + exiting for launchd restart", port)
+        log.info("daemon on :%d shutdown requested; launchd will restart fresh", port)
         return True
     except urllib.error.URLError as e:
         reason = getattr(e, "reason", str(e))
         if isinstance(reason, OSError) and reason.errno in {61, 111}:
             return False
-        log.info("daemon unload failed: %s; continuing", reason)
+        log.info("daemon shutdown failed: %s; continuing", reason)
         return False
     except Exception as e:
-        log.info("daemon unload error: %s; continuing", e)
+        log.info("daemon shutdown error: %s; continuing", e)
         return False
-
 
 class JsonlExampleStream(IterableDataset):
     """Yield `InputExample` rows from a JSONL file, line-by-line.
@@ -134,10 +132,8 @@ class JsonlExampleStream(IterableDataset):
                 )
 
     def __iter__(self):
-        # Single-worker streaming (MPS doesn't benefit from multiworker).
         info = get_worker_info()
         if info is not None and info.num_workers > 1:
-            # Shard across workers by modulo
             raw = (ex for i, ex in enumerate(self._raw_iter()) if i % info.num_workers == info.id)
         else:
             raw = self._raw_iter()
@@ -158,7 +154,6 @@ class JsonlExampleStream(IterableDataset):
         rng.shuffle(buf)
         yield from buf
 
-
 def count_jsonl_rows(path: Path) -> int:
     n = 0
     with path.open("r", encoding="utf-8") as f:
@@ -167,14 +162,12 @@ def count_jsonl_rows(path: Path) -> int:
                 n += 1
     return n
 
-
 def pick_device() -> str:
     if torch.backends.mps.is_available():
         return "mps"
     if torch.cuda.is_available():
         return "cuda"
     return "cpu"
-
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Fine-tune CrossEncoder reranker (streaming)")
@@ -202,7 +195,6 @@ def parse_args() -> argparse.Namespace:
         "format — see scripts/convert_to_listwise.py). Directly optimises "
         "NDCG, designed to fix rank-reshuffle regressions on multi-GT tickets.",
     )
-    # --- P5 memory-optimised training flags (new HF Trainer code path) ---
     p.add_argument(
         "--bf16",
         action="store_true",
@@ -232,7 +224,6 @@ def parse_args() -> argparse.Namespace:
         help="Attention kernel. 'sdpa' is the PyTorch default; use 'eager' "
         "if ModernBERT+MPS+bf16 crashes on scaled_dot_product_attention.",
     )
-    # --- P5 checkpoint / resume flags (new HF Trainer code path only) ---
     p.add_argument(
         "--save-steps",
         type=int,
@@ -258,7 +249,6 @@ def parse_args() -> argparse.Namespace:
     )
     return p.parse_args()
 
-
 def _latest_checkpoint(out_dir: Path) -> Path | None:
     """Find the highest-step ``checkpoint-*`` subdir under ``out_dir``.
 
@@ -278,16 +268,13 @@ def _latest_checkpoint(out_dir: Path) -> Path | None:
             best = (step, child)
     return best[1] if best else None
 
-
 def _use_new_trainer_path(args: argparse.Namespace) -> bool:
     """New HF Trainer path is enabled by any memory-opt flag."""
     return bool(args.bf16 or args.fp16 or args.gradient_checkpointing)
 
-
 # --------------------------------------------------------------------------
 # New CrossEncoderTrainer path (bf16 / fp16 / gradient_checkpointing)
 # --------------------------------------------------------------------------
-
 
 def detect_listwise_format(path: Path) -> bool:
     """Return True if the JSONL file has listwise rows (`docs` list).
@@ -311,7 +298,6 @@ def detect_listwise_format(path: Path) -> bool:
                 return False
             # Unknown schema — fall through to next line
     raise ValueError(f"could not detect data format from {path} (empty or malformed)")
-
 
 def _build_hf_dataset(path: Path, keep_indices: set[int], *, max_doc_chars: int = 1500):
     """Load the kept rows of a pointwise JSONL file into a `datasets.Dataset`.
@@ -351,7 +337,6 @@ def _build_hf_dataset(path: Path, keep_indices: set[int], *, max_doc_chars: int 
             )
     return Dataset.from_list(rows)
 
-
 def _build_hf_dataset_listwise(path: Path, keep_indices: set[int], *, max_doc_chars: int = 1500):
     """Load listwise rows ({query, docs, labels}) into a `datasets.Dataset`.
 
@@ -390,7 +375,6 @@ def _build_hf_dataset_listwise(path: Path, keep_indices: set[int], *, max_doc_ch
             )
     return Dataset.from_list(rows)
 
-
 class _MpsCacheHygieneCallback:
     """HF Trainer callback: flush MPS cache + gc every N steps.
 
@@ -398,7 +382,6 @@ class _MpsCacheHygieneCallback:
     import of `transformers.TrainerCallback` (keeps the legacy path import
     surface minimal).
     """
-
 
 def _run_new_trainer(
     args: argparse.Namespace,
@@ -686,11 +669,9 @@ def _run_new_trainer(
 
     return model, dur, final_val_loss, resumed_from
 
-
 # --------------------------------------------------------------------------
 # Legacy model.fit() path — unchanged behaviour
 # --------------------------------------------------------------------------
-
 
 def _run_legacy_fit(
     args: argparse.Namespace,
@@ -761,8 +742,6 @@ def _run_legacy_fit(
     dur = time.time() - t0
     log.info("training done in %.1fs (%.1f min)", dur, dur / 60.0)
 
-    # Streaming val loss — same anti-RAM pattern. Uses the same loss_fct as
-    # training so scales are comparable.
     final_val_loss: float | None = None
     with contextlib.suppress(Exception):
         model.model.eval()
@@ -802,21 +781,12 @@ def _run_legacy_fit(
 
     return model, dur, final_val_loss
 
-
-# --------------------------------------------------------------------------
-# main
-# --------------------------------------------------------------------------
-
-
 def main() -> int:
     args = parse_args()
 
-    # Silence the noisy tokenizer "Token indices sequence length is longer than..."
-    # warning that fires before HF applies the truncation we always request.
     warnings.filterwarnings("ignore", message="Token indices sequence length is longer than the specified maximum")
     logging.getLogger("transformers.tokenization_utils_base").setLevel(logging.ERROR)
 
-    # Seed BEFORE any model instantiation so weight init is reproducible.
     random.seed(args.seed)
     torch.manual_seed(args.seed)
 
@@ -830,7 +800,6 @@ def main() -> int:
     if not args.no_pause_daemon:
         pause_daemon()
 
-    # Precompute train/val split indices without materialising the file.
     total_rows = count_jsonl_rows(train_path)
     if total_rows == 0:
         log.error("empty train file")
@@ -847,8 +816,6 @@ def main() -> int:
     log.info("device: %s", device)
 
     use_new = _use_new_trainer_path(args)
-    # Listwise losses (LambdaLoss) require the new trainer + listwise data —
-    # legacy CrossEncoder.fit() has no path for this.
     if args.loss == "lambdaloss":
         if not use_new:
             log.warning(
@@ -870,11 +837,6 @@ def main() -> int:
             return 2
     log.info("training path: %s", "new (CrossEncoderTrainer)" if use_new else "legacy (CrossEncoder.fit)")
 
-    # MPS watermark clamp (new-trainer path only, before any big allocation).
-    # Default soft-cap at 0.7 on a 16GB Mac = ~11GB, enough for training but
-    # prevents runaway swap + kernel OOM kills. Respect user override.
-    # PyTorch requires LOW <= HIGH, and default LOW is 1.4 which would be
-    # invalid once HIGH is lowered to 0.7 — so clamp LOW to 0.5 too.
     mps_watermark_ratio = os.environ.get("PYTORCH_MPS_HIGH_WATERMARK_RATIO", "")
     if use_new and not mps_watermark_ratio:
         log.warning(
@@ -882,11 +844,9 @@ def main() -> int:
             "MPS allocations (~11GB on a 16GB Mac). Set the env var explicitly to override."
         )
         os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.7"
-        # Low watermark must be <= high; default 1.4 would be rejected.
         os.environ.setdefault("PYTORCH_MPS_LOW_WATERMARK_RATIO", "0.5")
         mps_watermark_ratio = "0.7"
 
-    # Resume: resolve effective checkpoint path.
     resume_path = ""
     if use_new:
         req = (args.resume_from_checkpoint or "").strip()
@@ -931,7 +891,6 @@ def main() -> int:
         )
         resumed_from = ""
 
-    # Ensure tokenizer is saved alongside model for reload compat
     model.save(str(out_dir))
 
     summary = {
@@ -963,7 +922,6 @@ def main() -> int:
     }
     (out_dir / "training_summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    # Reload smoke
     log.info("reload smoke: CrossEncoder(%s)", out_dir)
     reloaded = CrossEncoder(str(out_dir), device=device, trust_remote_code=True)
     score = reloaded.predict([("test query", "def test(): pass")])
@@ -983,7 +941,6 @@ def main() -> int:
         )
     )
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

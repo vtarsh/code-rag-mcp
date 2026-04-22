@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """P5 step 4: eval baseline vs fine-tuned CrossEncoder reranker on PI GT tasks.
 
 For each PI ticket in task_history with non-empty repos_changed:
@@ -13,7 +12,7 @@ per-task delta, aggregate train/test split, regressions list) and prints a
 console report ending with PROMOTE / HOLD / REJECT verdict. Does NOT swap
 any config.
 
-Daemon is paused via /admin/unload (pattern: embed_missing_vectors.py,
+Daemon is paused via /admin/shutdown (pattern: embed_missing_vectors.py,
 finetune_reranker.py) so we don't hold 2 rerankers + daemon's MiniLM at
 once during the 40-task run.
 """
@@ -51,38 +50,35 @@ logging.basicConfig(
 )
 log = logging.getLogger("eval_finetune")
 
-
 _BASE = Path(os.getenv("CODE_RAG_HOME", Path.home() / ".code-rag"))
 TASKS_DB = _BASE / "db" / "tasks.db"
 KNOWLEDGE_DB = _BASE / "db" / "knowledge.db"
 DAEMON_PORT = int(os.getenv("CODE_RAG_DAEMON_PORT", "8742"))
 
-
 def pause_daemon(port: int = DAEMON_PORT, timeout: float = 5.0) -> bool:
-    """POST /admin/unload so daemon frees its ML models before eval.
+    """POST /admin/shutdown so daemon frees its ML models before eval.
 
     Eval loads 2 CrossEncoders sequentially over 40 tasks x 200 candidates;
     daemon's ~1 GB resident MiniLM + MPS buffers would push us into Jetsam
-    territory on 16 GB Mac. Daemon exits and launchd restarts it fresh
-    after eval finishes.
+    territory on 16 GB Mac. Daemon drains in-flight then exits; launchd
+    restarts it fresh after eval finishes.
     """
-    url = f"http://127.0.0.1:{port}/admin/unload"
+    url = f"http://127.0.0.1:{port}/admin/shutdown"
     req = urllib.request.Request(url, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             resp.read()
-        log.info("daemon on :%d unloaded + exiting for launchd restart", port)
+        log.info("daemon on :%d shutdown requested; launchd will restart fresh", port)
         return True
     except urllib.error.URLError as e:
         reason = getattr(e, "reason", str(e))
         if isinstance(reason, OSError) and reason.errno in {61, 111}:
             return False
-        log.info("daemon unload failed: %s; continuing", reason)
+        log.info("daemon shutdown failed: %s; continuing", reason)
         return False
     except Exception as e:
-        log.info("daemon unload error: %s; continuing", e)
+        log.info("daemon shutdown error: %s; continuing", e)
         return False
-
 
 def load_all_gt_tasks(db_path: Path, projects: list[str] | None = None) -> list[dict]:
     """Load every ticket with non-empty repos_changed (no sampling).
@@ -130,7 +126,6 @@ def load_all_gt_tasks(db_path: Path, projects: list[str] | None = None) -> list[
         )
     return tasks
 
-
 def _resolve_eval_query(task: dict, mode: str) -> str:
     """Pick query string for eval based on mode.
 
@@ -142,7 +137,6 @@ def _resolve_eval_query(task: dict, mode: str) -> str:
         return build_query_text(task, use_description=True) or task["summary"]
     return task["summary"]
 
-
 def rerank_with_latency(model, query: str, chunks: list[dict], *, batch_size: int = 4) -> tuple[list[dict], float]:
     pairs = [(query, c["content"][:1000]) for c in chunks]
     t0 = time.perf_counter()
@@ -151,13 +145,11 @@ def rerank_with_latency(model, query: str, chunks: list[dict], *, batch_size: in
     order = sorted(range(len(chunks)), key=lambda i: float(scores[i]), reverse=True)
     return [chunks[i] for i in order], lat
 
-
 def rank_of_first_gt(ranked_repos: list[str], expected: set[str]) -> int | None:
     for i, r in enumerate(ranked_repos, start=1):
         if r in expected:
             return i
     return None
-
 
 def _lpt_schedule(
     tasks: list[dict],
@@ -196,7 +188,6 @@ def _lpt_schedule(
 
     return shard_tasks[shard_index]
 
-
 class _CrossEncoderAdapter:
     """Adapt a sentence_transformers.CrossEncoder to RerankerProvider.rerank(...).
 
@@ -219,7 +210,6 @@ class _CrossEncoderAdapter:
         pairs = [(query, doc) for doc in documents]
         scores = self._model.predict(pairs, batch_size=self._batch_size)
         return [float(s) for s in scores]
-
 
 def eval_one_model_hybrid(
     model_name_or_path: str,
@@ -252,9 +242,6 @@ def eval_one_model_hybrid(
 
     from src.search.hybrid import hybrid_search
 
-    # Route fts_limit to the in-process hybrid rerank pool. hybrid.py reads
-    # RERANK_POOL_SIZE at import time, so we set the env BEFORE the first
-    # hybrid_search call (eval_finetune is a fresh process per shard).
     os.environ["CODE_RAG_RERANK_POOL_SIZE"] = str(fts_limit)
 
     log.info("[%s] loading model (hybrid path): %s", label, model_name_or_path)
@@ -286,10 +273,6 @@ def eval_one_model_hybrid(
             "retrieval": "hybrid",
         }
         query = _resolve_eval_query(task, query_mode)
-        # hybrid.fts_search uses sanitize_fts_query which doesn't strip Jira
-        # punctuation (`:` in "Alias: X" crashes FTS5). preclean_for_fts
-        # normalizes the query the same way prepare_finetune_data.py did for
-        # training rows.
         query_clean = preclean_for_fts(query) if query_mode == "enriched" else query
         try:
             t_q = time.perf_counter()
@@ -305,15 +288,6 @@ def eval_one_model_hybrid(
             log.info("[%s] %s: hybrid_search error %s", label, ticket, type(e).__name__)
             continue
 
-        # 2026-04-22 experiment conclusion: conditional fallback-enrich in
-        # hybrid mode does NOT help. Investigation found:
-        #   (a) most "lost" tickets have cand > 50 (threshold wrong), so the
-        #       gate rarely fires.
-        #   (b) enriched-always on 126-ticket partial subset: -1.75pp baseline
-        #       r@10 vs summary mode (5 recovered / 10 newly lost).
-        # The fts_fallback_enrich parameter is accepted for API symmetry with
-        # eval_one_model but does nothing in hybrid mode (reserved for future
-        # intrinsic-signal-gated retries).
         _ = fts_fallback_enrich  # intentionally unused here
         _ = n_fallback_rescued  # unused; kept to preserve function shape
 
@@ -370,7 +344,6 @@ def eval_one_model_hybrid(
         pass
 
     return per_task, latencies
-
 
 def eval_one_model(
     model_name_or_path: str,
@@ -513,16 +486,13 @@ def eval_one_model(
 
     return per_task, latencies
 
-
 def mean(xs: list[float]) -> float:
     return sum(xs) / len(xs) if xs else 0.0
-
 
 def aggregate(per_task: dict[str, dict], tickets: list[str]) -> dict:
     r10 = [per_task[t]["recall_at_10"] for t in tickets if t in per_task]
     r25 = [per_task[t]["recall_at_25"] for t in tickets if t in per_task]
     return {"r10_mean": mean(r10), "r25_mean": mean(r25), "n": len(r10)}
-
 
 def build_delta(base: dict[str, dict], ft: dict[str, dict]) -> dict[str, dict]:
     """Per-ticket deltas. Format aligned with merge_eval_shards.build_delta
@@ -550,7 +520,6 @@ def build_delta(base: dict[str, dict], ft: dict[str, dict]) -> dict[str, dict]:
         }
     return out
 
-
 def find_regressions(delta: dict[str, dict], *, r10_drop_5pp: float = -0.05, r10_drop_10pp: float = -0.10) -> dict:
     drops_5 = [t for t, d in delta.items() if d["recall_at_10"] <= r10_drop_5pp]
     drops_10 = [t for t, d in delta.items() if d["recall_at_10"] <= r10_drop_10pp]
@@ -561,11 +530,9 @@ def find_regressions(delta: dict[str, dict], *, r10_drop_5pp: float = -0.05, r10
         "tickets_regressed": [{"ticket": t, "r10_delta": round(delta[t]["recall_at_10"], 4)} for t in drops_5],
     }
 
-
 # `decide_verdict` lives in scripts/eval_verdict.py — single source of truth.
 # The old test-only gate (delta_test r@10, n=5 tickets) was replaced 2026-04-20
 # with a full-eval gate (Δr@10 + ΔHit@5 + net_improved). See eval_verdict module.
-
 
 def print_console_report(
     *,
@@ -616,7 +583,6 @@ def print_console_report(
     print()
     print(f"Verdict: {verdict}")
     print(f"  {verdict_reason}")
-
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="P5 eval: baseline vs FT reranker")
@@ -703,7 +669,6 @@ def parse_args() -> argparse.Namespace:
         "measures what production actually does.",
     )
     return p.parse_args()
-
 
 def main() -> int:
     args = parse_args()
@@ -1070,7 +1035,6 @@ def main() -> int:
         verdict_reason=reason,
     )
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Sync LanceDB vectors with SQLite chunks by rowid.
 
 Full reconciliation:
@@ -34,15 +33,6 @@ import psutil  # noqa: E402
 from scripts.build_vectors import embed_simple  # noqa: E402
 from src.models import get_model_config  # noqa: E402
 
-# Memory watchdog — 2026-04-18 03:00 nightly run hit SIGKILL (macOS Jetsam).
-# Root causes: (1) daemon and embed each load the model (~1 GB + MPS buffers)
-# giving a combined ~14 GB on 16 GB M1, (2) nothing in the embed loop bounds
-# RSS under pressure. Mitigations applied here: pause daemon at start (it
-# auto-restarts via mcp_server.py proxy on next MCP call) + watchdog that
-# force-compacts on soft, exits cleanly on hard. LanceDB is append-only so
-# the next run resumes from the remaining delta.
-# Overrides (for testing): CODE_RAG_EMBED_{RSS_SOFT_GB,RSS_HARD_GB,
-# SYS_AVAIL_SOFT_GB,SYS_AVAIL_HARD_GB}.
 _GIB = 1024 ** 3
 RSS_SOFT_LIMIT_BYTES = int(float(os.getenv("CODE_RAG_EMBED_RSS_SOFT_GB", "8")) * _GIB)
 RSS_HARD_LIMIT_BYTES = int(float(os.getenv("CODE_RAG_EMBED_RSS_HARD_GB", "10")) * _GIB)
@@ -50,38 +40,38 @@ SYS_AVAIL_SOFT_BYTES = int(float(os.getenv("CODE_RAG_EMBED_SYS_AVAIL_SOFT_GB", "
 SYS_AVAIL_HARD_BYTES = int(float(os.getenv("CODE_RAG_EMBED_SYS_AVAIL_HARD_GB", "0.8")) * _GIB)
 DAEMON_PORT = int(os.getenv("CODE_RAG_DAEMON_PORT", "8742"))
 
-
 def pause_daemon(port: int = DAEMON_PORT, timeout: float = 5.0) -> bool:
-    """Ask daemon to release its resident ML models via POST /admin/unload.
+    """Force-restart the daemon so its ~1 GB resident models are truly freed.
 
-    Prevents concurrent model residency — daemon holds ~1 GB model + MPS
-    buffers, embedding a second copy here would peak ~14 GB on 16 GB Mac
-    and trigger Jetsam. Python's pymalloc won't return pages to the OS
-    after `del`, so the daemon exits itself after responding and lets
-    launchd KeepAlive restart it as a fresh low-RSS process. Embed
-    proceeds while launchd honours its ~10s throttle — by the time
-    embed finishes, daemon is back up idle.
+    Uses POST /admin/shutdown (drain + exit; launchd KeepAlive respawns fresh).
+    /admin/unload alone just drops refs — Python's pymalloc keeps freed pages
+    in arenas, so RSS barely moves. We need a process restart to return pages
+    to the OS. Embedding runs ~14 GB on 16 GB Mac without this and trips Jetsam.
 
-    Returns True if the daemon acknowledged unload, False if no daemon
+    /admin/shutdown semantics (since 2026-04-22):
+    - drains in-flight /tool/ requests for up to 1 s
+    - returns 503 on new /tool/... arriving during the drain window
+    - then os._exit(0); launchd throttles restart by ~10 s
+
+    Returns True if the daemon acknowledged the shutdown, False if no daemon
     is reachable or the endpoint is missing.
     """
-    url = f"http://127.0.0.1:{port}/admin/unload"
+    url = f"http://127.0.0.1:{port}/admin/shutdown"
     req = urllib.request.Request(url, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             resp.read()
-        print(f"  [daemon on :{port} unloaded + exiting for launchd restart]", flush=True)
+        print(f"  [daemon on :{port} shutdown requested; launchd will restart fresh]", flush=True)
         return True
     except urllib.error.URLError as e:
         reason = getattr(e, "reason", str(e))
         if isinstance(reason, OSError) and reason.errno in {61, 111}:  # ECONNREFUSED
             return False  # daemon not running — nothing to pause
-        print(f"  [daemon unload failed: {reason}; continuing without pause]", flush=True)
+        print(f"  [daemon shutdown failed: {reason}; continuing without pause]", flush=True)
         return False
     except Exception as e:
-        print(f"  [daemon unload error: {e}; continuing without pause]", flush=True)
+        print(f"  [daemon shutdown error: {e}; continuing without pause]", flush=True)
         return False
-
 
 def parse_args() -> tuple[str, bool]:
     model_key = "coderank"
@@ -92,7 +82,6 @@ def parse_args() -> tuple[str, bool]:
         elif arg == "--no-pause-daemon":
             pause_daemon_flag = False
     return model_key, pause_daemon_flag
-
 
 def load_model(model_key: str):
     mcfg = get_model_config(model_key)
@@ -111,7 +100,6 @@ def load_model(model_key: str):
     model = SentenceTransformer(mcfg.name, trust_remote_code=mcfg.trust_remote_code, device=device)
     return model, mcfg
 
-
 def main() -> None:
     model_key, pause_daemon_flag = parse_args()
     db_path = _BASE_DIR / "db" / "knowledge.db"
@@ -119,9 +107,6 @@ def main() -> None:
         print(f"ERROR: {db_path} does not exist", file=sys.stderr)
         sys.exit(1)
 
-    # Resolve LanceDB path without loading the model — model load is expensive
-    # (~400 MB for CodeRankEmbed, ~1 GB RAM) and we want to short-circuit when
-    # nothing to embed. Metadata lookup is cheap.
     mcfg = get_model_config(model_key)
     lance_path = _BASE_DIR / "db" / mcfg.lance_dir
     if not lance_path.exists():
@@ -137,9 +122,6 @@ def main() -> None:
     print(f"\n[2/6] Reading existing vectors from {lance_path}...")
     db = lancedb.connect(str(lance_path))
     table = db.open_table("chunks")
-    # Read ONLY the rowid column — full to_pandas() pulls all 768-float vectors
-    # into memory (~140 MB for 47k rows) just to build a set of integer rowids.
-    # Projection via underlying lance dataset is ~10-30x faster + bounded RAM.
     existing_rowids = set(table.to_lance().to_table(columns=["rowid"])["rowid"].to_pylist())
     print(f"  {len(existing_rowids)} existing vectors in LanceDB")
 
@@ -155,26 +137,14 @@ def main() -> None:
     index_dirty = False
 
     if missing_rowids:
-        # Serialize with the MCP daemon: daemon holds its own copy of the
-        # model (~1 GB + MPS buffers); running both at once peaks ~14 GB on
-        # 16 GB Mac and trips Jetsam. Daemon auto-restarts on the next MCP
-        # call via the mcp_server.py proxy.
         if pause_daemon_flag:
             pause_daemon()
 
-        # Lazy-load model only when embedding is actually needed — saves
-        # 1 GB RAM + model-load time on nights when nothing changed.
         print(f"\n[3/6] Loading {model_key} embedding model...")
         start = time.time()
         model, _mcfg = load_model(model_key)
         print(f"  Loaded in {time.time() - start:.1f}s")
 
-        # Batch SQL IN (SQLite default limit ~999) AND batch embed itself so
-        # memory stays bounded — each batch: fetch content, embed, append.
-        # Checkpointing is implicit: if embedding dies mid-way, LanceDB keeps
-        # what was already appended; next run picks up remaining delta.
-        # Try to get MPS cache clearer if available — release GPU buffers after
-        # each batch so they don't accumulate across the embed loop.
         try:
             import torch
 
@@ -183,12 +153,6 @@ def main() -> None:
             _mps_empty = None
 
         SQL_BATCH = 250
-        # LanceDB accumulates a new fragment file per `add()` — by 5-10 fragments
-        # the metadata scan on every subsequent add noticeably slows down. We
-        # compact every N batches (COMPACT_EVERY) to keep fragment count small.
-        # Tuned empirically on M1 Pro / MPS (2026-04-18): 250 x 4 = 1000 chunks
-        # per compact gave the best rate (~12-13 emb/s stable) vs 500/100 batch
-        # or 500-chunk compact window.
         COMPACT_EVERY = 4  # ~1000 chunks per compact (250 x 4)
 
         print(
@@ -211,7 +175,6 @@ def main() -> None:
             table.add(data)
             done += len(batch_rows)
 
-            # --- aggressive cleanup to stop RAM creep + fragment accumulation ---
             del batch_rows, data
             gc.collect()
             if _mps_empty is not None:
@@ -261,7 +224,6 @@ def main() -> None:
             remaining = (len(missing_rowids) - done) / max(rate, 0.01)
             print(f"  {done}/{len(missing_rowids)} ({rate:.1f} emb/s, ~{remaining / 60:.0f}m remaining)")
         conn.close()
-        # Final compact to leave the table clean
         with contextlib.suppress(Exception):
             table.optimize()
         print(f"\n[5/6] Appended {done} vectors to LanceDB")
@@ -296,7 +258,6 @@ def main() -> None:
         f"\nDone. Added {len(missing_rowids)}, removed {len(orphan_rowids)} "
         f"for {model_key}. Final: {new_total} vectors."
     )
-
 
 if __name__ == "__main__":
     main()
