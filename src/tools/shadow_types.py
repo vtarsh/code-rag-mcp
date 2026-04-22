@@ -22,9 +22,7 @@ log = logging.getLogger(__name__)
 
 _PROVIDER_TYPES_DIR = PROFILE_DIR / "provider_types"
 
-# Keys that are NOT the provider-side field name in a mapping dict
 _META_KEYS = {"proto", "transform", "value", "note", "purpose"}
-
 
 def _resolve_target(fm: dict) -> str:
     """Resolve the provider-side field name from a mapping dict.
@@ -43,7 +41,6 @@ def _resolve_target(fm: dict) -> str:
             return fm[key]
     return "?"
 
-
 def _load_provider_yaml(provider: str) -> dict | None:
     """Load a pre-built provider type map YAML."""
     yaml_path = _PROVIDER_TYPES_DIR / f"{provider}.yaml"
@@ -54,7 +51,6 @@ def _load_provider_yaml(provider: str) -> dict | None:
     except Exception as e:
         log.warning("Failed to load %s: %s", yaml_path, e)
         return None
-
 
 def _format_overview(data: dict) -> str:
     """Format overview mode output."""
@@ -73,7 +69,6 @@ def _format_overview(data: dict) -> str:
     for method_name, method_data in methods.items():
         req_collected = _collect_flow_mappings(method_data, "request")
         resp_collected = _collect_flow_mappings(method_data, "response")
-        # Count: flat list = len directly; sectioned = sum of all _mappings
         if req_collected and isinstance(req_collected[0], dict) and "_section" in req_collected[0]:
             req_count = sum(len(s["_mappings"]) for s in req_collected)
         else:
@@ -92,7 +87,6 @@ def _format_overview(data: dict) -> str:
 
     return "\n".join(lines)
 
-
 def _collect_flow_mappings(md: dict, direction: str) -> list[dict]:
     """Collect field mappings from top-level or nested flows/steps.
 
@@ -103,14 +97,12 @@ def _collect_flow_mappings(md: dict, direction: str) -> list[dict]:
     """
     key = f"{direction}_field_mappings"
 
-    # 1. Top-level mappings — return directly if present (must be a list)
     top = md.get(key, [])
     if isinstance(top, list) and top:
         return top
 
     all_mappings: list[dict] = []
 
-    # 2. Flow-based: flows.<flow_name>.(request|response)_field_mappings
     flows = md.get("flows", {})
     if isinstance(flows, dict):
         for flow_name, flow_data in flows.items():
@@ -119,7 +111,6 @@ def _collect_flow_mappings(md: dict, direction: str) -> list[dict]:
             flow_maps = flow_data.get(key, [])
             if flow_maps:
                 all_mappings.append({"_section": f"flow: {flow_name}", "_mappings": flow_maps})
-            # Also check nested steps inside a flow
             for step in flow_data.get("steps", []):
                 if isinstance(step, dict):
                     step_maps = step.get(key, [])
@@ -129,7 +120,6 @@ def _collect_flow_mappings(md: dict, direction: str) -> list[dict]:
                             {"_section": f"flow: {flow_name} / step: {step_name}", "_mappings": step_maps}
                         )
 
-    # 3. Step-based keys at method level: step1_*, step2_*, etc.
     for k, v in md.items():
         if k.startswith("step") and isinstance(v, dict):
             step_maps = v.get(key, [])
@@ -137,7 +127,6 @@ def _collect_flow_mappings(md: dict, direction: str) -> list[dict]:
                 all_mappings.append({"_section": k, "_mappings": step_maps})
 
     return all_mappings
-
 
 def _format_fields(data: dict, method: str) -> str:
     """Format fields mode output for a specific method."""
@@ -197,7 +186,6 @@ def _format_fields(data: dict, method: str) -> str:
 
     return "\n".join(lines)
 
-
 def _format_gaps(data: dict, method: str = "") -> str:
     """Format gaps mode output."""
     lines: list[str] = []
@@ -221,7 +209,6 @@ def _format_gaps(data: dict, method: str = "") -> str:
     lines.append(f"Total type gaps: {total}")
     return "\n".join(lines)
 
-
 def provider_type_map_tool(provider: str, method: str = "", mode: str = "overview") -> str:
     """Show shadow type map for a provider.
 
@@ -240,18 +227,14 @@ def provider_type_map_tool(provider: str, method: str = "", mode: str = "overvie
             available = [p.stem for p in _PROVIDER_TYPES_DIR.glob("*.yaml")]
         if available:
             return (
-                f"No type map found for '{provider}'. "
-                f"Available: {available}. "
-                f"Run: python scripts/build_shadow_types.py --provider={provider}"
+                f"shadow types not indexed for this provider ('{provider}'). "
+                f"Available providers: {available}."
             )
-        return (
-            f"No type maps built yet. "
-            f"Run: python scripts/build_shadow_types.py --provider={provider}"
-        )
+        return f"shadow types not indexed for this provider ('{provider}')."
 
     if mode == "fields":
         if not method:
-            return "Mode 'fields' requires a method name. " + _format_overview(data)
+            return "Error: mode='fields' requires non-empty method"
         return _format_fields(data, method)
     elif mode == "gaps":
         return _format_gaps(data, method)

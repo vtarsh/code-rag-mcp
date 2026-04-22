@@ -15,7 +15,6 @@ from src.types import (
     ProviderTypeMap,
 )
 
-
 # ---------------------------------------------------------------------------
 # JS Field Extractor Tests
 # ---------------------------------------------------------------------------
@@ -61,7 +60,6 @@ module.exports = async ({ req }) => {
 }
 """
 
-SAMPLE_PAYLOAD_BUILDER_JS = """
 module.exports = (request) => {
   const {
     identifiers: { transactionId },
@@ -133,7 +131,6 @@ module.exports = ({ response = {}, processorTransactionId, paymentMethod, isFail
 }
 """
 
-
 class TestJsFieldExtractor:
     def test_destructuring_nested(self):
         usages = extract_fields_from_file("test.js", SAMPLE_INITIALIZE_JS)
@@ -156,7 +153,6 @@ class TestJsFieldExtractor:
         payload_builds = [u for u in usages if u.usage_type == "payload_build"]
         field_names = [u.field_name for u in payload_builds]
         assert "path" in field_names
-        # Note: "payload" is a shorthand property (no colon) — extractor captures key: patterns
         assert "processor_transaction_id" in field_names
         assert "redirect_url" in field_names
 
@@ -185,8 +181,6 @@ class TestJsFieldExtractor:
         usages = extract_fields_from_file("test.js", SAMPLE_MAP_RESPONSE_JS)
         destructures = [u for u in usages if u.usage_type == "destructure"]
         field_names = [u.field_name for u in destructures]
-        # Renamed destructures (status: providerStatus) should extract 'providerStatus' or 'status'
-        # The regex captures the original name before the colon
         assert "response" in field_names or "providerStatus" in field_names or "status" in field_names
 
     def test_response_conditional_spread(self):
@@ -196,11 +190,6 @@ class TestJsFieldExtractor:
         assert "approvedAmount" in field_names
         assert "failureMessage" in field_names
         assert "failureCode" in field_names
-
-
-# ---------------------------------------------------------------------------
-# Pydantic Model Tests
-# ---------------------------------------------------------------------------
 
 class TestShadowTypeModels:
     def test_field_usage_model(self):
@@ -261,18 +250,23 @@ class TestShadowTypeModels:
         assert pe.name == "StatusEnum"
         assert len(pe.values) == 2
 
-
-# ---------------------------------------------------------------------------
-# Tool Output Tests
-# ---------------------------------------------------------------------------
-
 class TestProviderTypeMapTool:
     def test_missing_provider(self):
         result = provider_type_map_tool("nonexistent_provider_xyz")
-        assert "no type map" in result.lower() or "not found" in result.lower() or "not built" in result.lower()
+        assert "not indexed" in result.lower()
 
     def test_fields_mode_no_method(self):
-        # Should gracefully handle missing method by showing overview
         result = provider_type_map_tool("nonexistent_provider_xyz", method="", mode="fields")
-        # It will hit the "no type map" path first
         assert "nonexistent_provider_xyz" in result
+
+    def test_fields_mode_no_method_valid_provider(self, tmp_path, monkeypatch):
+        import src.tools.shadow_types as st
+
+        yaml_path = tmp_path / "fake.yaml"
+        yaml_path.write_text(
+            "provider: fake\nproto_service: FakeService\nmethods:\n  sale:\n    proto_request: SaleRequest\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(st, "_PROVIDER_TYPES_DIR", tmp_path)
+        result = st.provider_type_map_tool("fake", method="", mode="fields")
+        assert result == "Error: mode='fields' requires non-empty method"
