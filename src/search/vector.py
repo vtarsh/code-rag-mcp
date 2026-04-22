@@ -26,10 +26,16 @@ def vector_search(
     Results are raw dicts from LanceDB (not yet converted to SearchResult).
     """
     provider, table, err = get_vector_search()
-    if err and table is None:
-        return [], err
-    if provider is None or table is None:
+    if table is None:
+        # Propagate the most informative message. `err` may carry either a
+        # hard error (missing lance dir, open-table failure) or a provider
+        # warning (e.g. embedding model not ready). Fall back to a generic
+        # string only when we have nothing else to report.
+        if err:
+            return [], err
         return [], "Vector search unavailable: provider or table not loaded"
+    if provider is None:
+        return [], err or "Vector search unavailable: provider or table not loaded"
 
     # Embed query using provider (handles prefixing and API calls internally)
     try:

@@ -40,9 +40,14 @@ def get_db() -> sqlite3.Connection:
     global _wal_set
     conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    if not _wal_set:
-        conn.execute("PRAGMA journal_mode=WAL")
-        _wal_set = True
+    # Guard the check-then-act under `_lock`. The pragma itself is idempotent
+    # (WAL is a DB-file-level setting), but without the lock two threads may
+    # race on first connection and both flip `_wal_set` — harmless in effect
+    # but a check-then-act footgun.
+    with _lock:
+        if not _wal_set:
+            conn.execute("PRAGMA journal_mode=WAL")
+            _wal_set = True
     conn.execute(f"PRAGMA mmap_size={MMAP_SIZE}")
     conn.execute(f"PRAGMA cache_size={CACHE_SIZE}")
     # Attach supplementary DB so task_history et al. are transparent.
