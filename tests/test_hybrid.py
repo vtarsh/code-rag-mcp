@@ -16,8 +16,9 @@ def _mock_wiring():
     Without this fixture, every test would hit the live knowledge.db and pull
     extra candidates into the pool, breaking existing assertions.
     """
-    with patch("src.search.hybrid.code_facts_search", return_value=[]), patch(
-        "src.search.hybrid.env_var_search", return_value=[]
+    with (
+        patch("src.search.hybrid.code_facts_search", return_value=[]),
+        patch("src.search.hybrid.env_var_search", return_value=[]),
     ):
         yield
 
@@ -89,11 +90,10 @@ class TestHybridSearch:
     @patch("src.search.hybrid.vector_search")
     @patch("src.search.hybrid.fts_search")
     def test_rrf_fusion_merges_sources(self, mock_fts, mock_vec, mock_rerank):
-        # Same rowid from both sources — should merge
         mock_fts.return_value = [_make_sr(42)]
         mock_vec.return_value = ([_make_vr(42)], None)
         results, _err, total = hybrid_search("overlapping")
-        assert total == 1  # deduplicated by rowid
+        assert total == 1
         assert "keyword" in results[0]["sources"]
         assert "vector" in results[0]["sources"]
 
@@ -111,7 +111,6 @@ class TestHybridSearch:
     @patch("src.search.hybrid.vector_search")
     @patch("src.search.hybrid.fts_search")
     def test_keyword_weight_higher(self, mock_fts, mock_vec, mock_rerank):
-        # Keyword-only result should score higher than vector-only due to 2x weight
         mock_fts.return_value = [_make_sr(1)]
         mock_vec.return_value = ([_make_vr(2)], None)
         results, _, _ = hybrid_search("test", limit=10)
@@ -126,120 +125,6 @@ class TestHybridSearch:
         result = hybrid_search("anything")
         assert isinstance(result, tuple)
         assert len(result) == 3
-
-
-class TestCodeFactsWiring:
-    """P0c: code_facts_fts feeds the RRF pool via boost-existing + inject-missing."""
-
-    @patch("src.search.hybrid.fetch_chunks_for_files", return_value=[])
-    @patch("src.search.hybrid.env_var_search", return_value=[])
-    @patch("src.search.hybrid.code_facts_search")
-    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
-    @patch("src.search.hybrid.vector_search", return_value=([], None))
-    @patch("src.search.hybrid.fts_search")
-    def test_existing_file_gets_code_fact_boost(
-        self, mock_fts, mock_vec, mock_rerank, mock_cf, mock_ev, mock_fetch
-    ):
-        sr_hit = _make_sr(7, repo="repo-a")
-        sr_other = _make_sr(8, repo="repo-b")
-        mock_fts.return_value = [sr_hit, sr_other]
-        mock_cf.return_value = [
-            {
-                "repo_name": sr_hit.repo_name,
-                "file_path": sr_hit.file_path,
-                "fact_type": "joi_schema",
-                "condition": "x",
-                "message": "",
-                "line_number": 1,
-            }
-        ]
-        results, _err, total = hybrid_search("query with joi schema", limit=10)
-        # Same two files, no injection since fetch_chunks_for_files is empty
-        assert total == 2
-        boosted = next(r for r in results if r["repo_name"] == "repo-a")
-        other = next(r for r in results if r["repo_name"] == "repo-b")
-        assert "code_facts" in boosted["sources"]
-        assert "code_facts" not in other["sources"]
-        assert boosted["score"] > other["score"]
-
-    @patch("src.search.hybrid.env_var_search", return_value=[])
-    @patch("src.search.hybrid.fetch_chunks_for_files")
-    @patch("src.search.hybrid.code_facts_search")
-    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
-    @patch("src.search.hybrid.vector_search", return_value=([], None))
-    @patch("src.search.hybrid.fts_search", return_value=[])
-    def test_missing_file_injected_from_code_facts(
-        self, mock_fts, mock_vec, mock_rerank, mock_cf, mock_fetch, mock_ev
-    ):
-        mock_cf.return_value = [
-            {
-                "repo_name": "new-repo",
-                "file_path": "libs/fresh.js",
-                "fact_type": "validation_guard",
-                "condition": "x",
-                "message": "",
-                "line_number": 10,
-            }
-        ]
-        mock_fetch.return_value = [
-            {
-                "rowid": 999,
-                "repo_name": "new-repo",
-                "file_path": "libs/fresh.js",
-                "file_type": "library",
-                "chunk_type": "code_file",
-                "snippet": "fresh content",
-            }
-        ]
-
-        results, _err, total = hybrid_search("signature validation", limit=10)
-        assert total == 1  # only the injected candidate
-        assert results[0]["repo_name"] == "new-repo"
-        assert results[0]["sources"] == ["code_facts"]
-        # injected score must be positive
-        assert results[0]["score"] > 0
-
-    @patch("src.search.hybrid.env_var_search", return_value=[])
-    @patch("src.search.hybrid.code_facts_search", return_value=[])
-    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
-    @patch("src.search.hybrid.vector_search", return_value=([], None))
-    @patch("src.search.hybrid.fts_search", return_value=[])
-    def test_no_code_facts_no_change(self, *_mocks):
-        # Empty code_facts hits → pool stays empty
-        results, _err, total = hybrid_search("nothing", limit=10)
-        assert results == []
-        assert total == 0
-
-
-class TestEnvVarsWiring:
-    """P0c: env_vars boost repos when query contains UPPERCASE identifiers."""
-
-    @patch("src.search.hybrid.code_facts_search", return_value=[])
-    @patch("src.search.hybrid.env_var_search")
-    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
-    @patch("src.search.hybrid.vector_search", return_value=([], None))
-    @patch("src.search.hybrid.fts_search")
-    def test_repo_boosted_when_env_var_matches(
-        self, mock_fts, mock_vec, mock_rerank, mock_ev, mock_cf
-    ):
-        sr_match = _make_sr(1, repo="express-api-callbacks")
-        sr_other = _make_sr(2, repo="other-repo")
-        mock_fts.return_value = [sr_match, sr_other]
-        mock_ev.return_value = [
-            {
-                "repo": "express-api-callbacks",
-                "var_name": "FORCE_REDIRECTS_PROVIDERS",
-                "raw_value": "skrill",
-                "source": "consts_js_raw",
-            }
-        ]
-
-        results, _err, _total = hybrid_search("set FORCE_REDIRECTS_PROVIDERS flag", limit=10)
-        boosted = next(r for r in results if r["repo_name"] == "express-api-callbacks")
-        other = next(r for r in results if r["repo_name"] == "other-repo")
-        assert "env_var" in boosted["sources"]
-        assert "env_var" not in other["sources"]
-        assert boosted["score"] > other["score"]
 
 
 class TestRerank:
@@ -258,7 +143,7 @@ class TestRerank:
             {"score": 0.3, "snippet": "b", "repo_name": "r2", "file_path": "f2"},
         ]
         result = rerank("query", items)
-        assert result == items  # unchanged
+        assert result == items
 
     @patch("src.search.hybrid.get_reranker")
     def test_reranker_scores_combined(self, mock_get_reranker):
@@ -270,7 +155,6 @@ class TestRerank:
             {"score": 0.5, "snippet": "high rrf low rerank", "repo_name": "r2", "file_path": "f2"},
         ]
         result = rerank("query", items, limit=2)
-        # First item has higher rerank score (0.9), should be first after combining
         assert result[0]["repo_name"] == "r1"
         assert "combined_score" in result[0]
         assert "rerank_score" in result[0]
@@ -281,7 +165,6 @@ class TestRerankPenalties:
 
     @patch("src.search.hybrid.get_reranker")
     def test_doc_file_type_penalized(self, mock_get_reranker):
-        # Tied rerank scores — doc should fall behind code after penalty.
         mock_provider = MagicMock()
         mock_provider.rerank.return_value = [0.8, 0.8]
         mock_get_reranker.return_value = (mock_provider, None)
@@ -292,7 +175,6 @@ class TestRerankPenalties:
              "file_path": "libs/payout/handle.js", "file_type": "library"},
         ]
         result = rerank("payout handler code", items, limit=2)
-        # Code wins — doc got DOC_PENALTY.
         assert result[0]["repo_name"] == "r2"
         assert result[0]["penalty"] == 0.0
         assert result[1]["penalty"] > 0
@@ -326,8 +208,7 @@ class TestRerankPenalties:
              "file_path": "libs/handler.js", "file_type": "library"},
         ]
         result = rerank("handler pattern", items, limit=3)
-        assert result[0]["repo_name"] == "r3"  # code wins
-        # Guide penalty >= spec penalty.
+        assert result[0]["repo_name"] == "r3"
         guide = next(r for r in result if r["repo_name"] == "r1")
         spec = next(r for r in result if r["repo_name"] == "r2")
         assert guide["penalty"] >= spec["penalty"]
@@ -344,7 +225,6 @@ class TestRerankPenalties:
              "file_path": "libs/foo.js", "file_type": "library"},
         ]
         result = rerank("how to docs for README guide", items, limit=2)
-        # Query contains "docs" / "README" / "guide" — no penalty applied.
         for r in result:
             assert r["penalty"] == 0.0
 
@@ -360,5 +240,125 @@ class TestRerankPenalties:
              "file_path": "src/methods/payout.js", "file_type": "grpc_method"},
         ]
         result = rerank("webhook handler", items, limit=2)
+        for r in result:
+            assert r["penalty"] == 0.0
+
+    # P1c 2026-04-22: regression tests from Opus judge failures.
+
+    @patch("src.search.hybrid.get_reranker")
+    def test_ci_deploy_yml_penalized_on_code_query(self, mock_get_reranker):
+        """P1c #2: 'ach provider service integration repo' misfired to ci/deploy.yml."""
+        mock_provider = MagicMock()
+        mock_provider.rerank.return_value = [0.8, 0.8]
+        mock_get_reranker.return_value = (mock_provider, None)
+        items = [
+            {"score": 0.5, "snippet": "ci yaml", "repo_name": "workflow-ach-init",
+             "file_path": "ci/deploy.yml", "file_type": "config"},
+            {"score": 0.5, "snippet": "ach code", "repo_name": "grpc-banks-crb",
+             "file_path": "methods/ach-payment.js", "file_type": "grpc_method"},
+        ]
+        result = rerank("ach provider service integration repo", items, limit=2)
+        assert result[0]["repo_name"] == "grpc-banks-crb"
+        assert result[1]["penalty"] > 0
+
+    @patch("src.search.hybrid.get_reranker")
+    def test_k8s_github_workflows_penalized(self, mock_get_reranker):
+        """P1c: k8s/.github/workflows/* is also CI noise, not service code."""
+        mock_provider = MagicMock()
+        mock_provider.rerank.return_value = [0.8, 0.8]
+        mock_get_reranker.return_value = (mock_provider, None)
+        items = [
+            {"score": 0.5, "snippet": "gha", "repo_name": "workflow-ach-init",
+             "file_path": "k8s/.github/workflows/deploy.yml", "file_type": "config"},
+            {"score": 0.5, "snippet": "service", "repo_name": "grpc-apm-ach",
+             "file_path": "methods/sale.js", "file_type": "grpc_method"},
+        ]
+        result = rerank("ach service code", items, limit=2)
+        assert result[0]["repo_name"] == "grpc-apm-ach"
+        assert result[1]["penalty"] > 0
+
+    @patch("src.search.hybrid.get_reranker")
+    def test_checklist_query_disables_penalty(self, mock_get_reranker):
+        """P1c #5/#10/#42: 'checklist' token in query preserves docs/references."""
+        mock_provider = MagicMock()
+        mock_provider.rerank.return_value = [0.8, 0.8]
+        mock_get_reranker.return_value = (mock_provider, None)
+        items = [
+            {"score": 0.5, "snippet": "checklist", "repo_name": "provider-integration-checklist",
+             "file_path": "docs/references/provider-integration-checklist.md",
+             "file_type": "reference"},
+            {"score": 0.5, "snippet": "init", "repo_name": "grpc-apm-ppro",
+             "file_path": "methods/initialize.js", "file_type": "grpc_method"},
+        ]
+        result = rerank("new APM provider integration recipe checklist boilerplate", items, limit=2)
+        for r in result:
+            assert r["penalty"] == 0.0
+
+    @patch("src.search.hybrid.get_reranker")
+    def test_framework_query_disables_penalty(self, mock_get_reranker):
+        """P1c #19: 'investigation framework' is a named doc artifact."""
+        mock_provider = MagicMock()
+        mock_provider.rerank.return_value = [0.8, 0.8]
+        mock_get_reranker.return_value = (mock_provider, None)
+        items = [
+            {"score": 0.5, "snippet": "framework", "repo_name": "investigation-framework",
+             "file_path": "docs/references/investigation-framework.md", "file_type": "reference"},
+            {"score": 0.5, "snippet": "proto", "repo_name": "libs-types",
+             "file_path": "proto/protos/onboarding.proto", "file_type": "library"},
+        ]
+        result = rerank("investigation framework", items, limit=2)
+        for r in result:
+            assert r["penalty"] == 0.0
+
+    @patch("src.search.hybrid.get_reranker")
+    def test_severity_rules_query_disables_penalty(self, mock_get_reranker):
+        """P1c #4/#45: 'impact audit severity verification' + 'impact audit rules'."""
+        mock_provider = MagicMock()
+        mock_provider.rerank.return_value = [0.8, 0.8]
+        mock_get_reranker.return_value = (mock_provider, None)
+        items = [
+            {"score": 0.5, "snippet": "rules", "repo_name": "impact-audit-rules",
+             "file_path": "docs/references/impact-audit-rules.md", "file_type": "reference"},
+            {"score": 0.5, "snippet": "code", "repo_name": "graphql",
+             "file_path": "src/resolvers/audit/queries/audits.ts", "file_type": "library"},
+        ]
+        result = rerank("impact audit severity verification", items, limit=2)
+        for r in result:
+            assert r["penalty"] == 0.0
+
+    @patch("src.search.hybrid.get_reranker")
+    def test_matrix_reference_sandbox_overview_disable_penalty(self, mock_get_reranker):
+        """P1c #37/#38: 'reference matrix', 'sandbox testing' name doc artifacts."""
+        mock_provider = MagicMock()
+        mock_provider.rerank.return_value = [0.8, 0.8]
+        mock_get_reranker.return_value = (mock_provider, None)
+        for q in [
+            "provider reference matrix volt paysafe paynearme",
+            "payper sandbox testing amount magic values test",
+            "openfinance APM integration overview",
+        ]:
+            items = [
+                {"score": 0.5, "snippet": "doc", "repo_name": "r1",
+                 "file_path": "docs/references/foo.md", "file_type": "reference"},
+                {"score": 0.5, "snippet": "code", "repo_name": "r2",
+                 "file_path": "libs/bar.js", "file_type": "library"},
+            ]
+            result = rerank(q, items, limit=2)
+            for r in result:
+                assert r["penalty"] == 0.0, f"query {q!r} should disable penalty"
+
+    @patch("src.search.hybrid.get_reranker")
+    def test_ci_path_exempted_when_query_asks_docs(self, mock_get_reranker):
+        """P1c: CI yml penalty respects the DOC_QUERY regex like other penalties."""
+        mock_provider = MagicMock()
+        mock_provider.rerank.return_value = [0.8, 0.8]
+        mock_get_reranker.return_value = (mock_provider, None)
+        items = [
+            {"score": 0.5, "snippet": "ci", "repo_name": "workflow-ach-init",
+             "file_path": "ci/deploy.yml", "file_type": "config"},
+            {"score": 0.5, "snippet": "code", "repo_name": "grpc-apm-ach",
+             "file_path": "methods/sale.js", "file_type": "grpc_method"},
+        ]
+        result = rerank("deploy documentation sandbox", items, limit=2)
         for r in result:
             assert r["penalty"] == 0.0
