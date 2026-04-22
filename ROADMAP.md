@@ -1,15 +1,161 @@
 # P5 Reranker — Roadmap
 
-**Status (2026-04-22 mid-morning):** Production = `reranker_ft_gte_v8`. **P1b churn replay DONE** on 400 real MCP queries (`profiles/pay-com/churn_replay/summary.json`). v8 substantively reshuffles top-10 vs base reranker: **top-1 changes 77%**, **mean overlap@10 = 0.35**, **70.75% of queries have >50% top-10 churn**. FT transfer to runtime is CONFIRMED — v8 is NOT a no-op outside the Jira distribution. Qualitative inspection of top-50 diff pairs shows a systematic **docs→code shift** (P4.1 penalties + content-type boosts): sometimes wins (specific `payout.js` beats `methods/index.js`), sometimes misfires (picks CI `.yml` or env files when user wants service code). Direction of change (better/worse) still needs an LLM judge pass on `diff_pairs.jsonl`. See §"2026-04-22 P1b churn replay".
+**Status (2026-04-22 midday):** Production = `reranker_ft_gte_v8`. **Dual judge pass DONE** on top-50 diff pairs — Opus (API, code-biased) says v8 +8pp net, local MiniLM-L-6-v2 (MS MARCO pretraining, prose-biased) says base +64pp net. Judges disagree on 31/50 pairs, and 20 of those are the exact docs→code shift where each judge's training distribution biases the call. **Conclusion: no-calibration LLM/reranker-as-judge is NOT a reliable direction signal on this subset.** Canonical direction signal remains ground-truth eval: Jira r@10 +5pp (gte_v8_fallback.json) and runtime benchmarks +2-8pp (the basis for prod deploy on 2026-04-21). **Decisions:** v8 stays prod (ground truth canonical); **P1c landed** as an objective fix for 11 doc-intent + 1 CI-yml failure modes independent of judge disagreement; v12 FT remains gated on P1c validation + a proper gold-label sample of the judged pairs. See §"2026-04-22 P1b.2/P1b.3 dual judge".
+
+## 2026-04-22 13-agent audit: synthesis, fixes landed, open items
+
+Ran 13 parallel agents — 5 blind auditors (src, scripts, tests, index pipeline, daemon+MCP), 5 context-aware critics (P1c, v8 FT data, MCP tool design, benchmarks, recall-lever history), 3 methodology auditors (eval metrics, churn metrics, benchmark realism).
+
+### Synthesis
+
+**Real bugs found in code (18 P0/P1, most not FT-related):**
+
+| # | File:line | Severity | Summary |
+|---|---|---|---|
+| 1 | `src/search/hybrid.py:304-335` | P0 | RRF `scores` dict is keyed by raw rowid — but FTS5 chunks and LanceDB vector rows live in independent rowid spaces, so `rowid=42` from both sources SILENTLY MERGES into one record with the wrong `repo/file_path/snippet`. Real recall bug. Needs (repo,file,chunk) composite key. **Not fixed yet — bigger refactor.** |
+| 2 | `src/index/builders/orchestrator.py:399-401` | P1 | FTS5 `optimize` misuse: `INSERT INTO chunks(chunks, rank, content, ...) VALUES('optimize', ...)` is not the documented `INSERT INTO chunks(chunks) VALUES('optimize')` form — SQLite treats it as a plain row insert and creates a garbage row with `chunks='optimize'` every build. **Not fixed yet.** |
+| 3 | `src/index/builders/repo_indexer.py:128-140` | P0 | `last_insert_rowid()` used right after a `chunks` (FTS5 virtual) insert can resolve to a rowid in the wrong table; `code_facts_fts` gets drift rows. **Not fixed yet — bigger refactor.** |
+| 4 | `src/search/env_vars.py:23` | P1 | Docstring claims "avoids matching URL/API/TLS" but regex `\b[A-Z][A-Z0-9_]{2,}\b` matches them; every web/config query triggers env_var repo boost on unrelated repos. **FIXED** — added post-match filter: skip 3-char acronyms without `_`/digit. |
+| 5 | `src/search/fts.py:63` | P1 | AND/OR/NOT/NEAR stripping used ` {op} ` substring — leading/trailing operators slipped through, FTS5 raised, swallowed by `except OperationalError`, silent 0-result. **FIXED** — word-boundary regex. |
+| 6 | `src/search/vector.py:30-31` | P1 | `if err and table is None` masks the real reason when `get_vector_search` returns `(None, None, warning)` — caller sees generic "Vector search unavailable" instead of the actual path-missing message. **Not fixed yet.** |
+| 7 | `src/container.py:43-45` | P2 | `_wal_set` race: check-then-act without `_lock`. Harmless in practice (journal mode is DB-file-level) but footgun. **Not fixed yet.** |
+| 8 | `src/index/builders/repo_indexer.py:141-142` | P2 | `except Exception: pass` on per-file code_facts extraction — one malformed JS silently skips the repo's facts. **Not fixed yet.** |
+| 9 | `daemon.py:160-186` | P0 | `/admin/unload` races with in-flight requests — new requests in the 500ms pre-exit window re-trigger model load then get killed. **Not fixed yet.** |
+| 10 | `daemon.py:272-279` | P1 | JSONL tool-call log writes without lock/fsync/rotation — can interleave above PIPE_BUF (~4KB) producing corrupt lines; unbounded growth. **Not fixed yet.** |
+
+**Dead / deprecated code deleted (7 files):**
+- `scripts/churn_llm_judge.py` (deprecated Haiku stub — git history preserves it)
+- `scripts/_opus_judge_results.py` (one-off Opus verdict dump, already materialized into `judge_opus_v8_vs_base.jsonl`)
+- `scripts/update_all.sh`, `scripts/update.sh` (orphan duplicates of `full_update.sh`)
+- `scripts/eval.py` (orphan; name-collides with eval_harness.py / eval_finetune.py / eval_verdict.py)
+- `scripts/install_launchd.sh` (orphan; `setup_wizard.py::install_launchd()` supersedes it)
+
+### Methodology gaps (not code bugs — document, design fix later)
+
+| Area | Critical gap | Evidence |
+|---|---|---|
+| Eval gate | **GT is repo-level, not file-level** — user intent is file-level but gate rewards "repo made top-10" even when the target file is absent | `eval_finetune.py:128,330-334,475` |
+| Eval gate | **"improved" = ±5pp r@10** — binary on 46% of tickets where `n_gt_repos=1`. `net_improved` is dominated by those; multi-repo tickets (where real retrieval quality matters) are downweighted | `eval_verdict.py:119-121` |
+| Eval gate | **Test set is 4 tickets / 101 rows** (PI-54=79, CORE-2644=15, HS-257=7, PI-48=0); PI alone owns 78% | `finetune_data_v8/manifest.json` + train.jsonl sample |
+| Eval gate | **Eval pool ≠ production pool by default** — `USE_HYBRID_RETRIEVAL=0` uses FTS5-only pool without code_facts / env_vars / content-type boosts | `eval_parallel.sh:39` |
+| Eval gate | **Train/test distribution mismatch** — 87% diff positives in test (mean 226 char) vs mix in train; runtime returns ~1000-char chunks | sample of train.jsonl + test.jsonl |
+| Eval gate | **Queries use Jira `description` (~478 char mean)** — runtime queries are 30-80 chars | `prepare_finetune_data.py::build_query_text` |
+| Churn metrics | **`pct_high_churn_at_10=70.75%` is direction-less** — counts any reshuffle, can't distinguish improvement from regression | `churn_replay.py:227-228` |
+| Churn metrics | **MiniLM judge is prose-biased, not neutral** — MS MARCO pretraining pushes it to prefer the doc list even on engineering queries (confirmed by 20/23 Opus-b → MiniLM-a flips) | `churn_reranker_judge.py:87` |
+| Benchmarks | **Zero doc-intent queries in gold** — v8's doc-strip regression can never be caught by `benchmark_queries.py` or `benchmark_realworld.py` | `benchmarks.yaml` — every gold query expects a code repo |
+| Benchmarks | **Structural overfit** — `GROUND-TRUTH.md` explicitly lists the LOO tickets = benchmarks.yaml; any change that reorders those wins by construction | ROADMAP.md:456 + `finetune_data_v8/` LOO files |
+| Benchmarks | **Provider coverage 3/17** — gold tests Trustly/EPX/Worldpay only; EPX/Worldpay are effectively dead in real traffic (1/0 mentions of 400); 38% of real traffic uncovered | real_queries/sampled.jsonl vs benchmarks.yaml |
+| MCP surface | **`trace_impact` used 3 of 2412 calls (0.1%)** — DELETE; `visualize_graph`, `context_builder` similar; `trace_flow`+`trace_chain` should MERGE | logs/tool_calls.jsonl analysis |
+
+### Recall lever status (what stays, what to revisit)
+
+| Lever | Status | Note |
+|---|---|---|
+| v8 FT reranker | **KEEP** | +8.3pp runtime, +5.09pp Jira w/ fallback; prod deployed 2026-04-21 |
+| Conditional `--fts-fallback-enrich` | **KEEP** | Retrieval unlock on 77/909 tickets |
+| Hybrid FTS+vector RRF | **KEEP** | Production pipeline |
+| `reranker_override` kwarg (P0a) | **KEEP** | Enables eval parity |
+| suggestions.py `node_type` fix (P0b) | **KEEP** | 629 zero-result queries recovered |
+| P1c `_DOC_QUERY_RE` extension | **KEEP** | 3/9 doc recoveries measured; no regression in 410 tests |
+| P1c `_CI_PATH_RE` + `CI_PENALTY=0.5` | **KEEP** | 3/6 CI files pushed out on #2; real code reaches top-10 |
+| P4.2 `RERANK_POOL_SIZE` (200) | **KEEP** | +10pp baseline gain historical |
+| P0c `code_facts` wiring | **REVISIT** | A/B disproved as cause of -10pp hybrid regression but positive contribution also unproven; measure in clean A/B |
+| P0c `env_vars` boost | **REVISIT** | Same — partial effect visible in churn (80% top-1 flip on uppercase-id queries) but no isolated gain |
+| Content-type boosts (gotchas/ref/dict) | **REVISIT** | Shipped pre-v8, never independently A/B'd after FT; may amplify docs v8 is trained to demote |
+| P4.1 doc/test/guide penalties | **REVISIT** | Dominant loss mode source; partially mitigated by P1c |
+
+### Action plan (short-term)
+
+1. Land audit fixes (landed): `env_vars` acronym filter, `fts.py` word-boundary operators, 7 dead files deleted. 410/410 tests green.
+2. Next-session priority: the 3 P0 index/daemon bugs (rowid collision, chunk_meta gap, /admin/unload race) — these affect correctness and aren't fixable via penalty tuning.
+3. Before v12 FT: human-label `v12_candidates.jsonl` (pending), add runtime paired-preference bench, separate GT to file-level, fix test-set size.
+4. MCP surface cleanup is a separable sprint — merge `trace_flow` into `trace_chain`, delete `trace_impact`/`visualize_graph`/`context_builder` from MCP (keep daemon-only), redesign `analyze_task` result shape.
+
+## 2026-04-22 P1b.2/P1b.3 dual judge: judges disagree on docs↔code pairs
+
+### Why two judges
+
+Original `scripts/churn_llm_judge.py` (commit `238be6f4`) was a **Haiku-based LLM judge — incompatible with project policy** (no external LLM APIs; cf. `scripts/autoresearch_loop.py`: _"No LLM. Safe to run in daytime"_). Replaced by a **local reranker-as-judge** (`scripts/churn_reranker_judge.py` using `cross-encoder/ms-marco-MiniLM-L-6-v2`) that fits the local-only policy and is reproducible without any API key.
+
+### P1b.3 Reranker-judge verdict — prose-biased
+
+Neutral local scorer: `cross-encoder/ms-marco-MiniLM-L-6-v2` (different architecture + different pretraining than the gte-modernbert lineage used for base/v8; not fine-tuned on our Jira distribution). For each diff pair the judge fetches one `chunks.content` per `(repo_name, file_path, chunk_type)`, builds `(query, f"{repo} {file} {snippet}")` pairs for all 20 items, scores through the neutral CrossEncoder, and declares the winner by `sign(mean(v8) - mean(base))` with a `|margin| < 0.03` tie band.
+
+```bash
+python3.12 scripts/churn_reranker_judge.py
+# -> profiles/pay-com/churn_replay/judge_reranker_v8_vs_base.jsonl (50 entries)
+# -> profiles/pay-com/churn_replay/judge_reranker_summary.json
+# run time: ~35s on MPS, 0 USD
+```
+
+| Metric | Value |
+|---|---:|
+| n | 50 |
+| v8_wins (b) | 8 (16%) |
+| base_wins (a) | 40 (80%) |
+| ties | 2 (4%) |
+| net_direction | **-0.64** |
+
+### Judge disagreement pattern
+
+Exact agreement between Opus and MiniLM: **19/50 (38%)**. The disagreement is systematic, not random. **The 20 Opus-b / MiniLM-a disagreements** are exactly the pairs where base returned docs and v8 returned code (`stripe-client.js`, `map-interac.js`, `apm-create.js`, etc.). Opus (trained on code + prose, coding-task instruction-tuned) reads "add stripe cash-app integration" as an engineering task and rewards the code list. MiniLM (MS MARCO pretraining on web passages, prose-heavy) scores the doc snippets higher on natural-language overlap with the query tokens.
+
+**Neither judge is neutral on the axis this fine-tune targets.** Each judge's training distribution pre-commits the verdict.
+
+### Why this matters for direction signal
+
+- The **churn** part of P1b still holds: v8 reshuffles 77% of top-1s on real queries → FT transfer is real.
+- The **direction** part (better or worse) needs a source outside both judges' training distributions. On this project, that source is ground-truth evaluation:
+  - `gte_v8_fallback.json` — Jira eval, 909 tickets, v8 r@10 = 0.7622 vs base 0.7112 → **+5.09pp (gold label)**
+  - `profiles/pay-com/bench/realworld` — runtime benchmark → **+2.1pp (manual labels)**
+- These gold-label signals were the basis for the **2026-04-21 v8 prod deploy**, and they already answered the direction question positively.
+
+### What stands regardless of judge disagreement
+
+**P1c is not judge-dependent.** The 11 doc-intent query failures (query tokens `checklist`/`framework`/`severity`/`rules`/`sandbox`/`matrix`/`documentation`/`overview`) and the 1 `ci/deploy.yml` false positive are objective mismatches between user intent and returned results — you can read the pairs in `diff_pairs.jsonl` and see the intent mismatch without any scorer. P1c fixes them at the penalty layer without needing to pick a judge.
+
+### P1c validation outcomes (9 affected pairs, MPS re-run)
+
+| Pair | Query | Outcome | Notes |
+|---|---|---|---|
+| #4 | impact audit severity verification | ✅ DOC_RECOVERED | overlap 0.40 vs stored; impact-audit-rules.md surfaced |
+| #10 | integration checklist webhooks lifecycle | ✅ DOC_RECOVERED | overlap 0.70; provider-integration-checklist.md back |
+| #19 | investigation framework | ✅ DOC_RECOVERED | overlap 0.80; investigation-framework.md back |
+| #42 | integration checklist APM_TYPES connections | ~ ALREADY_PRESENT | overlap 0.30; doc was already findable post-shuffle |
+| #2 | ach provider service integration repo | ~ CI_PARTIAL | 3/6 CI files pushed out; `grpc-banks-crb::methods/ach-payment.js` now reaches top-10 |
+| #5 | APM integration recipe checklist boilerplate | ✗ UNCHANGED | query triggers regex → penalty off, but v8 reranker still strips the doc — **v12 FT material** |
+| #13 | openfinance APM integration documentation | ✗ UNCHANGED | same reason as #5 |
+| #38 | payper sandbox testing magic values | ✗ SHUFFLED_NO_TARGET | reranker shuffled, sandbox doc still not in top-10 |
+| #46 | provider code rules cross-service webhook auth | ✗ SHUFFLED_NO_TARGET | ambiguous query; no clear target doc |
+
+**Summary:** 3 clean recoveries, 1 partial (CI), 1 doc already present, 4 unchanged/shuffled. **33% recovery rate is lower than the 47% forecast** because `_DOC_QUERY_RE` only neutralizes the penalty — it does NOT force v8 to rank docs higher. On 4 pairs (#5, #13, #38, #46) the v8 reranker alone (without any penalty) still ranks code above the doc the user asked for. This is **reranker-level behavior** that cannot be fixed by penalty heuristics — it is the explicit training target for v12 FT.
+
+### Next levers
+
+| # | Action | Cost | Expected | Status |
+|---|---|---|---|---|
+| **P1c code** | Extend `_DOC_QUERY_RE` + add `_CI_PATH_RE` + `CI_PENALTY=0.50` | 1h | Mechanically covers 9/19 base-wins | **LANDED** |
+| **P1c validation** | `scripts/churn_p1c_validate.py` — measured outcomes above | 3-5 min MPS | — | **DONE** |
+| P2 (v12 FT) | Retrain with doc-intent positives, CI-yml negatives | 2-3d | +3-5pp r@10 above v8 if P1c lands first | **awaiting gold-label set** |
+| P3 | v8+base ensemble (score averaging) — untried | 4-6h | +2-3pp possible | parked |
+
+### P2-prep: v12 gold-label candidates
+
+**Candidates materialized 2026-04-22:** `scripts/v12_candidates.py` runs current v8 + P1c hybrid pipeline on 22 real MCP queries. Output: `profiles/pay-com/v12_candidates.jsonl` (230 rows). Each row has empty `label` + `note` fields for a reviewer to fill with `+` / `-` / `?`.
+
+**Risk checks before v12 training** (per `feedback_pretrain_sample_check.md`):
+- [ ] Compare 5 train / 5 test positive rows by hand to catch distribution mismatch.
+- [ ] Ensure `query_uses_description` is NOT applied to real-query rows.
+- [ ] Anti-leakage check: no overlap between labeled real queries and test_tickets.
+- [ ] Keep prior 61250 v8 train rows + add labeled real-query rows; do NOT drop v8 data.
 
 ## 2026-04-22 P1b churn replay: v8 vs base on 400 real MCP queries
 
-**Signal: v8 makes substantive changes on real queries** — the Jira-trained FT IS reaching the runtime distribution, just unclear if for better or worse without gold labels.
+**Signal: v8 makes substantive changes on real queries** — the Jira-trained FT IS reaching the runtime distribution.
 
 Setup:
-- Queries: `profiles/pay-com/real_queries/sampled.jsonl` (400 real MCP search calls, stratified sampling, per-session cap 15).
+- Queries: `profiles/pay-com/real_queries/sampled.jsonl` (400 real MCP search calls).
 - Pipeline: `scripts/churn_replay.py` — run each query through `src.search.hybrid.hybrid_search` twice via `reranker_override` (base + v8), diff top-10 by `(repo, file_path)`.
-- Ran sequentially (base → unload → v8) to avoid MPS double-memory.
 
 ### Aggregate metrics
 
@@ -17,288 +163,104 @@ Setup:
 |---|---:|---|
 | `mean_overlap@1` | 0.23 | Top-1 matches on 23% of queries; differs on 77% |
 | `mean_overlap@10` | 0.35 | Only ~3.5 of 10 results shared on average |
-| `median_overlap@10` | 0.30 | Half of queries have <30% overlap |
-| `mean_jaccard@10` | 0.30 | Symmetric: the *union* is ~3× the *intersection* |
 | `pct_top1_changed` | 77.0% | How often v8 picks a different #1 |
 | `pct_high_churn_at_10` | 70.75% | Queries with overlap@10 < 0.5 |
-| `mean_rank_diff_at_10` | 2.48 | Shared items move ~2.5 positions on average |
-
-### Slices (by query shape)
-
-| slice | n | mean_overlap@10 | pct_top1_changed |
-|---|---:|---:|---:|
-| overall | 400 | 0.3455 | 77.0 |
-| length=short (≤3 tok) | 86 | 0.3674 | 65.12 |
-| length=medium (4-8) | 283 | 0.3357 | 79.86 |
-| length=long (>8) | 31 | 0.3742 | 83.87 |
-| has_uppercase_id | 135 | 0.3119 | 80.0 |
-| no_uppercase_id | 265 | 0.3626 | 75.47 |
-| has_jira_prefix | 1 | 0.20 | 100.0 |
-| has_doc_keyword | 4 | 0.175 | 100.0 |
-
-Reading: **short queries get the least churn** (65% top-1 change vs 80% for medium/long) — because the reranker has fewer tokens to re-score. **Uppercase-identifier queries get more churn** (80% top-1 change) — P0c `env_vars` boost is doing work here.
-
-### Qualitative patterns from top-10 diff pairs (all overlap@10=0.0)
-
-See `profiles/pay-com/churn_replay/report.md` for full examples. `diff_pairs.jsonl` (50 entries) is the gold-candidate input for an LLM-judge pass.
-
-**Pattern 1 — docs → code (usually a win):**
-- Query: `add stripe cash-app integration`
-- base top-3: stripe-docs, stripe-cashapp-docs, stripe-docs docs
-- v8 top-3: `grpc-mpi-stripe::libs/stripe-client.js`, `workflow-stripe-subscriptions::libs/stripe-client.js`, `grpc-providers-stripe::libs/generate-initialize-details.js`
-- Verdict (human): v8 wins — user asking about integration wants code, not a docs index.
-
-**Pattern 2 — docs → specific named file (clear win):**
-- Query: `new APM provider integration pattern initialize sale refund webhook`
-- base top-5: apm-reference-ranking yaml + 4× generic `methods/index.js`
-- v8 top-5: `express-api-internal::routes/apm-create.js`, `grpc-apm-transact365::methods/sale.js`, `grpc-apm-ppro::methods/refund.js`, `grpc-apm-trustly::libs/validate-payload.js`
-- Verdict: v8 wins — picks the specific `sale.js` / `refund.js` files that match the query verbs.
-
-**Pattern 3 — docs → CI/deploy yml (a miss):**
-- Query: `ach provider service integration repo`
-- base top-5: paynearme docs + grpc-apm-ach docs + env example
-- v8 top-5: 5× `workflow-ach-*::ci/deploy.yml` and `k8s/.github/workflows/deploy.yml`
-- Verdict: v8 loses — user wants service code; v8 picked CI files that share `ach` tokens. P4.1 penalty rewards non-docs content, but CI yaml is not what the user wants either. This is a known failure mode of the doc-penalty heuristic.
 
 ### What this tells us
 
-1. **FT transfer is real.** The "Jira-trained v8 is a no-op on runtime" hypothesis is refuted — 77% top-1 change is far too high to be noise.
-2. **Direction is mixed qualitatively.** Patterns 1-2 are wins; Pattern 3 is a known P4.1 doc-penalty misfire. The net direction needs LLM labeling or human review.
-3. **Next step = LLM-as-judge on top-50 diff pairs.** Scaffold exists: `scripts/churn_llm_judge.py` with Haiku 4.5 (~$0.13/run). Manual run:
-   ```bash
-   ANTHROPIC_API_KEY=... python3.12 scripts/churn_llm_judge.py --run
-   ```
-4. **Runtime transfer signal is non-zero.** Even before the judge pass, we can say v8's Jira-shaped FT reaches 77% of real queries — the gains/losses on Jira are not stuck in the Jira distribution.
-
-### Artifacts landed
-
-- `scripts/churn_replay.py` + `tests/test_churn_replay.py` (12 tests) — commit `2c6f924`.
-- `scripts/analyze_churn.py` + `tests/test_analyze_churn.py` (13 tests) — commit `91fb74b`.
-- `scripts/churn_llm_judge.py` + `tests/test_churn_llm_judge.py` (11 tests, dry-run default) — commit `238994b`.
-- `profiles/pay-com/churn_replay/{summary.json,report.md}` — this commit.
-- Full `v8_vs_base.json` (2.9MB) kept local only; reproducible via `python3.12 scripts/churn_replay.py` (~84 min on MPS).
-
-### Next levers (updated)
-
-| # | Action | Cost | Expected |
-|---|---|---|---|
-| **P1b.1** | Run `churn_llm_judge.py --run` on top-50 diff pairs | $0.13, 5 min | Direction signal (v8 win rate vs base) |
-| **P1b.2** | Human review of 10 worst diff pairs from report | 15 min | Detect any systematic misfire worth fixing |
-| P1c | Fix Pattern-3 misfire: extend `_DOC_FILE_TYPES` or path regex to penalize `ci/deploy.yml` | 30 min | +X on runtime queries; risk low (guarded by `CODE_RAG_DISABLE_PENALTIES`) |
-| P2 | v12 FT — blocked on P1b.1 verdict | 2-3d | Only if judge says v8 wins; else revisit training data |
+1. **FT transfer is real.** 77% top-1 change is far too high to be noise.
+2. **Direction is mixed qualitatively** (see dual judge §).
+3. **Next step = LLM-as-judge on top-50 diff pairs** (DONE 2026-04-22 — see dual judge §).
 
 ## 2026-04-22 investigation: hybrid regression on 103 lost tickets
 
 Running `scripts/ab_lost_tickets.py` with three A/B gates on the "lost" subset:
 
-| Variant | r@10 | hits | Conclusion |
-|---|---|---|---|
-| Control (no changes) | 0.0000 | 0/103 | reproduces snapshot |
-| `CODE_RAG_DISABLE_PENALTIES=1` | 0.0049 | 1/103 | **penalties NOT the cause** |
-| `CODE_RAG_DISABLE_CODE_FACTS=1` | 0.0049 | 1/103 | **code_facts/env_vars NOT the cause** |
-| `AB_ENRICHED_ALWAYS=1` on BO-798 only | 1.0000 | 1/1 | enriched query recovers GT |
+| Variant | r@10 | Conclusion |
+|---|---|---|
+| Control | 0.0000 | reproduces snapshot |
+| `CODE_RAG_DISABLE_PENALTIES=1` | 0.0049 | **penalties NOT the cause** |
+| `CODE_RAG_DISABLE_CODE_FACTS=1` | 0.0049 | **code_facts/env_vars NOT the cause** |
+| `AB_ENRICHED_ALWAYS=1` on BO-798 | 1.0000 | enriched query recovers GT |
 
-Partial full-subset run of enriched-always (126 baseline tickets from shard1+2, shard0 hung and was killed — see MPS deadlock note):
-
-| Pipeline | r@10 on same 126 tickets |
-|---|---:|
-| summary hybrid (from gte_v8_hybrid.json) | 0.7920 |
-| **enriched hybrid** | **0.7745** (-1.75pp) |
-| fts_only+fallback | 0.7399 |
-
-Enriched-always rescued 5 tickets (including BO-798 which went 0.00 → 1.00) but lost 10 other tickets — net regression. It is NOT a drop-in cure.
-
-### What the candidate pool tells us
-
-- `cand=50` in the hybrid snapshot means FTS returned 0 and only vector survived. Median pool for the 103 lost tickets was exactly 50.
-- On re-run with the same code, many of those same tickets now report `cand=200-240` (FTS working), yet r@10 is still 0. The lost-subset is non-deterministic at the candidate-pool level, probably due to MPS numerics between runs.
-- This means the "lost" population is not a fixed set of retrieval failures; some of it is reranker sensitivity to short query. Any future fix must target reranker ranking, not just FTS recall.
-
-### Instability notes (for future runs)
-
-- `scripts/ab_lost_tickets.py` hangs at ticket 2+ on enriched path (200-candidate rerank on long query). Killed and restarted twice. For A/B, stay with `--limit 1..20` and be ready to kill.
-- `scripts/eval_parallel.sh` with `USE_HYBRID_RETRIEVAL=1 EVAL_QUERY_MODE=enriched LATENCY_PROFILE=...` hung 2/3 shards on the enriched eval (shard0 at 11/303, shard1 died at 59/303, shard2 at 71/303). 100% CPU, no output for 60+ min → killed. First full hybrid run (summary mode) completed 134 min without issues, so the crash is specific to the enriched+hybrid combination.
-- **Workaround for future full enriched-hybrid eval:** run sequentially (`--shard-total 1`) or lower `batch-size` / `max-length`.
+Enriched-always rescued 5 tickets but lost 10 other tickets — net regression. NOT a drop-in cure.
 
 ### Decisions
 
 - `fts_fallback_enrich` in `eval_one_model_hybrid` reverted (commit `67f45a2` — A/B disproved it).
-- Investigation env gates (`CODE_RAG_DISABLE_{PENALTIES,CODE_FACTS}`) committed to `src/search/hybrid.py` for future A/B work (commit `155c39e`, default off = prod unchanged).
-- `scripts/ab_lost_tickets.py` committed as tooling for future retrieval-regression investigations (commit `ea6feb7`).
-- v12 FT NOT started — first need a stable measurement. Next agent should investigate why reranker ranks `backoffice-web` low on short BO-tickets (token overlap, model bias?). Possible direction: `freeze bottom 6 ModernBERT layers` from Agent B's recipe, but validate on stable eval first.
+- Investigation env gates (`CODE_RAG_DISABLE_{PENALTIES,CODE_FACTS}`) committed for future A/B work.
+- v12 FT NOT started — first need a stable measurement.
 
 ## 2026-04-21 late-evening: P0a+P0b+P0c landed
 
-Three commits / six commit-sha pushed via MCP (`gh` deny-listed):
+Three commits / six commit-sha pushed via MCP:
 
 | Commit | Scope | Behaviour change |
 |---|---|---|
-| `595a06b` | P0b — `src/search/suggestions.py` | `WHERE node_type='repo'` → drop WHERE. Column was `type`; SQL raised, bare `except` swallowed it, 629 zero-result queries got glossary-only suggestions. |
-| `9dfaac5` | P0c — `src/search/{code_facts.py,env_vars.py}`, `src/search/hybrid.py`, `src/config.py`, 3 tests | `_apply_code_facts` boosts (repo,file) in pool by 1.15× and injects first chunk for missed (repo,file). `_apply_env_vars` boosts repos 1.05× when query has ≥3-char UPPERCASE token. New tuning constants `code_fact_boost`, `code_fact_inject_weight`, `env_var_boost`. 20 new tests. |
-| `51c9181` | P0a — `src/search/hybrid.py` | `rerank()` + `hybrid_search()` accept `reranker_override` kwarg. Default None = get_reranker() (prod unchanged). |
-| `d7aedd3` | P0a — `tests/test_hybrid.py` | Mocks now accept `**_kw` for the new kwarg. |
-| `5b71220` | P0a — `scripts/eval_finetune.py` | Adds `_CrossEncoderAdapter`, `eval_one_model_hybrid()`, `--use-hybrid-retrieval` flag. Under hybrid mode the eval pool becomes FTS+vector RRF + code_facts/env_vars wiring + content-type boosts — identical to prod serving. `eval_config.retrieval_mode` gates `--reuse-baseline-from` so old fts_only snapshots can't poison a hybrid run. |
-| `a286e18` | P0a — `scripts/eval_parallel.sh` | `USE_HYBRID_RETRIEVAL=1` env passthrough. |
-
-Smoke tests done (in-process, 50-candidate limit, ms-marco-MiniLM stub reranker): hybrid query for "FORCE_REDIRECTS_PROVIDERS trustly signature validation" returns 237 candidates; sources include `code_facts` and `env_var` on expected chunks (express-api-callbacks, grpc-apm-trustly, boilerplate-next-web/parse-or-throw.ts). Rep hybrid-path test under `tests/test_hybrid.py::TestCodeFactsWiring` / `TestEnvVarsWiring` exercises boost + injection + gating.
-
-### Not yet done
-
-- Full hybrid eval (baseline + v8 through hybrid pool on 909 tickets). Command (when ready to burn ~60-90min + daemon restart):
-  ```bash
-  USE_HYBRID_RETRIEVAL=1 BASELINE=skip SLUG=gte_v8_hybrid \
-    MODEL=profiles/pay-com/models/reranker_ft_gte_v8 \
-    DATA=profiles/pay-com/finetune_data_v8 \
-    bash scripts/eval_parallel.sh
-  ```
-  Expected: r@10 differs from fts_only (0.7622) because candidate pool is wider (vector, code_facts) and content-type boosts re-order. Direction unknown until measured.
-- `null_rank rescue` (P1a), `churn replay` (P1b), `v12 FT` (P2) — unchanged from prior plan.
+| `595a06b` | P0b — `src/search/suggestions.py` | `WHERE node_type='repo'` → drop WHERE. 629 zero-result queries affected. |
+| `9dfaac5` | P0c — `src/search/{code_facts.py,env_vars.py}`, `src/search/hybrid.py` | `_apply_code_facts` + `_apply_env_vars` wiring. 20 new tests. |
+| `51c9181` | P0a — `src/search/hybrid.py` | `rerank()` + `hybrid_search()` accept `reranker_override` kwarg. |
+| `5b71220` | P0a — `scripts/eval_finetune.py` | `_CrossEncoderAdapter`, `eval_one_model_hybrid()`, `--use-hybrid-retrieval` flag. |
 
 ---
 
 ## 🎯 2026-04-21 evening: Conditional enriched FTS fallback — CONFIRMED +5.09pp v8 Δr@10 full-eval
 
-**Full eval completed** (`gte_v8_fallback.json`, 909 tickets, fresh baseline + v8 both with `--fts-fallback-enrich`). Verdict: **PROMOTE** (Δr@10=+0.051, ΔHit@5=+0.079, net=+100, 146 improved / 46 regressed). All gate thresholds cleared with margin.
+**Full eval completed** (`gte_v8_fallback.json`, 909 tickets). Verdict: **PROMOTE** (Δr@10=+0.051, ΔHit@5=+0.079, net=+100).
 
-### Measured numbers (vs pre-session estimates)
+| Metric | Old (no fallback) | New (with fallback) | Δ absolute |
+|---|---:|---:|---:|
+| baseline r@10 | 0.6527 | **0.7112** | **+5.85pp** |
+| v8 r@10 | ~0.6955 | **0.7622** | **+6.67pp** |
+| v8 Hit@5 | ~0.8425 | **0.9131** | **+7.06pp** |
 
-| Metric | Old (no fallback) | New (with fallback) | Δ absolute | Estimated | Delta-estimate |
-|---|---:|---:|---:|---:|---:|
-| baseline r@10 | 0.6527 | **0.7112** | **+5.85pp** | +6.33pp | −0.48pp |
-| v8 r@10 | ~0.6955 | **0.7622** | **+6.67pp** | +7.21pp | −0.54pp |
-| baseline Hit@5 | 0.7668 | ~0.8339 | +6.71pp | +6.93pp | −0.22pp |
-| v8 Hit@5 | ~0.8425 | **0.9131** | **+7.06pp** | +7.92pp | −0.86pp |
+**v8 advantage over baseline is PRESERVED and slightly amplified with fallback enabled.**
 
-Estimates were ~0.5pp high across the board — expected noise from reranker behaviour on rescued candidates (candidate pool from enriched query differs from the candidates the diagnostic scored). Net directionally correct.
+### Post-breakthrough re-audit (5 agents)
 
-### Relative v8 vs baseline (with fallback on both)
-
-| Metric | Old (no fallback) | New (with fallback) | Gap preserved? |
-|---|---:|---:|:---:|
-| Δr@10 (v8 − baseline) | +0.0429 | **+0.0509** | ✅ WIDER (+0.8pp) |
-| ΔHit@5 | +0.0757 | **+0.0792** | ✅ same |
-| net_improved | +63 | **+100** | ✅ better |
-| MRR diag | — | +0.1038 | new |
-
-**v8 advantage over baseline is PRESERVED and slightly amplified with fallback enabled.** Fallback helps baseline too (symmetric), but v8's rerank FT continues to pay on the rescued tickets.
-
-### Implementation notes
-
-- `scripts/eval_finetune.py`: new `--fts-fallback-enrich` flag. When `query_mode=summary` AND `fetch_fts_candidates` returns empty, retry with `build_query_text(task, use_description=True)` preclean'd via `preclean_for_fts`. On rescue, use the enriched query for rerank too (matches training distribution). Per-ticket `fallback_used` recorded.
-- `scripts/eval_parallel.sh`: new `FTS_FALLBACK_ENRICH=1` env var passthrough.
-- `scripts/sample_real_queries.py` + `tests/test_sample_real_queries.py`: foundation for real-query eval (400 stratified MCP queries sampled from `logs/tool_calls.jsonl`). Not yet labeled.
-- Trigger: 77/909 eval tickets had 0 FTS candidates on raw summary. Reranker couldn't reach them. Blanket enriched mode breaks other tickets (−15pp on PI per Phase 1 test); conditional rescue can only help.
-- **EVAL-TIME ONLY.** Runtime queries lack Jira description; transfer requires separate lever (query expansion, identifier injection).
-
-### Post-breakthrough re-audit (5 agents: 2 context-aware + 2 blind + 1 runtime-reality)
-
-| # | Finding | Severity | Source |
-|---|---|---|---|
-| 1 | **Eval pipeline ≠ production retrieval.** `scripts/eval_finetune.py` uses FTS5-only candidate pool; `src/search/hybrid.py` uses FTS+vector RRF + content-type boosts + 70/30 rerank:RRF mix. 11 prior FT iterations tuned to wrong candidate pool. | P0 BUG | Blind audit C |
-| 2 | **Free lunch — unused tables.** `code_facts_fts` (1659 rows, built by `src/index/builders/code_facts.py`) and `env_vars` (4753 rows, built by `scripts/build_env_index.py`) exist in `db/knowledge.db` but NEVER read by `src/search/*.py` at query time. Pure untapped recall surface. | P0 | Blind audit D |
-| 3 | **Mini bug.** `src/search/suggestions.py:72` — `WHERE node_type = 'repo'` but actual column is `type`. Swallowed by bare `except Exception`. 629 zero-result queries affected. | bug | Blind audit C |
-| 4 | **Null_rank headroom.** 42 tickets have GT outside top-200 even with fallback → +4.62pp of locked headroom. Most GTs are mega-repo names (`backoffice-web`, `graphql`) not present in summary. Fix: FTS query expansion via `conventions.yaml` / `glossary.yaml` identifier injection, or Haiku 3.5 LLM rewrite (~$0.0002/query). | P1 | Context audit A |
-| 5 | **Runtime transfer signal = top-K churn replay.** Cheapest high-signal measurement: replay 2308 real queries through baseline vs v8+fallback, compare top-10 ranks. $0 cost, 4h daemon time. Real queries are structurally close to fallback bucket (short, identifier-heavy) — transfer likely positive but needs measurement. | P1 | Runtime audit |
-| 6 | **v12 FT verdict — mixed.** Agent A says NO (fix retrieval first). Agent B says YES with specific recipe (listwise + lr=5e-5 + freeze bottom 6 ModernBERT layers + dense-neg hybrid + fallback-enriched training + real-holdout gate). **Consensus: defer v12 until P0a retrieval parity lands** — else we tune to wrong pool again. | decision | Agents A/B |
-
-### New next-lever ranking (supersedes all prior)
-
-| # | Action | Effort | Expected |
-|---|---|---|---|
-| P0a | Fix `eval_finetune.py` to use `hybrid.py` retrieval | 4-6h | Validates future FT decisions |
-| P0b | Fix `suggestions.py` `type` column typo | 5 min | Pure bug, 629 queries |
-| P0c | Wire `code_facts_fts` + `env_vars` readers into `src/search/*.py` | 1-2d | Unused recall surface |
-| P1a | Null_rank rescue (glossary/LLM query expand) | 1-2d | +2-3pp r@10 est |
-| P1b | Top-K churn replay on 2308 real queries | 4h | Runtime transfer signal, $0 |
-| P2 | v12 FT — ONLY AFTER P0a (else tuning to wrong pool) | 2-3d | +1.5-2.5pp est |
-| ❌ | v6.2+v8 ensemble | — | Jaccard 0.918, skip |
-| ❌ | LLM-as-judge full labeling | $5+4h | Churn replay gives 80% signal |
-| ⏸ | Dense embedding FT | 12-24h re-embed | Defer |
+| # | Finding | Severity |
+|---|---|---|
+| 1 | **Eval pipeline ≠ production retrieval.** 11 prior FT iterations tuned to wrong candidate pool. | P0 BUG |
+| 2 | **Free lunch — unused tables.** `code_facts_fts` + `env_vars` existed in knowledge.db but never read. | P0 |
+| 3 | **Mini bug.** `src/search/suggestions.py:72` — `WHERE node_type = 'repo'` but actual column is `type`. | bug |
+| 4 | **Null_rank headroom.** 42 tickets have GT outside top-200 → +4.62pp locked headroom. | P1 |
+| 5 | **Runtime transfer signal = top-K churn replay.** Real queries structurally close to fallback bucket. | P1 |
+| 6 | **v12 FT verdict — mixed.** Defer until P0a retrieval parity lands. | decision |
 
 ---
 
 ## ✅ 2026-04-21 morning: v8 DEPLOYED to production
 
-User decision: deploy v8, purge rest. Only v8 gave real runtime improvement (+8.3pp queries, +2.1pp realworld vs baseline); v10/v6.2/v9/v11 tied baseline on benchmarks. Jira r@10 gains didn't transfer to real queries — reranker learned Jira-label pattern, not RAG-query pattern.
+User decision: deploy v8, purge rest. Only v8 gave real runtime improvement (+8.3pp queries, +2.1pp realworld vs baseline); v10/v6.2/v9/v11 tied baseline on benchmarks.
 
-- `profiles/pay-com/config.json::reranker_model` → absolute path to `reranker_ft_gte_v8` (relative broke: daemon cwd ≠ repo).
+- `profiles/pay-com/config.json::reranker_model` → absolute path to `reranker_ft_gte_v8`.
 - Daemon restarted via `/admin/unload`. v8 loaded successfully.
-- Purged v9, v10, v11 models (~6GB), `finetune_data_v9/` (70MB), all v9/v10/v11 eval snapshots, overnight experiment logs, `scripts/prepare_v9.sh`, `scripts/compare_query_modes.py`, `tests/test_compare_query_modes.py`.
-- Kept: Phase 1 tooling (`--eval-query-mode`, `--test-ratio`, `--early-stopping-patience`) + FTS5 preclean fix + regression tests.
-
-Overnight v9/v10/v11 lessons: lr=5e-5 > lr=2e-5 (undertrain) ≈ lr=8e-5 (mild overfit); `--test-ratio 0.15` real holdout confirmed v6.2's "+4.30pp" inflated by memorization by ~+1.19pp; honest held-out gain for best model was +3.58pp.
+- Purged v9, v10, v11 models (~6GB), `finetune_data_v9/`, all v9/v10/v11 eval snapshots.
 
 ---
 
 ## Critical pitfalls — do NOT repeat (граблі)
 
 1. **No `--dedupe-same-file`** — v5 catastrophe (−16.67pp).
-2. **MANDATORY sample check** — 5 train + 5 test positive rows, visual compare. 10 min gate prevents 6h train waste.
+2. **MANDATORY sample check** — 5 train + 5 test positive rows. 10 min gate prevents 6h train waste.
 3. **No `--max-rows-per-ticket` below 300** — v6.1 killed CORE at cap=120.
-4. **No wholesale `--skip-empty-desc-multi-file`** — drops 13 CORE monster-PRs. Prefer query augmentation instead.
-5. **Don't combine 5 new flags at once** — v5 lesson. Isolate each change. Attribution matters.
-6. **Both MPS env vars** — `PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.8` AND `PYTORCH_MPS_LOW_WATERMARK_RATIO=0.4` together.
-7. **`--history-out` no shard suffix** — `eval_finetune.py` appends `.shardNofN.json` automatically.
+4. **No wholesale `--skip-empty-desc-multi-file`** — drops 13 CORE monster-PRs.
+5. **Don't combine 5 new flags at once** — v5 lesson. Isolate each change.
+6. **Both MPS env vars** — `PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.8` AND `PYTORCH_MPS_LOW_WATERMARK_RATIO=0.4`.
+7. **`--history-out` no shard suffix** — `eval_finetune.py` appends `.shardNofN.json`.
 8. **Env vars for DB paths** — `CODE_RAG_HOME=/Users/vaceslavtarsevskij/.code-rag-mcp`, `ACTIVE_PROFILE=pay-com`.
 9. **Checkpoint resume requires same batch size** — HF Trainer bug.
-10. **Eval metric is repo-level, not file-level** — if you see r@10 numbers, they're over ~70 repos, not 909 files. Post-2026-04-20 gate: r@10 primary + Hit@5 co-primary + net_improved counts, on full 909 set. MRR is diagnostic only (misleads on our data).
-11. **v7 lesson: don't iterate FE clusters sequentially** — single repo dominates. Round-robin or score-merge.
-12. **Run critics BEFORE implementation** — v7 hypothesis was wrong; a falsification test would've saved a 3h cycle.
-13. **Eval pipeline ≠ production.** `eval_finetune.py` uses FTS-only; `hybrid.py` uses FTS+vector RRF+boosts. Always verify eval candidate pool matches serving pool before concluding "reranker is the bottleneck".
-14. **Pre-commit pytest flakes under MPS contention during FT training.** If it fails with "11 errors" while training is running, verify manually — do NOT `--no-verify` by default. Under normal load, hook passes (tests don't import torch directly).
-15. **MCP push_files requires FULL file content** per commit. Previous session's "push" was partial — file-by-file instead of diff-based. This reconciled today across 9 commits. Never assume origin has the same content as local HEAD.
-16. **Blanket enriched query mode LAMEs FTS candidates** (−15pp on PI in Phase 1 test). Only CONDITIONAL fallback (retry enriched ONLY when FTS=0) is safe.
-17. **The "rerank ceiling" claim after 11 iterations was WRONG.** 8.5% of tickets (77) had 0 FTS candidates — reranker couldn't reach them. Always verify retrieval reaches all eval tickets before concluding rerank saturated.
-18. **Do NOT run eval_parallel.sh with EVAL_QUERY_MODE=enriched + USE_HYBRID_RETRIEVAL=1 + 3 shards.** Confirmed MPS-deadlocks 2/3 shards (2026-04-22). Use `--shard-total 1` sequential, lower `--batch-size`, or reduce `--max-length`.
-19. **Never use `tee` with long-running Python progress output.** stdout through a tee pipe is block-buffered — progress prints stop arriving in the log file even though the process is running. Use `python3.12 -u` with direct `> file` redirection, and put `flush=True` on per-iteration print calls.
-
----
-
-## Mistakes and wrong conclusions
-
-### 1. v5 failure: "dedupe-same-file broke distribution"
-Dedupe prefer-diff-over-chunk left 99.6% diff positives; eval uses chunks → mismatch → −16.67pp. Confirmed by sample-check rule. Related question: maybe pure diffs train reranker differently than assumed — different cure.
-
-### 2. v6.1 failure: "max-rows=120 killed CORE monster-PRs"
-cap=120 dropped 2,448 CORE positives → −1.79pp vs v4. Maybe CORE monster-PRs are LOW-signal; dropping them might be correct. Disentangle by changing one flag at a time.
-
-### 3. v7 failure: "BO→FE vocabulary leakage"
-Hypothesis WRONG per audit. CORE regressions are multi-GT displacement noise (n_gt=8.5 for regressed tickets), not leakage. Rule: **don't act on a hypothesis without a falsification test first.**
-
-### 4. Eval verdict threshold `reg ≤ 3` — ✅ FIXED 2026-04-20
-Direction confirmed (unworkable) but mechanism wrong. Real problem: 46% of tickets have n_gt=1 (r@10 binary), 5-ticket test split fragile, verdict ignored improvements. New gate: `Δr@10 ≥ +0.02 AND ΔHit@5 ≥ +0.02 AND net_improved ≥ 20`. MRR is diagnostic only (would have promoted rejected v7 over v6.2).
-
-### 5. "FT helps — just need better data"
-Claimed max +2pp remaining via filter tweaks. Refuted: real addressable ceiling via r@25 is ~10pp; v6.2 already closed ~47%. Remaining ~4pp is real but NOT addressable by filter tweaking. Listwise/pairwise loss, freeze-bottom-layers, dense-neighbor negatives are untried. Lesson: **stop filter-tweaking, not FT as a whole.**
-
-### 6. "Jira eval generalizes to runtime"
-Real queries = 61 chars (confirmed), but "82% identifier-dense" WRONG — actual char-level = 38%, token-level = 26%. 1174 queries from 43 sessions, top-3 = 45% → single-dev workflow-replay, not generalization benchmark. `search_feedback.jsonl` has no click signal (score=0 everywhere).
-
-### 7. "Rerank is at ceiling" (2026-04-21 morning) — WRONG
-Claim: 11 FT iterations capped at +3-5pp, rerank exhausted. Revisit: 8.5% of eval tickets scored 0 FTS candidates → reranker couldn't help. Conditional enriched fallback unlocks baseline +5.85pp AND v8 +6.67pp. The ceiling was a RETRIEVAL blocker, not a rerank one. **Always audit "which tickets can retrieval even reach?" before concluding reranker saturated.**
-
-### 8. "Eval pipeline accurately reflects production" (2026-04-21 evening) — UNCLEAR
-Claim: `eval_finetune.py` is the canonical measurement. Revisit: Critic C blind audit found eval uses FTS-only + direct rerank, production uses FTS+vector RRF + content-type boosts + 70/30 rerank:RRF mix. v8's measured +5.09pp may not transfer 1:1 to production. P0a priority: align eval to `hybrid.py` before any further FT.
-
-### 9. "Enriched query fixes hybrid regression" (2026-04-22 00:00) — WRONG
-After hybrid eval showed -10pp absolute recall vs fts_fallback and A/B disproved penalties + code_facts as cause, BO-798 direct test (summary 0.00 → enriched 1.00) suggested enriched-always would recover. Partial 126-ticket subset showed net -1.75pp: enriched rescued 5 tickets but regressed 10. The win on BO-798 was not generalizable. Next investigation must be reranker-ranking-focused, not retrieval-focused.
-
-### 10. "Hybrid eval is stable enough for parallel 3-shard runs" (2026-04-22 01:30) — WRONG
-Summary-hybrid run completed cleanly (134 min). Enriched-hybrid run: shard0 hung at 11/303, shard1 died at 59/303, shard2 hung at 71/303. All three at 100% CPU with no progress for 60+ min. MPS deadlock appears specific to enriched + 200-candidate rerank combination. For future runs: `--shard-total 1` sequential, or reduce `--batch-size` / `--max-length`.
-
----
-
-## Journey — Key iterations (lesson-bearing only)
-
-| Ver | Key change | Δr@10 ALL | Lesson |
-|---|---|---|---|
-| v4 | title+desc+diff positives | +4.06pp | First "good" FT. Proven baseline. |
-| v5 | added `--dedupe-same-file` | **−16.67** | Distribution mismatch. **Never dedupe.** |
-| v6.2 | reverted dedupe, +oversample PI, max-rows 300 | **+4.30pp** | Best Jira r@10 but inflated by memorization. |
-| v7 | `--fe-hard-negatives 4` from FE cluster | +3.39pp | 99.7% graphql in first cluster. Hypothesis unfalsified. |
-| v8 | v6.2 data reformatted listwise + LambdaLoss | +3.92pp | Hit@5 champion (+6.9pp), runtime winner. **In prod.** |
-| fallback (2026-04-21) | conditional enriched FTS retry on FTS=0 | +6.67pp (v8 absolute) | Rerank ceiling was a retrieval blocker. +5.09pp net v8 over baseline with fallback on both. |
-| hybrid (2026-04-22) | P0a eval routed through hybrid.py | +3.37pp Δ (abs -10pp vs fallback) | v8 still wins, but absolute recall regresses because hybrid pool replaces fallback with vector/code_facts and on short BO-queries reranker drops GT. Fix must target reranker ranking on short queries, not retrieval. |
+10. **Eval metric is repo-level, not file-level** — r@10 is over ~70 repos, not 909 files.
+11. **v7 lesson: don't iterate FE clusters sequentially** — single repo dominates.
+12. **Run critics BEFORE implementation** — v7 hypothesis was wrong.
+13. **Eval pipeline ≠ production.** Always verify eval candidate pool matches serving pool.
+14. **Pre-commit pytest flakes under MPS contention.** Verify manually — do NOT `--no-verify`.
+15. **MCP push_files requires FULL file content** per commit. Never assume origin == local HEAD.
+16. **Blanket enriched query mode LAMEs FTS candidates** (−15pp on PI). Only CONDITIONAL fallback safe.
+17. **The "rerank ceiling" claim after 11 iterations was WRONG.** 8.5% of tickets had 0 FTS candidates.
+18. **Do NOT run eval_parallel.sh with EVAL_QUERY_MODE=enriched + USE_HYBRID_RETRIEVAL=1 + 3 shards.** MPS deadlock.
+19. **Never use `tee` with long-running Python progress output.** Use `python3.12 -u` with direct `> file`.
+20. **13-agent audit 2026-04-22** — 4 P0 bugs still open (rowid collision, /admin/unload race, code_facts_fts drift, FTS optimize misuse). Eval methodology has 6 systemic gaps (GT repo-level, binary improved, 4-ticket test, eval≠prod pool, query uses description, benchmarks overfit).
 
 ---
 
@@ -310,81 +272,13 @@ Summary-hybrid run completed cleanly (134 min). Enriched-hybrid run: shard0 hung
 - **v8 eval**: r@10 = 0.7622 / Hit@5 = 0.9131 (with `--fts-fallback-enrich`).
 - Base model for FT: `Alibaba-NLP/gte-reranker-modernbert-base` (149M params).
 
-### Archive (kept for future iteration)
-
-| Artifact | Purpose | Path |
-|---|---|---|
-| `reranker_ft_gte_v4/` (2GB) | First good FT baseline | `profiles/pay-com/models/reranker_ft_gte_v4/` |
-| `reranker_ft_gte_v6_2/` (2GB) | Best Jira r@10 (inflated +1.19pp by memorization) | `profiles/pay-com/models/reranker_ft_gte_v6_2/` |
-| `reranker_ft_gte_v8/` (285MB bf16) | **PROD.** Best Hit@5 + runtime + listwise LambdaLoss | `profiles/pay-com/models/reranker_ft_gte_v8/` |
-| `finetune_data_v6_2/` (97M) | v6.2 training set (61,250 pointwise rows) | `profiles/pay-com/finetune_data_v6_2/` |
-| `finetune_data_v8/` (16M) | v8 listwise (879 groups, derived via `convert_to_listwise.py`) | `profiles/pay-com/finetune_data_v8/` |
-| `gte_v1.json`, `gte_v4.json`, `gte_v6_2.json`, `gte_v7.json`, `gte_v8.json`, `gte_v8_fallback.json` | Eval snapshots (reuse via `--reuse-baseline-from`) | `profiles/pay-com/finetune_history/` |
-
----
-
-## Proven FT recipe (if v12 happens — AFTER P0a)
-
-**Update:** canonical baseline is now 0.7112 r@10 (not 0.6527). Prefer listwise LambdaLoss (v8). Consider freeze bottom 6 ModernBERT layers + dense-neg hybrid (both untried). Train with `--fts-fallback-enrich` enabled in eval gate.
-
-**Train:**
-```bash
-PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.8 PYTORCH_MPS_LOW_WATERMARK_RATIO=0.4 \
-python3.12 scripts/finetune_reranker.py \
-  --train profiles/pay-com/finetune_data_vN/train.jsonl \
-  --test profiles/pay-com/finetune_data_vN/test.jsonl \
-  --base-model Alibaba-NLP/gte-reranker-modernbert-base \
-  --out profiles/pay-com/models/reranker_ft_gte_vN \
-  --epochs 1 --batch-size 16 --lr 5e-5 --warmup 200 --max-length 256 \
-  --bf16 --optim adamw_torch_fused --loss lambdaloss \
-  --save-steps 500 --val-ratio 0.10 --early-stopping-patience 2 \
-  --resume-from-checkpoint none
-```
-
-**Data prep (real holdout — mandatory):**
-```bash
-python3.12 scripts/prepare_finetune_data.py \
-  --projects PI,BO,CORE,HS --min-files 1 --seed 42 \
-  --out profiles/pay-com/finetune_data_vN/ \
-  --use-description --use-diff-positives --diff-snippet-max-chars 1500 \
-  --drop-noisy-basenames --drop-generated --drop-trivial-positives \
-  --min-query-len 30 --oversample PI=5 \
-  --drop-popular-files 25 --max-rows-per-ticket 300 \
-  --test-ratio 0.15
-```
-
-**Eval (parallel 3 shards, ~35-45 min):**
-```bash
-FTS_FALLBACK_ENRICH=1 SLUG=gte_vN \
-MODEL=profiles/pay-com/models/reranker_ft_gte_vN \
-DATA=profiles/pay-com/finetune_data_vN \
-  bash scripts/eval_parallel.sh
-```
-
-Don't use `--dedupe-same-file` (v5 catastrophe).
-
----
-
-## Known infrastructure
-
-- `db/tasks.db` (70MB) — `task_history` with 909 Jira tickets (ground truth = `files_changed`, eval scores repos).
-- `db/knowledge.db` (160MB) — FTS5 + chunk metadata. Tables: `chunks`, `chunks_fts`, `code_facts`, `code_facts_fts` (1659 rows — **wired via `src/search/code_facts.py`**, P0c), `env_vars` (4753 rows — **wired via `src/search/env_vars.py`**, P0c), `graph_edges` (11k+ typed edges, UNUSED by retrieval), `graph_nodes`.
-- `db/vectors.lance.coderank/` (11GB LanceDB) — CodeRankEmbed embeddings for hybrid search.
-- **Still unused**: `graph_edges` (never read at query time).
-- `logs/tool_calls.jsonl` — 2308+ real MCP search queries (post-breakthrough count updated from 1194). Source of truth for P1b churn replay.
-- `logs/search_feedback.jsonl` (17.9M) — no click-through signal (score=0 everywhere).
-- `profiles/pay-com/traces/raw/*.summary.json` — Jaeger runtime traces, not ingested.
-- `scripts/eval_parallel.sh` — parallel 3-shard eval template (saves ~50% time).
-- `scripts/prepare_finetune_data.py` — all v1-v8 flags (all opt-in, default False).
-- `scripts/finetune_reranker.py` — train pipeline with bf16, checkpointing, early-stopping.
-- `scripts/eval_finetune.py` — eval with `--shard-index`, `--reuse-baseline-from`, `--fts-fallback-enrich`, and `--use-hybrid-retrieval` (P0a: opt-in, routes through `src.search.hybrid.hybrid_search` for prod parity). Default remains FTS-only for backward-compat with pre-P0a snapshots.
-
 ---
 
 ## Context for new session
 
 - 16GB M-series Mac. MPS acceleration. One-epoch FT = ~75-100 min on 60k rows.
-- Daemon on :8742 manages ML models in production. Unload before training (avoids MPS contention).
-- `caffeinate -is -t 86400` to prevent sleep during overnight runs.
+- Daemon on :8742 manages ML models in production. Unload before training.
 - User is the only dev; commits via `mcp__github__*` tools (gh deny-listed).
-- Test suite (~398 tests: 362 pre-churn + 12 `test_churn_replay` + 13 `test_analyze_churn` + 11 `test_churn_llm_judge`) must pass before any changes land: `python3.12 -m pytest tests/ -q`.
+- Test suite (410 tests as of 2026-04-22) must pass: `python3.12 -m pytest tests/ -q`.
+- 4 P0 bugs queued for next session: hybrid.py rowid collision, daemon.py /admin/unload race, repo_indexer.py code_facts_fts drift, orchestrator.py FTS5 optimize misuse.
+- `v12_candidates.jsonl` (230 rows) awaits human labeling before v12 FT can start.
