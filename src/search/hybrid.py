@@ -185,7 +185,7 @@ def rerank(
 
 
 def _apply_code_facts(
-    scores: dict[int, dict],
+    scores: dict[str, dict],
     query: str,
     repo: str,
     rrf_k: int,
@@ -201,6 +201,11 @@ def _apply_code_facts(
          from that file and insert it with position-based RRF weight. This is
          the recall-surface part: chunks the keyword/vector search missed but
          code_facts matched.
+
+    P0 (2026-04-22): `scores` is keyed by `f"{source}:{rowid}"` to avoid
+    collisions between FTS and vector rowid spaces. `fetch_chunks_for_files`
+    returns rowids from the `chunks` (FTS5) table, so injected records use
+    the `fts:` prefix to stay coherent if the same chunk surfaces via FTS.
     """
     cf_hits = code_facts_search(query, repo, limit=50)
     if not cf_hits:
@@ -232,11 +237,12 @@ def _apply_code_facts(
     if missing_pairs:
         injected = fetch_chunks_for_files(missing_pairs)
         for rank_idx, chunk in enumerate(injected):
-            rid = chunk["rowid"]
-            if rid in scores:
+            # chunk["rowid"] comes from the `chunks` (FTS5) table.
+            key = f"fts:{chunk['rowid']}"
+            if key in scores:
                 continue
             rrf_score = (kw_weight * CODE_FACT_INJECT_WEIGHT) / (rrf_k + rank_idx + 1)
-            scores[rid] = {
+            scores[key] = {
                 "score": rrf_score,
                 "repo_name": chunk["repo_name"],
                 "file_path": chunk["file_path"],
@@ -247,7 +253,7 @@ def _apply_code_facts(
             }
 
 
-def _apply_env_vars(scores: dict[int, dict], query: str) -> None:
+def _apply_env_vars(scores: dict[str, dict], query: str) -> None:
     """P0c: Boost repos that define UPPERCASE env vars in the query.
 
     Repo-level signal — lighter than code_facts (file-level). Only fires when
@@ -300,13 +306,27 @@ def hybrid_search(
     vector_results, vec_err = vector_search(query, repo, file_type, exclude_file_types, limit=50)
 
     # 3. RRF fusion
-    scores: dict[int, dict] = {}  # rowid → merged result dict
+    #
+    # P0 (2026-04-22): `scores` is keyed by `f"{source}:{rowid}"` to prevent
+    # collisions between the FTS5 `chunks` table and the LanceDB vector table.
+    # The two rowid spaces are independent — `rowid=42` in FTS points to a
+    # DIFFERENT chunk than `rowid=42` in vector. Keying by raw int merged them
+    # into one corrupted record (keeping whichever hit arrived first for
+    # repo/path/snippet and summing both RRF scores).
+    #
+    # We do NOT attempt to re-merge "same logical chunk" across sources here
+    # because chunk identity (repo, file, chunk_type) is not unique — a file
+    # often has many chunks of the same chunk_type. The downstream reranker
+    # scores by content, so a chunk that surfaces in both sources at distinct
+    # keys is ranked consistently by the cross-encoder rather than artificially
+    # boosted by RRF-sum tricks.
+    scores: dict[str, dict] = {}  # "fts:<rowid>" | "vec:<rowid>" → result dict
 
     for rank_idx, sr in enumerate(keyword_results):
-        rid = sr.rowid
+        key = f"fts:{sr.rowid}"
         rrf_score = KW_WEIGHT / (K + rank_idx + 1)
-        if rid not in scores:
-            scores[rid] = {
+        if key not in scores:
+            scores[key] = {
                 "score": 0,
                 "repo_name": sr.repo_name,
                 "file_path": sr.file_path,
@@ -315,14 +335,14 @@ def hybrid_search(
                 "snippet": sr.snippet,
                 "sources": [],
             }
-        scores[rid]["score"] += rrf_score
-        scores[rid]["sources"].append("keyword")
+        scores[key]["score"] += rrf_score
+        scores[key]["sources"].append("keyword")
 
     for rank_idx, vrow in enumerate(vector_results):
-        rid = vrow["rowid"]
+        key = f"vec:{vrow['rowid']}"
         rrf_score = 1.0 / (K + rank_idx + 1)
-        if rid not in scores:
-            scores[rid] = {
+        if key not in scores:
+            scores[key] = {
                 "score": 0,
                 "repo_name": vrow["repo_name"],
                 "file_path": vrow["file_path"],
@@ -331,8 +351,8 @@ def hybrid_search(
                 "snippet": vrow.get("content_preview", ""),
                 "sources": [],
             }
-        scores[rid]["score"] += rrf_score
-        scores[rid]["sources"].append("vector")
+        scores[key]["score"] += rrf_score
+        scores[key]["sources"].append("vector")
 
     # P0c: wire code_facts_fts — structured facts (schemas, env lookups, guards,
     # retry policies) that chunks_fts can miss. Boost chunks whose (repo, file)
