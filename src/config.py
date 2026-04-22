@@ -209,23 +209,20 @@ ENV_VAR_BOOST: float = float(_tuning.get("env_var_boost", 1.05))
 # --- Rerank pool size (P4.2) — feed more candidates to cross-encoder ---
 # Controls pre-rerank cap. Benchmark (rerank_ab_top200.json) showed 50→200
 # gives +10 pp r@10 for baseline MiniLM-L-6. Env override: CODE_RAG_RERANK_POOL_SIZE.
-RERANK_POOL_SIZE: int = int(
-    os.getenv("CODE_RAG_RERANK_POOL_SIZE", _tuning.get("rerank_pool_size", 200))
-)
+RERANK_POOL_SIZE: int = int(os.getenv("CODE_RAG_RERANK_POOL_SIZE", _tuning.get("rerank_pool_size", 200)))
 
 # --- Rerank penalties (P4.1) — down-weight doc/test chunks for code-related queries ---
 # Applied to normalized combined_score AFTER cross-encoder reranking,
 # skipped when query itself requests docs/tests/guides.
 # Env overrides: CODE_RAG_DOC_PENALTY, CODE_RAG_TEST_PENALTY, CODE_RAG_GUIDE_PENALTY.
-DOC_PENALTY: float = float(
-    os.getenv("CODE_RAG_DOC_PENALTY", _tuning.get("doc_penalty", 0.15))
-)
-TEST_PENALTY: float = float(
-    os.getenv("CODE_RAG_TEST_PENALTY", _tuning.get("test_penalty", 0.20))
-)
-GUIDE_PENALTY: float = float(
-    os.getenv("CODE_RAG_GUIDE_PENALTY", _tuning.get("guide_penalty", 0.25))
-)
+DOC_PENALTY: float = float(os.getenv("CODE_RAG_DOC_PENALTY", _tuning.get("doc_penalty", 0.15)))
+TEST_PENALTY: float = float(os.getenv("CODE_RAG_TEST_PENALTY", _tuning.get("test_penalty", 0.20)))
+GUIDE_PENALTY: float = float(os.getenv("CODE_RAG_GUIDE_PENALTY", _tuning.get("guide_penalty", 0.25)))
+# P1c 2026-04-22: CI yml (`ci/deploy.ya?ml`, `k8s/.github/workflows/*`) needs a
+# stronger penalty than a generic doc — on short repo queries the v8 reranker
+# surfaces 5+ identical CI files that out-rank real code; 0.15 was not enough
+# to flip the order (validated on pair #2 "ach provider service integration").
+CI_PENALTY: float = float(os.getenv("CODE_RAG_CI_PENALTY", _tuning.get("ci_penalty", 0.50)))
 
 # Query cache
 CACHE_TTL: int = int(_tuning.get("cache_ttl", 300))
