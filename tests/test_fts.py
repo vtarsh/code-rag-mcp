@@ -1,6 +1,6 @@
 """Tests for search/fts.py — query expansion and FTS5 sanitization."""
 
-from src.search.fts import expand_query, sanitize_fts_query
+from src.search.fts import _sanitize_fts_input, expand_query, sanitize_fts_query
 
 
 class TestExpandQuery:
@@ -73,3 +73,29 @@ class TestSanitizeFtsQuery:
         result = sanitize_fts_query("trustly verification webhook")
         parts = result.split(" OR ")
         assert len(parts) == 3
+
+
+class TestSanitizeFtsInput:
+    """Audit 2026-04-22: leading/trailing FTS5 operators used to slip through
+    the ` {op} ` substring pattern and crash FTS5 silently (swallowed by the
+    OperationalError handler in fts_search). Word boundaries now catch them.
+    """
+
+    def test_leading_operator_stripped(self):
+        assert _sanitize_fts_input("AND foo bar") == "foo bar"
+
+    def test_trailing_operator_stripped(self):
+        assert _sanitize_fts_input("foo bar OR") == "foo bar"
+
+    def test_multiple_operators_stripped(self):
+        assert _sanitize_fts_input("AND foo NOT bar NEAR baz") == "foo bar baz"
+
+    def test_lowercase_operator_preserved(self):
+        # "and", "or" lowercase are word tokens, not FTS5 operators.
+        assert _sanitize_fts_input("foo and bar") == "foo and bar"
+
+    def test_existing_behavior_middle_operator(self):
+        assert _sanitize_fts_input("foo AND bar") == "foo bar"
+
+    def test_parentheses_and_quotes_removed(self):
+        assert _sanitize_fts_input('"foo" (bar)') == "foo bar"

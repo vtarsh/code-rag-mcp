@@ -23,11 +23,17 @@ class TestExtractUpperIdents:
         idents = extract_upper_idents("set PORT and HOST and PORT again")
         assert idents == ["PORT", "HOST"]
 
-    def test_short_acronyms_matched(self):
-        # 3-char minimum still allows URL / API / TLS
+    def test_short_generic_acronyms_filtered(self):
+        # 3-char generic acronyms (URL/API/TLS) are filtered to avoid
+        # spraying env_var boost across every web/config query. Only
+        # identifiers with a separator (_ or digit) or length >= 4 match.
         idents = extract_upper_idents("call API with URL")
-        assert "API" in idents
-        assert "URL" in idents
+        assert idents == []
+
+    def test_four_char_acronym_matched(self):
+        # PORT / HOST are still accepted (length >= 4 without separator).
+        idents = extract_upper_idents("set PORT and HOST")
+        assert idents == ["PORT", "HOST"]
 
     def test_lower_and_mixed_ignored(self):
         assert extract_upper_idents("call apiSomething + url + Post") == []
