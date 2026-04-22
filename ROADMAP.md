@@ -1,6 +1,91 @@
 # P5 Reranker — Roadmap
 
-**Status (2026-04-22 early-morning):** Production = `reranker_ft_gte_v8`. P0a/b/c landed + measured. Full hybrid eval done (`gte_v8_hybrid.json`): baseline r@10 = 0.6284, v8 r@10 = 0.6621 (PROMOTE with Δ+0.034, net=+60). Absolute recall is **-10pp below** fts_only+fallback (0.7622) but gap closes when we remember fts_only+fallback measures a different pool. Investigation into the 103 "lost" tickets (r@10=0 in hybrid, r@10>0 in fts_fallback) disproved three hypotheses; the underlying cause is reranker ranking on short summary queries, not penalties / code_facts / fallback threshold. See §"2026-04-22 investigation".
+**Status (2026-04-22 mid-morning):** Production = `reranker_ft_gte_v8`. **P1b churn replay DONE** on 400 real MCP queries (`profiles/pay-com/churn_replay/summary.json`). v8 substantively reshuffles top-10 vs base reranker: **top-1 changes 77%**, **mean overlap@10 = 0.35**, **70.75% of queries have >50% top-10 churn**. FT transfer to runtime is CONFIRMED — v8 is NOT a no-op outside the Jira distribution. Qualitative inspection of top-50 diff pairs shows a systematic **docs→code shift** (P4.1 penalties + content-type boosts): sometimes wins (specific `payout.js` beats `methods/index.js`), sometimes misfires (picks CI `.yml` or env files when user wants service code). Direction of change (better/worse) still needs an LLM judge pass on `diff_pairs.jsonl`. See §"2026-04-22 P1b churn replay".
+
+## 2026-04-22 P1b churn replay: v8 vs base on 400 real MCP queries
+
+**Signal: v8 makes substantive changes on real queries** — the Jira-trained FT IS reaching the runtime distribution, just unclear if for better or worse without gold labels.
+
+Setup:
+- Queries: `profiles/pay-com/real_queries/sampled.jsonl` (400 real MCP search calls, stratified sampling, per-session cap 15).
+- Pipeline: `scripts/churn_replay.py` — run each query through `src.search.hybrid.hybrid_search` twice via `reranker_override` (base + v8), diff top-10 by `(repo, file_path)`.
+- Ran sequentially (base → unload → v8) to avoid MPS double-memory.
+
+### Aggregate metrics
+
+| Metric | Value | Interpretation |
+|---|---:|---|
+| `mean_overlap@1` | 0.23 | Top-1 matches on 23% of queries; differs on 77% |
+| `mean_overlap@10` | 0.35 | Only ~3.5 of 10 results shared on average |
+| `median_overlap@10` | 0.30 | Half of queries have <30% overlap |
+| `mean_jaccard@10` | 0.30 | Symmetric: the *union* is ~3× the *intersection* |
+| `pct_top1_changed` | 77.0% | How often v8 picks a different #1 |
+| `pct_high_churn_at_10` | 70.75% | Queries with overlap@10 < 0.5 |
+| `mean_rank_diff_at_10` | 2.48 | Shared items move ~2.5 positions on average |
+
+### Slices (by query shape)
+
+| slice | n | mean_overlap@10 | pct_top1_changed |
+|---|---:|---:|---:|
+| overall | 400 | 0.3455 | 77.0 |
+| length=short (≤3 tok) | 86 | 0.3674 | 65.12 |
+| length=medium (4-8) | 283 | 0.3357 | 79.86 |
+| length=long (>8) | 31 | 0.3742 | 83.87 |
+| has_uppercase_id | 135 | 0.3119 | 80.0 |
+| no_uppercase_id | 265 | 0.3626 | 75.47 |
+| has_jira_prefix | 1 | 0.20 | 100.0 |
+| has_doc_keyword | 4 | 0.175 | 100.0 |
+
+Reading: **short queries get the least churn** (65% top-1 change vs 80% for medium/long) — because the reranker has fewer tokens to re-score. **Uppercase-identifier queries get more churn** (80% top-1 change) — P0c `env_vars` boost is doing work here.
+
+### Qualitative patterns from top-10 diff pairs (all overlap@10=0.0)
+
+See `profiles/pay-com/churn_replay/report.md` for full examples. `diff_pairs.jsonl` (50 entries) is the gold-candidate input for an LLM-judge pass.
+
+**Pattern 1 — docs → code (usually a win):**
+- Query: `add stripe cash-app integration`
+- base top-3: stripe-docs, stripe-cashapp-docs, stripe-docs docs
+- v8 top-3: `grpc-mpi-stripe::libs/stripe-client.js`, `workflow-stripe-subscriptions::libs/stripe-client.js`, `grpc-providers-stripe::libs/generate-initialize-details.js`
+- Verdict (human): v8 wins — user asking about integration wants code, not a docs index.
+
+**Pattern 2 — docs → specific named file (clear win):**
+- Query: `new APM provider integration pattern initialize sale refund webhook`
+- base top-5: apm-reference-ranking yaml + 4× generic `methods/index.js`
+- v8 top-5: `express-api-internal::routes/apm-create.js`, `grpc-apm-transact365::methods/sale.js`, `grpc-apm-ppro::methods/refund.js`, `grpc-apm-trustly::libs/validate-payload.js`
+- Verdict: v8 wins — picks the specific `sale.js` / `refund.js` files that match the query verbs.
+
+**Pattern 3 — docs → CI/deploy yml (a miss):**
+- Query: `ach provider service integration repo`
+- base top-5: paynearme docs + grpc-apm-ach docs + env example
+- v8 top-5: 5× `workflow-ach-*::ci/deploy.yml` and `k8s/.github/workflows/deploy.yml`
+- Verdict: v8 loses — user wants service code; v8 picked CI files that share `ach` tokens. P4.1 penalty rewards non-docs content, but CI yaml is not what the user wants either. This is a known failure mode of the doc-penalty heuristic.
+
+### What this tells us
+
+1. **FT transfer is real.** The "Jira-trained v8 is a no-op on runtime" hypothesis is refuted — 77% top-1 change is far too high to be noise.
+2. **Direction is mixed qualitatively.** Patterns 1-2 are wins; Pattern 3 is a known P4.1 doc-penalty misfire. The net direction needs LLM labeling or human review.
+3. **Next step = LLM-as-judge on top-50 diff pairs.** Scaffold exists: `scripts/churn_llm_judge.py` with Haiku 4.5 (~$0.13/run). Manual run:
+   ```bash
+   ANTHROPIC_API_KEY=... python3.12 scripts/churn_llm_judge.py --run
+   ```
+4. **Runtime transfer signal is non-zero.** Even before the judge pass, we can say v8's Jira-shaped FT reaches 77% of real queries — the gains/losses on Jira are not stuck in the Jira distribution.
+
+### Artifacts landed
+
+- `scripts/churn_replay.py` + `tests/test_churn_replay.py` (12 tests) — commit `2c6f924`.
+- `scripts/analyze_churn.py` + `tests/test_analyze_churn.py` (13 tests) — commit `91fb74b`.
+- `scripts/churn_llm_judge.py` + `tests/test_churn_llm_judge.py` (11 tests, dry-run default) — commit `238994b`.
+- `profiles/pay-com/churn_replay/{summary.json,report.md}` — this commit.
+- Full `v8_vs_base.json` (2.9MB) kept local only; reproducible via `python3.12 scripts/churn_replay.py` (~84 min on MPS).
+
+### Next levers (updated)
+
+| # | Action | Cost | Expected |
+|---|---|---|---|
+| **P1b.1** | Run `churn_llm_judge.py --run` on top-50 diff pairs | $0.13, 5 min | Direction signal (v8 win rate vs base) |
+| **P1b.2** | Human review of 10 worst diff pairs from report | 15 min | Detect any systematic misfire worth fixing |
+| P1c | Fix Pattern-3 misfire: extend `_DOC_FILE_TYPES` or path regex to penalize `ci/deploy.yml` | 30 min | +X on runtime queries; risk low (guarded by `CODE_RAG_DISABLE_PENALTIES`) |
+| P2 | v12 FT — blocked on P1b.1 verdict | 2-3d | Only if judge says v8 wins; else revisit training data |
 
 ## 2026-04-22 investigation: hybrid regression on 103 lost tickets
 
@@ -234,7 +319,7 @@ Summary-hybrid run completed cleanly (134 min). Enriched-hybrid run: shard0 hung
 | `reranker_ft_gte_v8/` (285MB bf16) | **PROD.** Best Hit@5 + runtime + listwise LambdaLoss | `profiles/pay-com/models/reranker_ft_gte_v8/` |
 | `finetune_data_v6_2/` (97M) | v6.2 training set (61,250 pointwise rows) | `profiles/pay-com/finetune_data_v6_2/` |
 | `finetune_data_v8/` (16M) | v8 listwise (879 groups, derived via `convert_to_listwise.py`) | `profiles/pay-com/finetune_data_v8/` |
-| `gte_v1.json`, `gte_v4.json`, `gte_v6_2.json`, `gte_v7.json`, `gte_v8.json`, `gte_v8_fallback.json`, `gte_v8_hybrid.json` | Eval snapshots (reuse via `--reuse-baseline-from`) | `profiles/pay-com/finetune_history/` |
+| `gte_v1.json`, `gte_v4.json`, `gte_v6_2.json`, `gte_v7.json`, `gte_v8.json`, `gte_v8_fallback.json` | Eval snapshots (reuse via `--reuse-baseline-from`) | `profiles/pay-com/finetune_history/` |
 
 ---
 
@@ -292,8 +377,7 @@ Don't use `--dedupe-same-file` (v5 catastrophe).
 - `scripts/eval_parallel.sh` — parallel 3-shard eval template (saves ~50% time).
 - `scripts/prepare_finetune_data.py` — all v1-v8 flags (all opt-in, default False).
 - `scripts/finetune_reranker.py` — train pipeline with bf16, checkpointing, early-stopping.
-- `scripts/eval_finetune.py` — eval with `--shard-index`, `--reuse-baseline-from`, `--fts-fallback-enrich`, `--latency-profile` (LPT shard balance), and `--use-hybrid-retrieval` (P0a: opt-in, routes through `src.search.hybrid.hybrid_search` for prod parity). Default remains FTS-only for backward-compat with pre-P0a snapshots.
-- `scripts/ab_lost_tickets.py` — A/B utility for hybrid regression investigation. Env flags `CODE_RAG_DISABLE_{PENALTIES,CODE_FACTS}` short-circuit hybrid.py branches; `AB_FALLBACK_ENRICH`, `AB_ENRICHED_ALWAYS` vary query composition.
+- `scripts/eval_finetune.py` — eval with `--shard-index`, `--reuse-baseline-from`, `--fts-fallback-enrich`, and `--use-hybrid-retrieval` (P0a: opt-in, routes through `src.search.hybrid.hybrid_search` for prod parity). Default remains FTS-only for backward-compat with pre-P0a snapshots.
 
 ---
 
@@ -303,4 +387,4 @@ Don't use `--dedupe-same-file` (v5 catastrophe).
 - Daemon on :8742 manages ML models in production. Unload before training (avoids MPS contention).
 - `caffeinate -is -t 86400` to prevent sleep during overnight runs.
 - User is the only dev; commits via `mcp__github__*` tools (gh deny-listed).
-- Test suite (364 tests, +7 LPT tests added 2026-04-21) must pass before any changes land: `python3.12 -m pytest tests/ -q`.
+- Test suite (~398 tests: 362 pre-churn + 12 `test_churn_replay` + 13 `test_analyze_churn` + 11 `test_churn_llm_judge`) must pass before any changes land: `python3.12 -m pytest tests/ -q`.
