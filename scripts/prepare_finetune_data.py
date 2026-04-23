@@ -812,6 +812,53 @@ def verify_no_leakage(train_records: list[dict], test_tasks: list[dict]) -> None
         )
 
 
+# ---------- query-level leakage guard -------------------------------------- #
+
+
+def _default_query_tokens(text: str) -> set[str]:
+    return set(re.findall(r"\w{3,}", (text or "").lower()))
+
+
+def verify_no_query_leakage(
+    train_items,
+    holdout_items,
+    token_fn=_default_query_tokens,
+    threshold: float = 0.5,
+) -> None:
+    """Raise ValueError if any train/holdout pair has Jaccard ≥ threshold.
+
+    Items may be strings or dicts with ``summary``/``description`` keys
+    (concatenated before tokenising). Used to cross-check v12 train vs
+    held-out Jira / runtime sets before training.
+    """
+
+    def _text(item) -> str:
+        if isinstance(item, str):
+            return item
+        if isinstance(item, dict):
+            return f"{item.get('summary', '') or ''} {item.get('description', '') or ''}".strip()
+        return str(item)
+
+    if not train_items or not holdout_items:
+        return
+
+    train_tokens = [token_fn(_text(t)) for t in train_items]
+    holdout_tokens = [token_fn(_text(h)) for h in holdout_items]
+
+    for i, t_toks in enumerate(train_tokens):
+        if not t_toks:
+            continue
+        for j, h_toks in enumerate(holdout_tokens):
+            if not h_toks:
+                continue
+            jac = len(t_toks & h_toks) / len(t_toks | h_toks)
+            if jac >= threshold:
+                raise ValueError(
+                    f"query-leakage detected: train[{i}] ∩ holdout[{j}] "
+                    f"jaccard={jac:.1f} (threshold={threshold})"
+                )
+
+
 # ---------- main ----------------------------------------------------------- #
 
 
