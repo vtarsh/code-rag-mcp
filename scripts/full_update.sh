@@ -180,6 +180,22 @@ print(','.join(changed))
     "$SCRIPTS_DIR/run_with_timeout.sh" 10800 \
         python3 "$SCRIPTS_DIR/embed_missing_vectors.py" --model=coderank 2>&1 | tail -10 || \
         echo "  ⚠️ sync failed or timed out — chunks/vectors will reconcile next run"
+
+    # Step 5c: Build docs tower (two-tower migration, 2026-04-23).
+    # Runs SEQUENTIALLY after the code tower — parallelism would peak ~3 GB RAM
+    # (both SentenceTransformer models loaded) which is too tight on 16 GB Macs.
+    # Sequential peak is ~1 GB at any time. See profiles/pay-com/docs/gotchas/two-tower-migration.md
+    # Env vars (CODE_RAG_HOME, ACTIVE_PROFILE, PYTORCH_MPS_*) are inherited from this shell.
+    echo ""
+    echo "[5c/7] Building docs vector tower (nomic-embed-text-v1.5)..."
+    DOCS_ARGS=()
+    if [[ "$FULL_FLAG" == "--full" ]]; then
+      DOCS_ARGS+=(--force)
+    elif [[ -n "$REPOS_FLAG" ]]; then
+      DOCS_ARGS+=("$REPOS_FLAG")
+    fi
+    python3 "$SCRIPTS_DIR/build_docs_vectors.py" "${DOCS_ARGS[@]}" 2>&1 | tail -6 || \
+        echo "  ⚠️ docs tower build failed — router will fall back to code tower only"
   fi
 
   # Step 6: Build shadow types (YAMLs for each known provider)
