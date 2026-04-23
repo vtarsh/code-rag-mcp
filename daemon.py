@@ -87,6 +87,8 @@ TOOLS: dict[str, Callable[[dict[str, Any]], str]] = {
         args.get("file_type", ""),
         args.get("exclude_file_types", ""),
         args.get("limit", 10),
+        brief=args.get("brief", False),
+        cross_provider=args.get("cross_provider", False),
     ),
     "find_dependencies": lambda args: find_dependencies_tool(args["repo_name"]),
     "trace_impact": lambda args: trace_impact_tool(

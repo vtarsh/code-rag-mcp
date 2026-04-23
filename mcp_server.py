@@ -122,6 +122,7 @@ def search(
     exclude_file_types: str = "",
     limit: int = 10,
     brief: bool = False,
+    cross_provider: bool = False,
 ) -> str:
     """Search the knowledge base using keyword + semantic hybrid search.
 
@@ -139,6 +140,9 @@ def search(
         brief: When True, drop "Found N of M candidates for 'query'" header
             (re-echoes query), strip >>><<< highlight markers, and drop
             [keyword+vector] source tags. Default False preserves current output.
+        cross_provider: When True and query matches {provider} {operation} pattern,
+            also returns top-1 analogous chunk from up to 6 sibling providers —
+            eliminates provider-swap reformulation chains.
     """
     return _call_daemon(
         "search",
@@ -149,6 +153,7 @@ def search(
             "exclude_file_types": exclude_file_types,
             "limit": limit,
             "brief": brief,
+            "cross_provider": cross_provider,
         },
     )
 

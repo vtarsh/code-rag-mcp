@@ -32,6 +32,7 @@ def search_tool(
     exclude_file_types: str = "",
     limit: int = 10,
     brief: bool = False,
+    cross_provider: bool = False,
 ) -> str:
     """Search the knowledge base using keyword + semantic hybrid search.
 
@@ -45,6 +46,10 @@ def search_tool(
             (re-echoes query), strip >>><<< highlight markers (sub-agents don't
             render), and drop [keyword+vector] source tags. Preserves repo/path/
             file_type/chunk_type/snippet. Default False preserves current output.
+        cross_provider: When True and query matches {provider} {operation} pattern,
+            also returns top-1 analogous chunk from up to 6 sibling providers —
+            eliminates provider-swap reformulation chains. Default False preserves
+            current output byte-for-byte.
     """
     # Defensive validation: callers sometimes omit `query` entirely (observed 74x
     # KeyError('query') in logs/tool_calls.jsonl before this guard was added).
@@ -66,10 +71,18 @@ def search_tool(
         exclude_file_types=exclude_file_types,
         limit=limit,
         brief=brief,
+        cross_provider=cross_provider,
     )
 
     def _compute() -> str:
-        ranked, vec_err, total_candidates = hybrid_search(expanded, repo, file_type, exclude_file_types, limit)
+        ranked, vec_err, total_candidates = hybrid_search(
+            expanded,
+            repo,
+            file_type,
+            exclude_file_types,
+            limit,
+            cross_provider=cross_provider,
+        )
 
         log_search("search", expanded, {"repo": repo, "file_type": file_type, "limit": limit}, ranked, total_candidates)
 
