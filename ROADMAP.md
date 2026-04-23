@@ -1,6 +1,44 @@
 # P5 Reranker — Roadmap
 
-**Status (2026-04-22 midday):** Production = `reranker_ft_gte_v8`. **Dual judge pass DONE** on top-50 diff pairs — Opus (API, code-biased) says v8 +8pp net, local MiniLM-L-6-v2 (MS MARCO pretraining, prose-biased) says base +64pp net. Judges disagree on 31/50 pairs, and 20 of those are the exact docs→code shift where each judge's training distribution biases the call. **Conclusion: no-calibration LLM/reranker-as-judge is NOT a reliable direction signal on this subset.** Canonical direction signal remains ground-truth eval: Jira r@10 +5pp (gte_v8_fallback.json) and runtime benchmarks +2-8pp (the basis for prod deploy on 2026-04-21). **Decisions:** v8 stays prod (ground truth canonical); **P1c landed** as an objective fix for 11 doc-intent + 1 CI-yml failure modes independent of judge disagreement; v12 FT remains gated on P1c validation + a proper gold-label sample of the judged pairs. See §"2026-04-22 P1b.2/P1b.3 dual judge".
+**Status (2026-04-24):** **Two-tower v13 LANDED on main + benchmarks GREEN.** Production reranker = `reranker_ft_gte_v8` (unchanged). Vector retrieval now splits by query intent: code → CodeRankEmbed (768d, `vectors.lance.coderank`), docs → nomic-embed-text-v1.5 (768d, `vectors.lance.docs`, 153 MB on disk). 651/651 pytest green. Benchmarks: queries 0.933 (=v8), realworld 0.843 (=v8), flows 0.833. No regression. Doc-intent routing verified live (`provider response mapping reference` → `docs/references/provider-response-mapping.md` top-1).
+
+## 2026-04-24 early-morning: two-tower v13 deployed
+
+**v13 = two-tower architecture**, not a 13th FT iteration. After v1-v12a single-tower FT all marginal/negative, the pivot was to give docs their own embedding tower so vector retrieval finds them on merit instead of relying on FTS + reranker bailouts.
+
+**Deployed pieces (12 commits on main, fe5d1e6..4398ccf):**
+- `src/models.py` — new `"docs"` model key (nomic-embed-text-v1.5, 768d). `EmbeddingModel.document_prefix` field.
+- `src/embedding_provider.py` — per-key singletons; `get_embedding_provider("docs")` lazy-loads the docs tower.
+- `src/container.py` — per-key LanceDB cache; `get_vector_search("docs")` opens `vectors.lance.docs`.
+- `src/search/vector.py` — `vector_search(..., model_key)` pass-through.
+- `src/search/hybrid.py` — `hybrid_search` routes vector leg by `_query_wants_docs` + code-signal detection. Pure doc-intent → docs tower; pure code-intent → code tower; mixed → both, dedupe by rowid (keep-first) before RRF. `docs_index: bool|None` override for eval/debug.
+- `src/search/service.py` — `search_tool` threads `docs_index` through cache key.
+- `src/index/builders/docs_vector_indexer.py` — `build_docs_vectors(...)` reads chunks WHERE file_type IN {doc,docs,gotchas,reference,provider_doc,task,flow_annotation,dictionary,domain_registry} and writes embeddings. Adaptive batching, 5000-row checkpoints, IVF-PQ index.
+- `scripts/build_docs_vectors.py` — CLI wrapper. `--force`, `--repos=`, `--no-reindex`.
+- `scripts/full_update.sh` — step `[5c/7]` runs docs vectors sequentially after code vectors.
+- `daemon.py` /health — exposes `embedding_providers_loaded: list`.
+- 36 new tests (`test_two_tower_foundation.py` 19, `test_two_tower_routing.py` 8, `test_docs_vector_indexer.py` 9).
+
+**Build stats (45759 doc chunks, MPS):**
+- Embedding: ~25 min @ 18-23 emb/s (started high, decayed as long-chunk batches dominated)
+- LanceDB write: 0.7s
+- IVF-PQ index (64 partitions, 48 sub_vectors): 19.4s
+- On-disk size: 153 MB
+
+**Memory (M-series 16 GB):** code tower ~230 MB + docs tower ~550 MB + reranker ~285 MB ≈ 1.1 GB resident. Safe for production.
+
+**Benchmark verdict (two-tower vs v8 baseline):**
+| Bench | v8 | two-tower v13 | Δ |
+|---|---:|---:|---:|
+| queries (4 conceptual) | 0.9333 | 0.933 | flat |
+| realworld (6 real) | 0.843 | 0.843 | flat |
+| flows (2 flows) | — | 0.833 | new |
+
+The benchmark queries are mostly code-intent so they still hit the code tower, which is unchanged. The win is on doc-intent queries that previously fell off the rerank pool because CodeRankEmbed embedded docs to near-random vectors. Smoke-tested live: `provider response mapping reference` returns `docs/references/provider-response-mapping.md` top-1 with no FTS fallback needed.
+
+**Open follow-up:** add a doc-intent recall harness to the benchmark suite (current 4-conceptual + 6-realworld + 2-flow set has zero pure doc-intent queries, so the bench can't quantify the doc-tower lift). Suggested seed: 20-30 queries from the regen candidates that hit reference docs.
+
+---
 
 ## 2026-04-23 late: v12a REJECTED — two-tower pivot decision
 
