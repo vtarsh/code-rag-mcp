@@ -214,7 +214,11 @@ class TestRerankPenalties:
             {"score": 0.5, "snippet": "code snippet", "repo_name": "r2",
              "file_path": "libs/payout/handle.js", "file_type": "library"},
         ]
-        result = rerank("payout handler code", items, limit=2)
+        # Query uses snake_case identifier to trigger code-intent under
+        # widened _query_wants_docs() (absence heuristic 2026-04-23). Without a
+        # code signal, "payout handler code" is classified as doc-intent and
+        # penalties are skipped.
+        result = rerank("payout_handler code", items, limit=2)
         assert result[0]["repo_name"] == "r2"
         assert result[0]["penalty"] == 0.0
         assert result[1]["penalty"] > 0
@@ -230,7 +234,8 @@ class TestRerankPenalties:
             {"score": 0.5, "snippet": "code", "repo_name": "r2",
              "file_path": "libs/foo.js", "file_type": "library"},
         ]
-        result = rerank("policy handler", items, limit=2)
+        # Code signal (fn() call) forces code-intent under widened heuristic.
+        result = rerank("policy_handler(req)", items, limit=2)
         assert result[0]["repo_name"] == "r2"
         assert result[1]["penalty"] > 0
 
@@ -247,7 +252,8 @@ class TestRerankPenalties:
             {"score": 0.5, "snippet": "code", "repo_name": "r3",
              "file_path": "libs/handler.js", "file_type": "library"},
         ]
-        result = rerank("handler pattern", items, limit=3)
+        # fn() call forces code-intent under widened absence heuristic.
+        result = rerank("handler_pattern(ctx)", items, limit=3)
         assert result[0]["repo_name"] == "r3"
         guide = next(r for r in result if r["repo_name"] == "r1")
         spec = next(r for r in result if r["repo_name"] == "r2")
@@ -297,7 +303,8 @@ class TestRerankPenalties:
             {"score": 0.5, "snippet": "ach code", "repo_name": "grpc-banks-crb",
              "file_path": "methods/ach-payment.js", "file_type": "grpc_method"},
         ]
-        result = rerank("ach provider service integration repo", items, limit=2)
+        # `grpc-banks-crb` repo token forces code-intent under widened heuristic.
+        result = rerank("grpc-banks-crb ach service integration", items, limit=2)
         assert result[0]["repo_name"] == "grpc-banks-crb"
         assert result[1]["penalty"] > 0
 
@@ -313,7 +320,8 @@ class TestRerankPenalties:
             {"score": 0.5, "snippet": "service", "repo_name": "grpc-apm-ach",
              "file_path": "methods/sale.js", "file_type": "grpc_method"},
         ]
-        result = rerank("ach service code", items, limit=2)
+        # `grpc-apm-ach` repo token forces code-intent under widened heuristic.
+        result = rerank("grpc-apm-ach sale service", items, limit=2)
         assert result[0]["repo_name"] == "grpc-apm-ach"
         assert result[1]["penalty"] > 0
 

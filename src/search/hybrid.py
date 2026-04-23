@@ -26,6 +26,7 @@ from src.config import (
     GOTCHAS_BOOST,
     GUIDE_PENALTY,
     KEYWORD_WEIGHT,
+    PROVIDER_PREFIXES,
     REFERENCE_BOOST,
     RERANK_POOL_SIZE,
     RRF_K,
@@ -36,6 +37,131 @@ from src.search.code_facts import code_facts_search, fetch_chunks_for_files
 from src.search.env_vars import env_var_search
 from src.search.fts import fts_search
 from src.search.vector import vector_search
+
+# Cross-provider fan-out (2026-04-23): eliminates provider-swap reformulation
+# chains. 82% of reformulation chains end with identical result_len and 56% of
+# transitions are pure provider token swaps (nuvei -> payper -> volt). When the
+# query matches {provider} {topic_verb}, we pull top-1 analogous chunk from each
+# sibling provider repo and prepend a grouped header.
+#
+# Provider list: hard-coded to top-10 payment providers. PROVIDER_PREFIXES from
+# conventions.yaml tells us WHERE to look (repo prefix), but the actual provider
+# names are encoded in the repo names themselves — not independently exposed.
+# Keeping this list small and explicit is safer than scanning the repo index at
+# import time (which would need a DB connection).
+_KNOWN_PROVIDERS: frozenset[str] = frozenset(
+    {
+        "payper", "nuvei", "trustly", "volt", "ppro",
+        "paynearme", "aeropay", "fonix", "paysafe", "worldpay",
+    }
+)
+
+# Topic verbs that indicate an operation which is implemented per-provider.
+# Must appear adjacent to a provider token for fan-out to trigger.
+_TOPIC_VERBS: frozenset[str] = frozenset(
+    {
+        "payout", "refund", "sale", "webhook", "initialize", "dispatch",
+        "activities", "signature", "credentials", "idempotency",
+    }
+)
+
+# Max sibling providers returned (spec: up to 6 siblings).
+_MAX_SIBLINGS: int = 6
+
+
+def _detect_provider_topic(query: str) -> tuple[str, str] | None:
+    """Return (provider, topic_verb) if the query contains both tokens, else None.
+
+    Both must appear in the query; order does not matter so "nuvei payout" and
+    "payout handle-activities nuvei" both trigger fan-out. Case-insensitive,
+    word-boundary matched to avoid false positives on substrings.
+
+    When a query contains multiple valid topic tokens (e.g. "nuvei payout
+    handle-activities.js" has both `payout` and `activities`), we preserve the
+    token order from the original query so tests and the resulting FTS query
+    line up with user intent — the leftmost verb wins.
+    """
+    if not query:
+        return None
+    token_list = [t.lower().strip(".,;:!?") for t in re.split(r"[\s/\-_.]+", query) if t]
+    token_set = set(token_list)
+    provider = next((t for t in token_list if t in _KNOWN_PROVIDERS), None) or next(
+        (p for p in _KNOWN_PROVIDERS if p in token_set), None
+    )
+    topic = next((t for t in token_list if t in _TOPIC_VERBS), None) or next(
+        (t for t in _TOPIC_VERBS if t in token_set), None
+    )
+    if provider and topic:
+        return provider, topic
+    return None
+
+
+def _sibling_provider_repos(active_provider: str) -> list[tuple[str, str]]:
+    """Return up to _MAX_SIBLINGS (sibling_name, repo_name) pairs.
+
+    Uses PROVIDER_PREFIXES from conventions.yaml to build candidate repo names.
+    Skips the active provider and the 4th-prefix "mpi" (historically only 3D
+    Secure, not payment methods). Output is deterministic (sorted siblings).
+    """
+    if not PROVIDER_PREFIXES:
+        # Fallback for profiles that don't declare prefixes — use the two most
+        # common layouts so the fan-out still fires on pay-com-like orgs.
+        prefixes = ("grpc-apm-", "grpc-providers-")
+    else:
+        prefixes = tuple(PROVIDER_PREFIXES[:2])
+
+    siblings = sorted(p for p in _KNOWN_PROVIDERS if p != active_provider)
+    out: list[tuple[str, str]] = []
+    for sib in siblings:
+        for prefix in prefixes:
+            out.append((sib, f"{prefix}{sib}"))
+        if len({s for s, _ in out}) >= _MAX_SIBLINGS:
+            break
+    return out
+
+
+def _cross_provider_fanout(query: str, limit_per_sibling: int = 1) -> tuple[str, str] | tuple[None, None]:
+    """Build a cross-provider sibling header.
+
+    Returns (header_text, topic_verb) on hit, (None, None) when the query does
+    not match the {provider} {topic_verb} pattern or no sibling chunks exist.
+
+    For each sibling repo we fire a lightweight FTS5 query for the topic verb
+    filtered to that repo. Top-1 hit per sibling is included, capped at
+    _MAX_SIBLINGS unique sibling providers.
+    """
+    hit = _detect_provider_topic(query)
+    if hit is None:
+        return None, None
+    active, topic = hit
+
+    sibling_pairs = _sibling_provider_repos(active)
+    lines: list[str] = []
+    seen_providers: set[str] = set()
+    for sib_name, repo_name in sibling_pairs:
+        if sib_name in seen_providers:
+            continue
+        if len(seen_providers) >= _MAX_SIBLINGS:
+            break
+        try:
+            rows = fts_search(topic, repo=repo_name, limit=limit_per_sibling)
+        except Exception:
+            rows = []
+        if not rows:
+            continue
+        top = rows[0]
+        snippet = re.sub(r">>>|<<<", "", top.snippet or "")[:200]
+        lines.append(
+            f"  - **{top.repo_name}** | `{top.file_path}` ({top.file_type}/{top.chunk_type})\n"
+            f"    {snippet}"
+        )
+        seen_providers.add(sib_name)
+
+    if not lines:
+        return None, None
+
+    header = f"## Cross-provider siblings for '{topic}'\n\n" + "\n\n".join(lines) + "\n"
+    return header, topic
 
 # A/B investigation env gates (post-P0a hybrid eval found 103 tickets lose GT
 # repos vs fts_only+fallback). Default 0 = production behaviour unchanged.
@@ -82,9 +208,28 @@ _DOC_QUERY_RE = re.compile(
 )
 
 
+_CODE_SIG_RE = re.compile(
+    r"(?:\b[a-z][a-zA-Z0-9]*\([^)]*\)|"
+    r"\b[A-Z][A-Z0-9_]{2,}\b|"
+    r"[a-z]+_[a-z_]+|"
+    r"\.(?:js|ts|py|go|proto)\b)"
+)
+_REPO_TOKEN_RE = re.compile(
+    r"\b(?:grpc-|express-|next-web-|workflow-|k8s-)[a-z0-9-]+\b",
+    re.IGNORECASE,
+)
+
+
 def _query_wants_docs(query: str) -> bool:
-    """Return True if query explicitly asks for docs/tests/guides."""
-    return bool(_DOC_QUERY_RE.search(query or ""))
+    """Doc-intent: explicit _DOC_QUERY_RE trigger OR absence-based (no code sig + 2-15 tokens)."""
+    if _DOC_QUERY_RE.search(query or ""):
+        return True
+    if not query:
+        return False
+    if _CODE_SIG_RE.search(query) or _REPO_TOKEN_RE.search(query):
+        return False
+    tokens = query.split()
+    return 2 <= len(tokens) <= 15
 
 
 def _classify_penalty(file_type: str, file_path: str) -> float:
@@ -282,6 +427,7 @@ def hybrid_search(
     limit: int = 10,
     *,
     reranker_override=None,
+    cross_provider: bool = False,
 ) -> tuple[list[dict], str | None, int]:
     """Hybrid search: combine FTS5 keyword + vector similarity via RRF.
 
@@ -292,6 +438,12 @@ def hybrid_search(
     `eval_finetune.py --use-hybrid-retrieval` so each eval model scores the
     production RRF pool (FTS + vector + code_facts/env_vars + content boosts)
     instead of a detached FTS-only pool.
+
+    `cross_provider` (2026-04-23): when True and the query matches the
+    `{provider} {topic_verb}` pattern (e.g. "nuvei payout"), the top-result
+    snippet is prefixed with a `## Cross-provider siblings for '{topic}'`
+    header listing top-1 analogous chunks from up to 6 sibling provider repos.
+    Default False preserves byte-for-byte output.
 
     Returns (ranked_results, vector_error | None, total_candidates).
     """
@@ -401,6 +553,20 @@ def hybrid_search(
 
     # Rerank with cross-encoder (eval path may override with a specific model)
     ranked = rerank(query, ranked, limit, reranker_override=reranker_override)
+
+    # Cross-provider fan-out (post-rerank). When opted in and the query matches
+    # {provider} {topic_verb}, prepend a grouped header with top-1 analogous
+    # chunk from up to 6 sibling provider repos. This targets 56% of observed
+    # reformulation transitions (provider-swap chains) and 82% of chains that
+    # end with identical result_len (user searches in vain). Opt-in so the
+    # default output stays byte-for-byte identical for callers that don't want
+    # the expansion.
+    if cross_provider and ranked:
+        header, _topic = _cross_provider_fanout(query)
+        if header:
+            first = ranked[0]
+            first["snippet"] = header + "\n" + (first.get("snippet") or "")
+            first["has_cross_provider"] = True
 
     # Expand top results with sibling chunks for context
     ranked = _expand_siblings(ranked)
