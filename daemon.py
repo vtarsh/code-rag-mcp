@@ -130,11 +130,19 @@ class DaemonHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if self.path == "/health":
-            from src.embedding_provider import _embedding_provider, _reranker_provider
+            from src.embedding_provider import (
+                _embedding_provider,
+                _reranker_provider,
+                loaded_provider_names,
+            )
 
             providers_ready = is_model_loaded() and is_reranker_loaded()
             emb_name = _embedding_provider.provider_name if _embedding_provider else "not initialized"
             rer_name = _reranker_provider.provider_name if _reranker_provider else "not initialized"
+            # Two-tower: expose each resident embedding tower separately so an
+            # operator can see whether the docs tower got loaded (it is lazy —
+            # first load happens on first doc-intent query).
+            emb_loaded = loaded_provider_names()
             # Report "shutting_down" if /admin/shutdown has been triggered so
             # operators can tell a drain apart from a stuck request.
             status = "shutting_down" if _shutting_down.is_set() else ("ok" if providers_ready else "ready")
@@ -143,6 +151,7 @@ class DaemonHandler(BaseHTTPRequestHandler):
                 {
                     "status": status,
                     "embedding_provider": emb_name,
+                    "embedding_providers_loaded": emb_loaded,
                     "reranker_provider": rer_name,
                     "uptime": time.time() - _start_time,
                     "pid": os.getpid(),
