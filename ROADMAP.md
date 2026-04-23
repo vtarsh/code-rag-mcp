@@ -2,6 +2,40 @@
 
 **Status (2026-04-22 midday):** Production = `reranker_ft_gte_v8`. **Dual judge pass DONE** on top-50 diff pairs — Opus (API, code-biased) says v8 +8pp net, local MiniLM-L-6-v2 (MS MARCO pretraining, prose-biased) says base +64pp net. Judges disagree on 31/50 pairs, and 20 of those are the exact docs→code shift where each judge's training distribution biases the call. **Conclusion: no-calibration LLM/reranker-as-judge is NOT a reliable direction signal on this subset.** Canonical direction signal remains ground-truth eval: Jira r@10 +5pp (gte_v8_fallback.json) and runtime benchmarks +2-8pp (the basis for prod deploy on 2026-04-21). **Decisions:** v8 stays prod (ground truth canonical); **P1c landed** as an objective fix for 11 doc-intent + 1 CI-yml failure modes independent of judge disagreement; v12 FT remains gated on P1c validation + a proper gold-label sample of the judged pairs. See §"2026-04-22 P1b.2/P1b.3 dual judge".
 
+## 2026-04-23 late: v12a REJECTED — two-tower pivot decision
+
+**V12a FT — REJECT.** Measured vs v8 baseline (full eval):
+- Train Jira r@10 (859): 0.633 → 0.613 (**Δ −0.020**, primary gate fail)
+- Train Jira r@25: 0.706 → 0.691 (−0.015)
+- Test holdout r@10 (50): 0.548 → 0.518 (**Δ −0.030**)
+- Test holdout r@25: 0.643 → 0.624 (−0.019)
+
+Stable regression on both splits. v8 stays prod. v12a archived at `profiles/pay-com/reranker_ft_gte_v12a/`, snapshot at `profiles/pay-com/finetune_history/gte_v12a.json`.
+
+**Root cause (why 12 FT iterations plateau'd):**
+Single-tower architecture — CodeRankEmbed embeds code AND `.md` files into the same vector space, but was trained ONLY on GitHub code. Doc files get near-random embeddings → vector stage recall for doc queries is already broken before reranker sees a candidate. Reranker can only reorder what vector+FTS returned; it cannot conjure the right doc into top-100.
+
+All reranker FT iterations (v1..v12a) hit the same ceiling. **12 FT iterations = sunk-cost spiral.**
+
+**Decision: pivot to two-tower.**
+- Code index: keep CodeRankEmbed, `db/vectors.lance.coderank/` (existing, unchanged)
+- Docs index: new `db/vectors.lance.docs/` table with text-specialized model (`BAAI/bge-m3` OR `nomic-embed-text-v1.5`)
+- Query router: extend `_query_wants_docs()` — code-intent → code index; doc-intent → docs index; mixed → both + RRF merge
+- Cost: +5-8 GB disk, +2-3 GB daemon RAM, ~2 days engineering + overnight reindex
+
+**Salvaged from v12 work (reusable for v13):**
+- `v12_candidates_regen_labeled_FINAL.jsonl` (118+/79−) — doc-positive examples for future docs-reranker fine-tune
+- `holdout_jira_50.jsonl` + `holdout_runtime_20.jsonl` — valid holdouts, reuse
+- `scripts/eval_jidm.py` IM-NDCG — tower-agnostic gate
+- `scripts/sanity_v2_gate.py` — v13 validation flow
+
+**Pitfalls to not repeat:**
+1. Don't stack reranker signals when architecture is the bottleneck
+2. Dual-judge autonomous labeling has 5-10% FP — don't treat as ground truth for FT
+3. Stratified holdouts still small (50+20) — Δ ±0.02 may be within noise envelope; v13 should target 100+ holdout tickets
+
+Next session priorities in `NEXT_SESSION_PROMPT.md`.
+
 ## 2026-04-23 evening: Doc search diagnostics — 6-agent synthesis
 
 User report: search requires 3-4 reformulations to surface relevant docs. Ran 6 readonly diagnostic agents in parallel: coverage heatmap, chunk quality, reformulation patterns, gotchas inventory, link rot, Obsidian-style redesign proposal.
