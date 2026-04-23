@@ -2,32 +2,128 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 
 from ._common import MAX_CHUNK, MIN_CHUNK
 
+# Minimum body length (after stripping [Repo: X] / [Provider Docs: X] prefix)
+# required to keep a doc_section chunk. Prevents orphan headings / TODO markers
+# from polluting the index. Intentionally > MIN_CHUNK because the prefix
+# (~25-40 chars) previously let bodies as small as 15 chars squeak through.
+MIN_DOC_BODY = 120
+
+# Regex matching the "[Repo: X]" / "[... Docs: X]" prefix used for doc chunks.
+# Shared by chunk_markdown and downstream dedup/filter passes.
+_DOC_PREFIX_RE = re.compile(r"^\s*\[(?:Repo|[^]]+?Docs):\s*[^\]]+\]\s*")
+
+
+def _body_only(content: str) -> str:
+    """Strip the '[Repo: X]' / '[Provider Docs: X]' prefix from chunk content."""
+    return _DOC_PREFIX_RE.sub("", content)
+
+
+def content_hash(content: str) -> str:
+    """Stable 16-char md5 of the chunk body (prefix-independent).
+
+    Used by the doc indexers to skip boilerplate duplicates where the same body
+    appears under ``[Repo: A]`` and ``[Repo: B]`` prefixes. Scope the dedup per
+    file_type upstream so a generic body like "### Responses\n\nOK" doesn't
+    shadow a gotcha entry that happens to match.
+    """
+    body = _body_only(content)
+    return hashlib.md5(body.encode("utf-8")).hexdigest()[:16]
+
+
+def _subsplit_oversized(section_text: str, max_chars: int = MAX_CHUNK, overlap: int = 400) -> list[str]:
+    """Split an oversized markdown section on paragraph boundaries with overlap.
+
+    - Sections <= max_chars pass through unchanged.
+    - Otherwise split on blank lines; accumulate paragraphs up to max_chars.
+    - When flushing, keep trailing paragraphs up to ~overlap chars as the head
+      of the next chunk so cross-chunk context is preserved.
+    - A single paragraph larger than max_chars is hard-char-split with overlap.
+    """
+    if len(section_text) <= max_chars:
+        return [section_text]
+    paragraphs = re.split(r"\n\n+", section_text)
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+    for para in paragraphs:
+        if current_len + len(para) + 2 > max_chars and current:
+            chunks.append("\n\n".join(current))
+            # overlap: keep last paragraph(s) up to `overlap` chars
+            tail: list[str] = []
+            tail_len = 0
+            for p in reversed(current):
+                if tail_len + len(p) > overlap:
+                    break
+                tail.insert(0, p)
+                tail_len += len(p)
+            current = tail
+            current_len = tail_len
+        current.append(para)
+        current_len += len(para) + 2
+    if current:
+        chunks.append("\n\n".join(current))
+    # Final safety: hard-split any chunk that still exceeds max_chars
+    # (happens when a single paragraph is larger than max_chars).
+    out: list[str] = []
+    step = max(1, max_chars - overlap)
+    for ch in chunks:
+        if len(ch) <= max_chars:
+            out.append(ch)
+        else:
+            for i in range(0, len(ch), step):
+                out.append(ch[i : i + max_chars])
+    return out
+
 
 def chunk_markdown(content: str, repo_name: str) -> list[dict]:
-    """Chunk markdown by header sections."""
-    chunks = []
+    """Chunk markdown by header sections.
+
+    Behavior:
+    - Header split on ^#{1,3}\\s+ (unchanged).
+    - Each emitted section is subsplit with :func:`_subsplit_oversized` so no
+      single chunk exceeds MAX_CHUNK. This unlocks provider mega-dumps
+      (Plaid, Credorax, Skrill, EVO) for the reranker.
+    - Orphan-heading filter: chunks whose *body* (content minus
+      ``[Repo: X]``/``[Docs: X]`` prefix) is shorter than :data:`MIN_DOC_BODY`
+      are dropped. Protects against headings-with-links-only and tiny TODOs.
+    """
+    chunks: list[dict] = []
     content = re.sub(r"\A---\n.*?\n---\n?", "", content, count=1, flags=re.DOTALL)
     sections = re.split(r"^(#{1,3}\s+.+)$", content, flags=re.MULTILINE)
 
     current_header = ""
-    current_content = []
+    current_content: list[str] = []
+
+    def _emit(section_text: str, chunk_type: str) -> None:
+        # MIN_CHUNK is a cheap pre-filter; MIN_DOC_BODY is the real gate.
+        if len(section_text) < MIN_CHUNK:
+            return
+        body_len = len(_body_only(section_text).strip())
+        if body_len < MIN_DOC_BODY:
+            return
+        for piece in _subsplit_oversized(section_text):
+            # Re-check body length after subsplit (a piece may be mostly overlap).
+            piece_body_len = len(_body_only(piece).strip())
+            if piece_body_len < MIN_DOC_BODY:
+                continue
+            chunks.append(
+                {
+                    "content": f"[Repo: {repo_name}] {piece}",
+                    "chunk_type": chunk_type,
+                }
+            )
 
     for part in sections:
         if re.match(r"^#{1,3}\s+", part):
             # Save previous section
             if current_content:
                 text = (current_header + "\n" + "\n".join(current_content)).strip()
-                if len(text) >= MIN_CHUNK:
-                    chunks.append(
-                        {
-                            "content": f"[Repo: {repo_name}] {text}",
-                            "chunk_type": "doc_section",
-                        }
-                    )
+                _emit(text, "doc_section")
             current_header = part
             current_content = []
         else:
@@ -36,21 +132,19 @@ def chunk_markdown(content: str, repo_name: str) -> list[dict]:
     # Last section
     if current_content or current_header:
         text = (current_header + "\n" + "\n".join(current_content)).strip()
-        if len(text) >= MIN_CHUNK:
-            chunks.append(
-                {
-                    "content": f"[Repo: {repo_name}] {text}",
-                    "chunk_type": "doc_section",
-                }
-            )
+        _emit(text, "doc_section")
 
     if not chunks and len(content.strip()) >= MIN_CHUNK:
-        chunks.append(
-            {
-                "content": f"[Repo: {repo_name}] {content.strip()}",
-                "chunk_type": "doc_file",
-            }
-        )
+        body = content.strip()
+        if len(body) >= MIN_DOC_BODY:
+            for piece in _subsplit_oversized(body):
+                if len(piece.strip()) >= MIN_DOC_BODY:
+                    chunks.append(
+                        {
+                            "content": f"[Repo: {repo_name}] {piece}",
+                            "chunk_type": "doc_file",
+                        }
+                    )
 
     return chunks
 

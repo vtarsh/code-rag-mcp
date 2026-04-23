@@ -77,10 +77,12 @@ class TestChunkMarkdown:
     """Markdown chunking by header sections."""
 
     def test_splits_on_headers(self):
-        # Each section must exceed MIN_CHUNK (50 chars) after repo prefix
+        # Each section body (after repo prefix) must exceed MIN_DOC_BODY (120 chars)
         content = (
-            "# Introduction\n\nSome intro text here that is long enough to exceed the minimum chunk size threshold.\n\n"
-            "## Details\n\nDetailed description of the feature with enough content to also exceed the minimum chunk size.\n"
+            "# Introduction\n\nThe payment processing service exposes multiple gRPC endpoints for card "
+            "transactions, refunds, and reversals that clients depend on for reliable settlement flows.\n\n"
+            "## Details\n\nDetailed description of the feature covering request validation, provider routing, "
+            "idempotency keys, retry semantics, and the downstream webhook notification contracts to users.\n"
         )
         chunks = chunk_markdown(content, "test-repo")
         assert len(chunks) >= 2
@@ -88,12 +90,20 @@ class TestChunkMarkdown:
             assert c["chunk_type"] == "doc_section"
 
     def test_single_section(self):
-        content = "# Only One Section\n\nThis is the only section with enough content to pass the minimum."
+        content = (
+            "# Only One Section\n\nThis is the only section with enough substantive body text to pass the "
+            "new 120-character minimum body threshold used by the orphan-heading filter introduced in the "
+            "chunker audit fix; it describes service behavior in meaningful detail.\n"
+        )
         chunks = chunk_markdown(content, "test-repo")
         assert len(chunks) >= 1
 
     def test_no_headers_still_chunks(self):
-        content = "This is a markdown file without any headers but with enough content to be indexed as a chunk."
+        content = (
+            "This is a markdown file without any headers but with enough substantive body content to be "
+            "indexed as a chunk even after the new body-only 120-character orphan-heading filter takes "
+            "effect across the doc_section and doc_file paths in chunk_markdown."
+        )
         chunks = chunk_markdown(content, "test-repo")
         assert len(chunks) == 1
         # Without headers, re.split still produces sections — chunk_type is doc_section or doc_file
@@ -109,15 +119,25 @@ class TestChunkMarkdown:
         assert chunks == []
 
     def test_repo_prefix(self):
-        content = "# Header\n\nSufficient content here for the chunk to be indexed properly."
+        content = (
+            "# Header\n\nSufficient substantive body content here for the chunk to be indexed properly even "
+            "after the 120-character orphan-heading filter kicks in; payment webhook retry behaviour is "
+            "described in enough detail to survive the new minimum.\n"
+        )
         chunks = chunk_markdown(content, "test-repo")
         assert all(c["content"].startswith("[Repo: test-repo]") for c in chunks)
 
     def test_h3_headers_split(self):
         content = (
-            "# Top\n\nTop-level content that is long enough to be a valid chunk.\n\n"
-            "## Section\n\nMiddle section with meaningful content for the test.\n\n"
-            "### Subsection\n\nSubsection content that also passes the minimum length check.\n"
+            "# Top\n\nTop-level content that is long enough to be a valid chunk with substantive body text "
+            "exceeding the 120-character body-only orphan-heading filter threshold that the chunker now "
+            "enforces on every section it emits.\n\n"
+            "## Section\n\nMiddle section with meaningful content for the test case, describing behavior "
+            "in enough detail for the body-only length check to pass after stripping the [Repo: ...] "
+            "prefix that gets added at emit time by chunk_markdown.\n\n"
+            "### Subsection\n\nSubsection content that also passes the minimum body length check by "
+            "including enough substantive text about retry semantics, idempotency keys, and webhook "
+            "signature validation that the 120-character threshold is comfortably exceeded.\n"
         )
         chunks = chunk_markdown(content, "test-repo")
         assert len(chunks) >= 3

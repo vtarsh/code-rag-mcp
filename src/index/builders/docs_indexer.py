@@ -20,7 +20,7 @@ from ._common import (
 )
 from .detect import detect_language
 from .dispatcher import chunk_file
-from .docs_chunks import chunk_markdown, chunk_task_markdown
+from .docs_chunks import chunk_markdown, chunk_task_markdown, content_hash
 
 
 def index_gotchas(conn: sqlite3.Connection) -> tuple[int, int]:
@@ -34,6 +34,10 @@ def index_gotchas(conn: sqlite3.Connection) -> tuple[int, int]:
 
     files = 0
     chunks = 0
+    # Dedup by body hash within file_type='gotchas' — skips boilerplate that
+    # differs only by the [Repo: X] prefix (e.g., identical "see provider
+    # response mapping" snippets copy-pasted across per-provider gotchas).
+    seen_hashes: set[str] = set()
 
     for file_path in sorted(GOTCHAS_DIR.glob("*.md")):
         repo_name = file_path.stem  # grpc-apm-trustly.md → grpc-apm-trustly
@@ -42,6 +46,10 @@ def index_gotchas(conn: sqlite3.Connection) -> tuple[int, int]:
         file_chunks = chunk_file(file_path, repo_name, "docs")
 
         for chunk in file_chunks:
+            h = content_hash(chunk["content"])
+            if h in seen_hashes:
+                continue
+            seen_hashes.add(h)
             conn.execute(
                 "INSERT INTO chunks(content, repo_name, file_path, file_type, chunk_type, language) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
@@ -272,6 +280,10 @@ def index_references(conn: sqlite3.Connection) -> tuple[int, int]:
 
     files = 0
     chunks = 0
+    # Dedup by body hash within file_type='reference'. Provider references
+    # (conventions, code-style) copy common subsections; hash-dedup cuts
+    # ~6x repetition observed in the audit.
+    seen_hashes: set[str] = set()
 
     for file_path in sorted(REFERENCES_DIR.glob("*")):
         if file_path.suffix.lower() not in (".yaml", ".yml", ".md"):
@@ -305,6 +317,10 @@ def index_references(conn: sqlite3.Connection) -> tuple[int, int]:
             if not chunk_content.startswith("[Reference:"):
                 chunk_content = f"[Reference: {ref_name}] {chunk_content}"
 
+            h = content_hash(chunk_content)
+            if h in seen_hashes:
+                continue
+            seen_hashes.add(h)
             conn.execute(
                 "INSERT INTO chunks(content, repo_name, file_path, file_type, chunk_type, language) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
@@ -413,6 +429,12 @@ def index_providers(conn: sqlite3.Connection) -> tuple[int, int]:
 
     total_files = 0
     total_chunks = 0
+    # Dedup scoped across the whole provider_doc file_type: 138 clusters of
+    # ~3 dup chunks each were observed (shared OpenAPI boilerplate "### Responses
+    # \n\nOK" etc.) Hash is body-only so [Provider A Docs: X] vs
+    # [Provider B Docs: X] with identical body collapse to one chunk — this is
+    # intentional for scraped OpenAPI boilerplate.
+    seen_hashes: set[str] = set()
 
     for provider_dir in sorted(PROVIDERS_DIR.iterdir()):
         if not provider_dir.is_dir():
@@ -443,6 +465,10 @@ def index_providers(conn: sqlite3.Connection) -> tuple[int, int]:
                 chunk_content = chunk["content"]
                 if not chunk_content.startswith(f"[{provider_title} Docs:"):
                     chunk_content = f"[{provider_title} Docs: {slug}] {chunk_content}"
+                h = content_hash(chunk_content)
+                if h in seen_hashes:
+                    continue
+                seen_hashes.add(h)
                 conn.execute(
                     "INSERT INTO chunks(content, repo_name, file_path, file_type, chunk_type, language) "
                     "VALUES (?, ?, ?, ?, ?, ?)",
