@@ -51,8 +51,16 @@ from src.search.vector import vector_search
 # import time (which would need a DB connection).
 _KNOWN_PROVIDERS: frozenset[str] = frozenset(
     {
-        "payper", "nuvei", "trustly", "volt", "ppro",
-        "paynearme", "aeropay", "fonix", "paysafe", "worldpay",
+        "payper",
+        "nuvei",
+        "trustly",
+        "volt",
+        "ppro",
+        "paynearme",
+        "aeropay",
+        "fonix",
+        "paysafe",
+        "worldpay",
     }
 )
 
@@ -60,8 +68,16 @@ _KNOWN_PROVIDERS: frozenset[str] = frozenset(
 # Must appear adjacent to a provider token for fan-out to trigger.
 _TOPIC_VERBS: frozenset[str] = frozenset(
     {
-        "payout", "refund", "sale", "webhook", "initialize", "dispatch",
-        "activities", "signature", "credentials", "idempotency",
+        "payout",
+        "refund",
+        "sale",
+        "webhook",
+        "initialize",
+        "dispatch",
+        "activities",
+        "signature",
+        "credentials",
+        "idempotency",
     }
 )
 
@@ -151,10 +167,7 @@ def _cross_provider_fanout(query: str, limit_per_sibling: int = 1) -> tuple[str,
             continue
         top = rows[0]
         snippet = re.sub(r">>>|<<<", "", top.snippet or "")[:200]
-        lines.append(
-            f"  - **{top.repo_name}** | `{top.file_path}` ({top.file_type}/{top.chunk_type})\n"
-            f"    {snippet}"
-        )
+        lines.append(f"  - **{top.repo_name}** | `{top.file_path}` ({top.file_type}/{top.chunk_type})\n    {snippet}")
         seen_providers.add(sib_name)
 
     if not lines:
@@ -162,6 +175,7 @@ def _cross_provider_fanout(query: str, limit_per_sibling: int = 1) -> tuple[str,
 
     header = f"## Cross-provider siblings for '{topic}'\n\n" + "\n\n".join(lines) + "\n"
     return header, topic
+
 
 # A/B investigation env gates (post-P0a hybrid eval found 103 tickets lose GT
 # repos vs fts_only+fallback). Default 0 = production behaviour unchanged.
@@ -428,6 +442,7 @@ def hybrid_search(
     *,
     reranker_override=None,
     cross_provider: bool = False,
+    docs_index: bool | None = None,
 ) -> tuple[list[dict], str | None, int]:
     """Hybrid search: combine FTS5 keyword + vector similarity via RRF.
 
@@ -445,6 +460,14 @@ def hybrid_search(
     header listing top-1 analogous chunks from up to 6 sibling provider repos.
     Default False preserves byte-for-byte output.
 
+    `docs_index` (2026-04-23 two-tower): overrides vector-leg routing.
+      - None  (default): auto-route by query intent — pure doc-intent hits the
+        docs tower only, pure code-intent hits the code tower only, and
+        ambiguous / mixed queries fan out to both towers and merge.
+      - True  : force the docs tower regardless of intent (debug / eval).
+      - False : force the code tower regardless of intent (debug / eval).
+      FTS5 is content-agnostic and always runs against the shared chunks pool.
+
     Returns (ranked_results, vector_error | None, total_candidates).
     """
     K = RRF_K
@@ -454,8 +477,54 @@ def hybrid_search(
     #    P4.2: raised 100→150 to fill rerank pool to ~200 after RRF overlap.
     keyword_results = fts_search(query, repo, file_type, exclude_file_types, limit=150)
 
-    # 2. Vector search
-    vector_results, vec_err = vector_search(query, repo, file_type, exclude_file_types, limit=50)
+    # 2. Vector search — two-tower routing.
+    #
+    # The vector leg is the only part of the pipeline that changes per tower.
+    # We route by query intent (docs vs code) and fan out to both towers for
+    # ambiguous queries, then dedupe by rowid before the RRF loop so a chunk
+    # that surfaces in both towers contributes one RRF position (not two).
+    #
+    # Dedupe strategy: same `rowid` across towers means the same row in the
+    # SQLite `chunks` table (towers share that table — only the embeddings
+    # differ). Keeping the first occurrence preserves the better-ranked
+    # position from whichever tower surfaced it first, and matches the existing
+    # `if key not in scores` behaviour in the RRF loop. Alternatives considered:
+    # (a) summing RRF scores (double-boosts mixed hits — spec calls this out),
+    # (b) using a fixed merged position (throws away ranking signal). Dedupe
+    # by rowid is the lowest-risk option.
+    if docs_index is True:
+        vector_results, vec_err = vector_search(query, repo, file_type, exclude_file_types, limit=50, model_key="docs")
+    elif docs_index is False:
+        vector_results, vec_err = vector_search(query, repo, file_type, exclude_file_types, limit=50)
+    else:
+        is_doc_intent = _query_wants_docs(query)
+        has_code_signal = bool(_CODE_SIG_RE.search(query or "") or _REPO_TOKEN_RE.search(query or ""))
+        if is_doc_intent and not has_code_signal:
+            # pure doc intent → docs tower only
+            vector_results, vec_err = vector_search(
+                query, repo, file_type, exclude_file_types, limit=50, model_key="docs"
+            )
+        elif has_code_signal and not is_doc_intent:
+            # pure code intent → code tower only (unchanged legacy path)
+            vector_results, vec_err = vector_search(query, repo, file_type, exclude_file_types, limit=50)
+        else:
+            # mixed / ambiguous → query both towers and merge.
+            code_results, code_err = vector_search(query, repo, file_type, exclude_file_types, limit=50, model_key=None)
+            docs_results, docs_err = vector_search(
+                query, repo, file_type, exclude_file_types, limit=50, model_key="docs"
+            )
+            # Dedupe by rowid keeping first occurrence (code tower first → its
+            # ranking wins on collisions; rationale in block comment above).
+            seen_rowids: set = set()
+            merged: list[dict] = []
+            for vrow in list(code_results) + list(docs_results):
+                rid = vrow.get("rowid")
+                if rid in seen_rowids:
+                    continue
+                seen_rowids.add(rid)
+                merged.append(vrow)
+            vector_results = merged
+            vec_err = code_err or docs_err
 
     # 3. RRF fusion
     #
