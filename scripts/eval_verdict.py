@@ -242,3 +242,331 @@ def verdict_from_snapshot(
             "delta_mrr_diag": round(mrr_ft - mrr_base, 4),
         },
     )
+
+
+# =====================================================================
+# v2 gate — file-level co-primary + stratified net (proposal §3)
+# =====================================================================
+#
+# Additive to v1: kept alongside `decide_verdict` because legacy snapshots
+# (gte_v4.json, gte_v6_2.json, gte_v7.json, …) do not carry
+# `file_recall_at_10` in per_task and will fall back to v1 via the
+# `verdict_from_snapshot_dual` dispatcher.
+#
+# Thresholds below are first-principles guesses from §3; calibration on
+# v6.2 vs v8 is deferred to §7 of the proposal (next run).
+
+DELTA_FILE_R10_THRESHOLD_V2 = 0.01   # +1pp — file-level is strictly harder
+MIN_NET_STRATUM_V2 = 15               # required net in BOTH strata
+
+# Stratum thresholds:
+#   n_gt_repos == 1:    r@10 is binary (0 or 1) — only full flips matter.
+#   n_gt_repos >= 2:    continuous — 5pp threshold matches v1 REGRESSION_DELTA_PP.
+STRATUM_N1_FLIP_THRESHOLD = 0.5
+STRATUM_N2PLUS_DELTA = 0.05
+
+
+def _stratified_counts(
+    per_task_deltas: dict[str, dict],
+) -> dict[str, int]:
+    """Return stratified improved/regressed counts by ``n_gt_repos``.
+
+    `per_task_deltas[tid]` must carry both `recall_at_10` (delta) AND
+    `n_gt_repos` (ticket metadata). Tickets missing `n_gt_repos` are
+    silently skipped — caller must inject the field from baseline
+    per_task before invoking the gate.
+
+    Returns six counts: n1_improved, n1_regressed, n2plus_improved,
+    n2plus_regressed, net_n1, net_n2plus.
+    """
+    n1_imp = n1_reg = 0
+    n2p_imp = n2p_reg = 0
+    for d in per_task_deltas.values():
+        n_gt = d.get("n_gt_repos")
+        if n_gt is None:
+            continue
+        delta = d.get("recall_at_10", 0.0)
+        if delta is None:
+            continue
+        if n_gt == 1:
+            # Binary flip — |Δ| ≥ 0.5 ≈ 0→1 or 1→0.
+            if delta >= STRATUM_N1_FLIP_THRESHOLD:
+                n1_imp += 1
+            elif delta <= -STRATUM_N1_FLIP_THRESHOLD:
+                n1_reg += 1
+        elif n_gt >= 2:
+            if delta >= STRATUM_N2PLUS_DELTA:
+                n2p_imp += 1
+            elif delta <= -STRATUM_N2PLUS_DELTA:
+                n2p_reg += 1
+    return {
+        "n1_improved": n1_imp,
+        "n1_regressed": n1_reg,
+        "n2plus_improved": n2p_imp,
+        "n2plus_regressed": n2p_reg,
+        "net_n1": n1_imp - n1_reg,
+        "net_n2plus": n2p_imp - n2p_reg,
+    }
+
+
+def decide_verdict_v2(
+    delta_metrics: dict,
+    per_task_deltas: dict[str, dict],
+    *,
+    delta_r10_threshold: float = DELTA_R10_THRESHOLD,
+    delta_hit5_threshold: float = DELTA_HIT5_THRESHOLD,
+    delta_file_r10_threshold: float = DELTA_FILE_R10_THRESHOLD_V2,
+    min_net_stratum: int = MIN_NET_STRATUM_V2,
+) -> dict:
+    """v2 gate: primary triple + stratified net on ``n_gt_repos`` strata.
+
+    Proposal §3. Primary (ALL must pass): Δr@10 ≥ +0.02, ΔHit@5 ≥ +0.02,
+    Δfile_r@10 ≥ +0.01. Stratified net: `min(net_n1, net_n2plus) ≥ 15`.
+
+    Args:
+      delta_metrics: dict with keys `delta_r10_all`, `delta_hit5_all`,
+        `delta_file_r10_all`. Missing keys default to 0.0 (so a caller
+        without file-level data falls to HOLD, not REJECT).
+      per_task_deltas: per-ticket deltas with `recall_at_10` AND
+        `n_gt_repos` populated. Tickets lacking `n_gt_repos` are skipped.
+
+    Returns:
+      dict with `verdict`, `reason`, `primary`, `stratified`, `gate_version`.
+      `verdict` is one of "PROMOTE" | "HOLD" | "REJECT".
+    """
+    d_r10 = float(delta_metrics.get("delta_r10_all", 0.0))
+    d_hit5 = float(delta_metrics.get("delta_hit5_all", 0.0))
+    d_file_r10 = float(delta_metrics.get("delta_file_r10_all", 0.0))
+
+    strat = _stratified_counts(per_task_deltas)
+
+    primary = {
+        "delta_r10_all": round(d_r10, 4),
+        "delta_hit5_all": round(d_hit5, 4),
+        "delta_file_r10_all": round(d_file_r10, 4),
+        "delta_r10_threshold": delta_r10_threshold,
+        "delta_hit5_threshold": delta_hit5_threshold,
+        "delta_file_r10_threshold": delta_file_r10_threshold,
+    }
+
+    # REJECT: any primary Δ<0 or either stratum net<0.
+    if d_r10 < 0:
+        return {
+            "verdict": "REJECT",
+            "reason": f"Δr@10={d_r10:+.3f} — primary regressed",
+            "primary": primary,
+            "stratified": strat,
+            "gate_version": "v2",
+        }
+    if d_hit5 < 0:
+        return {
+            "verdict": "REJECT",
+            "reason": f"ΔHit@5={d_hit5:+.3f} — top-5 quality regressed",
+            "primary": primary,
+            "stratified": strat,
+            "gate_version": "v2",
+        }
+    if d_file_r10 < 0:
+        return {
+            "verdict": "REJECT",
+            "reason": f"Δfile_r@10={d_file_r10:+.3f} — file-level co-primary regressed",
+            "primary": primary,
+            "stratified": strat,
+            "gate_version": "v2",
+        }
+    if strat["net_n1"] < 0:
+        return {
+            "verdict": "REJECT",
+            "reason": (
+                f"net_n1={strat['net_n1']:+d} "
+                f"({strat['n1_improved']} improved, {strat['n1_regressed']} regressed) "
+                f"— 1-repo stratum more losers than winners"
+            ),
+            "primary": primary,
+            "stratified": strat,
+            "gate_version": "v2",
+        }
+    if strat["net_n2plus"] < 0:
+        return {
+            "verdict": "REJECT",
+            "reason": (
+                f"net_n2plus={strat['net_n2plus']:+d} "
+                f"({strat['n2plus_improved']} improved, {strat['n2plus_regressed']} regressed) "
+                f"— multi-repo stratum more losers than winners"
+            ),
+            "primary": primary,
+            "stratified": strat,
+            "gate_version": "v2",
+        }
+
+    # PROMOTE: all primaries meet threshold AND min stratum net ≥ min_net_stratum.
+    primary_ok = (
+        d_r10 >= delta_r10_threshold
+        and d_hit5 >= delta_hit5_threshold
+        and d_file_r10 >= delta_file_r10_threshold
+    )
+    stratum_ok = min(strat["net_n1"], strat["net_n2plus"]) >= min_net_stratum
+    if primary_ok and stratum_ok:
+        return {
+            "verdict": "PROMOTE",
+            "reason": (
+                f"Δr@10={d_r10:+.3f}, ΔHit@5={d_hit5:+.3f}, "
+                f"Δfile_r@10={d_file_r10:+.3f}, "
+                f"net_n1=+{strat['net_n1']}, net_n2plus=+{strat['net_n2plus']}"
+            ),
+            "primary": primary,
+            "stratified": strat,
+            "gate_version": "v2",
+        }
+
+    # HOLD: positive but sub-threshold on ≥1 axis.
+    shortfall: list[str] = []
+    if d_r10 < delta_r10_threshold:
+        shortfall.append(f"Δr@10={d_r10:+.3f}<{delta_r10_threshold:+.3f}")
+    if d_hit5 < delta_hit5_threshold:
+        shortfall.append(f"ΔHit@5={d_hit5:+.3f}<{delta_hit5_threshold:+.3f}")
+    if d_file_r10 < delta_file_r10_threshold:
+        shortfall.append(f"Δfile_r@10={d_file_r10:+.3f}<{delta_file_r10_threshold:+.3f}")
+    if strat["net_n1"] < min_net_stratum:
+        shortfall.append(f"net_n1={strat['net_n1']:+d}<{min_net_stratum}")
+    if strat["net_n2plus"] < min_net_stratum:
+        shortfall.append(f"net_n2plus={strat['net_n2plus']:+d}<{min_net_stratum}")
+    return {
+        "verdict": "HOLD",
+        "reason": "positive but sub-threshold: " + "; ".join(shortfall),
+        "primary": primary,
+        "stratified": strat,
+        "gate_version": "v2",
+    }
+
+
+def _compute_file_r10_mean(per_task: dict[str, dict]) -> float | None:
+    """Mean of file_recall_at_10 over per_task entries; None if any missing.
+
+    v2 requires ALL evaluated entries to carry file_recall_at_10. A single
+    None (legacy row) disqualifies v2 and collapses to v1-only.
+    """
+    vals: list[float] = []
+    for v in per_task.values():
+        x = v.get("file_recall_at_10")
+        if x is None:
+            return None
+        vals.append(float(x))
+    if not vals:
+        return None
+    return sum(vals) / len(vals)
+
+
+def _inject_n_gt_repos(
+    per_task_deltas: dict[str, dict],
+    per_task_baseline: dict[str, dict],
+) -> dict[str, dict]:
+    """Shallow-copy deltas with `n_gt_repos` added from baseline per-task.
+
+    The stratifier requires `n_gt_repos` on each delta; eval_finetune.py
+    writes it on per_task entries but build_delta strips non-metric keys.
+    """
+    out: dict[str, dict] = {}
+    for tid, d in per_task_deltas.items():
+        entry = dict(d)
+        base = per_task_baseline.get(tid, {})
+        if "n_gt_repos" not in entry and "n_gt_repos" in base:
+            entry["n_gt_repos"] = base["n_gt_repos"]
+        out[tid] = entry
+    return out
+
+
+def verdict_from_snapshot_dual(
+    snapshot_baseline: dict[str, dict],
+    snapshot_candidate: dict[str, dict],
+    *,
+    per_task_delta: dict[str, dict] | None = None,
+) -> dict:
+    """Emit both v1 and v2 verdicts from snapshot dicts in one call.
+
+    v1 is always computed (legacy snapshots must still score). v2 is
+    computed iff every entry in both baseline AND candidate per_task has
+    `file_recall_at_10` — otherwise v2 is reported as HOLD/unavailable
+    rather than a spurious REJECT.
+
+    Args:
+      snapshot_baseline, snapshot_candidate: per_task dicts (mapping
+        ticket_id → metric entry).
+      per_task_delta: optional precomputed delta dict. If None, derived
+        locally via `build_delta`-equivalent logic inline (recall_at_10,
+        recall_at_25, rank_of_first_gt_delta, file_recall_at_10).
+
+    Returns:
+      `{"verdict_v1": {...}, "verdict_v2": {...}}` — each value is either
+      the gate payload or `{"verdict": "HOLD", "reason": "unavailable: ...",
+      "gate_version": "v2"}` for v2 when file-level data is missing.
+    """
+    # --- Derive v1 inputs from raw snapshots -----------------------------
+    # build_delta lives in merge_eval_shards; replicate the minimum here to
+    # avoid a cross-script import cycle (merge_eval_shards already imports
+    # verdict_from_snapshot from this module).
+    if per_task_delta is None:
+        pd: dict[str, dict] = {}
+        for tid in set(snapshot_baseline) & set(snapshot_candidate):
+            b = snapshot_baseline[tid]
+            f = snapshot_candidate[tid]
+            b_rank = b.get("rank_of_first_gt")
+            f_rank = f.get("rank_of_first_gt")
+            rank_delta: int | None
+            if b_rank is None or f_rank is None:
+                rank_delta = None
+            else:
+                rank_delta = f_rank - b_rank
+            b_file = b.get("file_recall_at_10")
+            f_file = f.get("file_recall_at_10")
+            if b_file is None or f_file is None:
+                file_delta: float | None = None
+            else:
+                file_delta = round(float(f_file) - float(b_file), 4)
+            pd[tid] = {
+                "recall_at_10": round(
+                    f.get("recall_at_10", 0.0) - b.get("recall_at_10", 0.0), 4
+                ),
+                "recall_at_25": round(
+                    f.get("recall_at_25", 0.0) - b.get("recall_at_25", 0.0), 4
+                ),
+                "rank_of_first_gt_delta": rank_delta,
+                "file_recall_at_10": file_delta,
+            }
+        per_task_delta = pd
+
+    v1_result = verdict_from_snapshot(
+        snapshot_baseline, snapshot_candidate, per_task_delta
+    )
+    v1_payload = {
+        "verdict": v1_result.verdict,
+        "reason": v1_result.reason,
+        "metrics": v1_result.metrics,
+        "gate_version": "v1",
+    }
+
+    # --- v2 — only if BOTH snapshots carry file_recall_at_10 on every row
+    base_file_mean = _compute_file_r10_mean(snapshot_baseline)
+    cand_file_mean = _compute_file_r10_mean(snapshot_candidate)
+    if base_file_mean is None or cand_file_mean is None:
+        v2_payload = {
+            "verdict": "HOLD",
+            "reason": "unavailable: file_recall_at_10 missing on legacy snapshot",
+            "gate_version": "v2",
+        }
+        return {"verdict_v1": v1_payload, "verdict_v2": v2_payload}
+
+    r10_base = compute_r10_mean(snapshot_baseline)
+    r10_cand = compute_r10_mean(snapshot_candidate)
+    hit5_base = compute_hit5_mean(snapshot_baseline)
+    hit5_cand = compute_hit5_mean(snapshot_candidate)
+
+    delta_metrics = {
+        "delta_r10_all": r10_cand - r10_base,
+        "delta_hit5_all": hit5_cand - hit5_base,
+        "delta_file_r10_all": cand_file_mean - base_file_mean,
+    }
+
+    deltas_with_strata = _inject_n_gt_repos(per_task_delta, snapshot_baseline)
+    v2_payload = decide_verdict_v2(delta_metrics, deltas_with_strata)
+    return {"verdict_v1": v1_payload, "verdict_v2": v2_payload}

@@ -589,6 +589,9 @@ def build_delta(base: dict[str, dict], ft: dict[str, dict]) -> dict[str, dict]:
     post-2026-04-20 fix: key `rank_of_first_gt_delta` (was ambiguously named
     `rank_of_first_gt`). None if either baseline or ft didn't find GT.
     Negative rank delta = ft moved GT up (improvement).
+
+    2026-04-22: added `file_recall_at_10` delta alongside — v2 gate primary.
+    None if either side lacks the field (legacy per-task entries).
     """
     out: dict[str, dict] = {}
     for ticket in base:
@@ -603,10 +606,17 @@ def build_delta(base: dict[str, dict], ft: dict[str, dict]) -> dict[str, dict]:
             rank_delta = None
         else:
             rank_delta = f_rank - b_rank
+        b_file = b.get("file_recall_at_10")
+        f_file = f.get("file_recall_at_10")
+        if b_file is None or f_file is None:
+            file_delta: float | None = None
+        else:
+            file_delta = float(f_file) - float(b_file)
         out[ticket] = {
             "recall_at_10": f["recall_at_10"] - b["recall_at_10"],
             "recall_at_25": f["recall_at_25"] - b["recall_at_25"],
             "rank_of_first_gt_delta": rank_delta,
+            "file_recall_at_10": file_delta,
         }
     return out
 

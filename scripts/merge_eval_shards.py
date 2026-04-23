@@ -34,15 +34,76 @@ def percentile(values: list, p: float) -> float:
     return float(s[k])
 
 
+def _median(vs: list[float]) -> float:
+    if not vs:
+        return 0.0
+    s = sorted(vs)
+    n = len(s)
+    mid = n // 2
+    if n % 2 == 1:
+        return float(s[mid])
+    return float((s[mid - 1] + s[mid]) / 2.0)
+
+
 def aggregate(per_task: dict, tickets: list[str]) -> dict:
+    """Aggregate per-task scalars across `tickets` with None-safe file metrics.
+
+    File-level recall fields (`file_recall_at_10`, `file_recall_at_25`) are
+    additive to the legacy schema (per proposal §5 — legacy snapshots store
+    no file-level data). We:
+      - Skip entries where the key is absent OR the value is None.
+      - Emit mean + median per file-recall dimension (median = outlier-robust
+        sanity check alongside the mean, since file-level deltas compress).
+      - Tag the aggregate with `gate_version`: "v2" iff EVERY evaluated entry
+        carries `file_recall_at_10` (not missing, not None); else "v1". This
+        lets `merge_eval_shards` decide which verdict gate to invoke.
+    """
     r10 = [per_task[t]["recall_at_10"] for t in tickets if t in per_task]
     r25 = [per_task[t]["recall_at_25"] for t in tickets if t in per_task]
+
+    # File-level series — legacy-compat: skip missing or None.
+    file_r10: list[float] = []
+    file_r25: list[float] = []
+    # Track whether every evaluated per_task has file_recall_at_10 — drives gate_version.
+    evaluated = [t for t in tickets if t in per_task]
+    v2_eligible = bool(evaluated)
+    for t in evaluated:
+        entry = per_task[t]
+        v = entry.get("file_recall_at_10")
+        if v is None:
+            v2_eligible = False
+        else:
+            file_r10.append(float(v))
+        v25 = entry.get("file_recall_at_25")
+        if v25 is not None:
+            file_r25.append(float(v25))
+
+    gate_version = "v2" if v2_eligible else "v1"
+
     if not r10:
-        return {"r10_mean": 0.0, "r25_mean": 0.0, "n": 0}
+        return {
+            "r10_mean": 0.0,
+            "r25_mean": 0.0,
+            "file_r10_mean": 0.0,
+            "file_r10_median": 0.0,
+            "file_r25_mean": 0.0,
+            "file_r25_median": 0.0,
+            "n": 0,
+            "n_file_r10": 0,
+            "n_file_r25": 0,
+            "gate_version": gate_version,
+        }
     return {
         "r10_mean": sum(r10) / len(r10),
         "r25_mean": sum(r25) / len(r25),
+        "file_r10_mean": (sum(file_r10) / len(file_r10)) if file_r10 else 0.0,
+        "file_r10_median": _median(file_r10),
+        "file_r25_mean": (sum(file_r25) / len(file_r25)) if file_r25 else 0.0,
+        "file_r25_median": _median(file_r25),
         "n": len(r10),
+        "n_file_r10": len(file_r10),
+        "n_file_r25": len(file_r25),
+        "gate_version": gate_version,
     }
 
 
@@ -64,10 +125,20 @@ def build_delta(base: dict, ft: dict) -> dict:
             rank_delta = None
         else:
             rank_delta = f_rank - b_rank
+        # Δfile_r@10 — proposal §3 co-primary. None on either side ⇒ None
+        # (legacy-compat: absence of key is indistinguishable from None and
+        # means "this snapshot pre-dates the file-level gate schema").
+        b_file = b.get("file_recall_at_10")
+        f_file = f.get("file_recall_at_10")
+        if b_file is None or f_file is None:
+            file_r10_delta: float | None = None
+        else:
+            file_r10_delta = round(float(f_file) - float(b_file), 4)
         deltas[tid] = {
             "recall_at_10": round(f["recall_at_10"] - b["recall_at_10"], 4),
             "recall_at_25": round(f["recall_at_25"] - b["recall_at_25"], 4),
             "rank_of_first_gt_delta": rank_delta,
+            "file_recall_at_10": file_r10_delta,
         }
     return deltas
 
