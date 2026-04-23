@@ -94,8 +94,8 @@ def load_all_gt_tasks(db_path: Path, projects: list[str] | None = None) -> list[
     else:
         where = "repos_changed IS NOT NULL AND repos_changed != '[]'"
     rows = conn.execute(
-        "SELECT ticket_id, summary, description, jira_comments, repos_changed "
-        "FROM task_history "
+        "SELECT ticket_id, summary, description, jira_comments, repos_changed, "
+        "files_changed FROM task_history "
         f"WHERE {where} ORDER BY ticket_id"
     ).fetchall()
     conn.close()
@@ -115,6 +115,17 @@ def load_all_gt_tasks(db_path: Path, projects: list[str] | None = None) -> list[
                 comments = json.loads(raw_comments) or []
             except (TypeError, json.JSONDecodeError):
                 comments = []
+        # File-level GT (proposal §2): load alongside repos_changed. Missing /
+        # malformed rows default to [] so callers never see KeyError and the
+        # file-recall helpers can fold to 0.0 via `if not expected_files`.
+        expected_files: list[str] = []
+        raw_files = r["files_changed"] if "files_changed" in r.keys() else None
+        if raw_files:
+            try:
+                parsed = json.loads(raw_files) or []
+                expected_files = sorted({str(f) for f in parsed if f})
+            except (TypeError, json.JSONDecodeError):
+                expected_files = []
         tasks.append(
             {
                 "ticket_id": r["ticket_id"],
@@ -122,6 +133,7 @@ def load_all_gt_tasks(db_path: Path, projects: list[str] | None = None) -> list[
                 "description": r["description"] or "",
                 "jira_comments": comments,
                 "expected_repos": list(repos),
+                "expected_files": expected_files,
             }
         )
     return tasks
@@ -150,6 +162,64 @@ def rank_of_first_gt(ranked_repos: list[str], expected: set[str]) -> int | None:
         if r in expected:
             return i
     return None
+
+# --- File-level GT upgrade (docs/eval_file_level_gt_proposal.md §2, §6) ---
+#
+# Gate schema versions — snapshots written before the file-level gate shipped
+# carry `gate_version == GATE_VERSION_V1` and are evaluated with the legacy
+# repo-only primary; new runs carry `GATE_VERSION_V2` and add
+# `file_recall@10` as a co-primary with `DELTA_FILE_R10_THRESHOLD` as the
+# minimum Δ for PROMOTE. Threshold is 0.01 (vs 0.02 on repo r@10) because
+# file-level recall is strictly harder than repo-level and absolute deltas
+# compress.
+GATE_VERSION_V1 = "v1"
+GATE_VERSION_V2 = "v2"
+DELTA_FILE_R10_THRESHOLD = 0.01
+
+
+def top_k_files(ranked: list[dict], k: int) -> list[tuple[str, str]]:
+    """Return top-k unique (repo_name, file_path) tuples from a ranked chunk list.
+
+    Analogue of `top_k_repos` at the file granularity. Dedup key is
+    `(repo_name, file_path)` so two chunks from the same file collapse to one
+    entry. Chunks missing either field are skipped.
+    """
+    seen: set[tuple[str, str]] = set()
+    out: list[tuple[str, str]] = []
+    for c in ranked:
+        repo = c.get("repo_name") or ""
+        fpath = c.get("file_path") or ""
+        if not repo or not fpath:
+            continue
+        key = (repo, fpath)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(key)
+        if len(out) >= k:
+            break
+    return out
+
+
+def compute_file_recall(
+    ranked_files: list[tuple[str, str]],
+    expected_files: list[str],
+    k: int,
+) -> float:
+    """Fraction of `expected_files` present in the first `k` ranked file paths.
+
+    Mirrors `compute_recall` but at file granularity. `ranked_files` is a
+    list of `(repo_name, file_path)` tuples (typically from `top_k_files`);
+    match is by `file_path` only because `task_history.files_changed` records
+    paths without repo prefixes. Returns 0.0 when `expected_files` is empty
+    (no ZeroDivisionError — matches the repo-level convention).
+    """
+    if not expected_files:
+        return 0.0
+    expected_set = set(expected_files)
+    ranked_paths = {fp for _repo, fp in ranked_files[:k]}
+    return len(expected_set & ranked_paths) / len(expected_set)
+
 
 def _lpt_schedule(
     tasks: list[dict],
@@ -261,11 +331,14 @@ def eval_one_model_hybrid(
     for task in tasks:
         ticket = task["ticket_id"]
         expected = set(task["expected_repos"])
+        expected_files: list[str] = task.get("expected_files", []) or []
         entry: dict = {
             "recall_at_10": 0.0,
             "recall_at_25": 0.0,
             "rank_of_first_gt": None,
             "n_gt_repos": len(expected),
+            "n_gt_files": len(expected_files),
+            "file_recall_at_10": 0.0,
             "top_10_repos": [],
             "latency_s": None,
             "error": None,
@@ -309,11 +382,18 @@ def eval_one_model_hybrid(
 
         top10 = ranked_repos_full[:10]
         top25 = ranked_repos_full[:25]
+        # File-level GT co-primary (proposal §2): dedup by (repo, file_path)
+        # on the same `ranked` chunk list, then intersect with
+        # task_history.files_changed. We keep chunks not truncated here —
+        # `top_k_files(ranked, len(ranked))` is idempotent on already-sorted
+        # input and lets compute_file_recall slice to k itself.
+        ranked_files_full = top_k_files(ranked, len(ranked))
         entry.update(
             {
                 "recall_at_10": compute_recall(top10, expected, 10),
                 "recall_at_25": compute_recall(top25, expected, 25),
                 "rank_of_first_gt": rank_of_first_gt(ranked_repos_full, expected),
+                "file_recall_at_10": compute_file_recall(ranked_files_full, expected_files, 10),
                 "top_10_repos": top10,
                 "latency_s": lat,
             }
@@ -321,11 +401,12 @@ def eval_one_model_hybrid(
         latencies.append(lat)
         per_task[ticket] = entry
         log.info(
-            "[%s] %s: r@10=%.2f r@25=%.2f first_gt=%s lat=%.2fs (hybrid, cand=%d)",
+            "[%s] %s: r@10=%.2f r@25=%.2f file_r@10=%.2f first_gt=%s lat=%.2fs (hybrid, cand=%d)",
             label,
             ticket,
             entry["recall_at_10"],
             entry["recall_at_25"],
+            entry["file_recall_at_10"],
             entry["rank_of_first_gt"],
             lat,
             total_candidates,
@@ -376,11 +457,14 @@ def eval_one_model(
     for task in tasks:
         ticket = task["ticket_id"]
         expected = set(task["expected_repos"])
+        expected_files: list[str] = task.get("expected_files", []) or []
         entry: dict = {
             "recall_at_10": 0.0,
             "recall_at_25": 0.0,
             "rank_of_first_gt": None,
             "n_gt_repos": len(expected),
+            "n_gt_files": len(expected_files),
+            "file_recall_at_10": 0.0,
             "top_10_repos": [],
             "latency_s": None,
             "error": None,
@@ -448,11 +532,16 @@ def eval_one_model(
         ranked_repos_full = top_k_repos(ranked, len(ranked))
         top10 = ranked_repos_full[:10]
         top25 = ranked_repos_full[:25]
+        # File-level GT co-primary (proposal §2): parallel dedup on (repo,
+        # file_path). Zero cost when a ticket has no expected_files
+        # (compute_file_recall short-circuits to 0.0).
+        ranked_files_full = top_k_files(ranked, len(ranked))
         entry.update(
             {
                 "recall_at_10": compute_recall(top10, expected, 10),
                 "recall_at_25": compute_recall(top25, expected, 25),
                 "rank_of_first_gt": rank_of_first_gt(ranked_repos_full, expected),
+                "file_recall_at_10": compute_file_recall(ranked_files_full, expected_files, 10),
                 "top_10_repos": top10,
                 "latency_s": lat,
             }
@@ -460,11 +549,12 @@ def eval_one_model(
         latencies.append(lat)
         per_task[ticket] = entry
         log.info(
-            "[%s] %s: r@10=%.2f r@25=%.2f first_gt=%s lat=%.2fs",
+            "[%s] %s: r@10=%.2f r@25=%.2f file_r@10=%.2f first_gt=%s lat=%.2fs",
             label,
             ticket,
             entry["recall_at_10"],
             entry["recall_at_25"],
+            entry["file_recall_at_10"],
             entry["rank_of_first_gt"],
             lat,
         )
