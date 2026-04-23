@@ -26,7 +26,7 @@ os.environ.setdefault("CODE_RAG_HOME", str(BASE))
 os.environ.setdefault("ACTIVE_PROFILE", "pay-com")
 PROFILE = BASE / "profiles" / "pay-com"
 DB = BASE / "db" / "knowledge.db"
-TRACES_DIR = PROFILE / "data" / "implementation_traces"
+TRACES_DIR = PROFILE / "manual_gt" / "implementation_traces"
 
 # Default eval set: tasks with collected ground truth
 DEFAULT_TASKS = ["PI-5", "PI-14", "PI-39", "PI-40", "PI-60"]
