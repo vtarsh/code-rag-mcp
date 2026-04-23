@@ -108,7 +108,7 @@ def _make_input(path: Path, rows: list[dict]) -> None:
 def test_output_schema_preserves_inputs_and_adds_new_fields(
     labeler_module, tmp_path: Path, monkeypatch
 ):
-    """main() should preserve every input field and add label, minilm_score,
+    """main() preserves inputs + adds label, minilm_score, judge, and (optionally) note fields."""
     extracted = tmp_path / "extracted" / "r1" / "a.md"
     extracted.parent.mkdir(parents=True)
     extracted.write_text("file-based content for query")
