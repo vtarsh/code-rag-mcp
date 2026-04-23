@@ -60,6 +60,7 @@ module.exports = async ({ req }) => {
 }
 """
 
+SAMPLE_PAYLOAD_BUILDER_JS = """
 module.exports = (request) => {
   const {
     identifiers: { transactionId },
