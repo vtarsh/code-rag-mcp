@@ -2,6 +2,58 @@
 
 **Status (2026-04-22 midday):** Production = `reranker_ft_gte_v8`. **Dual judge pass DONE** on top-50 diff pairs — Opus (API, code-biased) says v8 +8pp net, local MiniLM-L-6-v2 (MS MARCO pretraining, prose-biased) says base +64pp net. Judges disagree on 31/50 pairs, and 20 of those are the exact docs→code shift where each judge's training distribution biases the call. **Conclusion: no-calibration LLM/reranker-as-judge is NOT a reliable direction signal on this subset.** Canonical direction signal remains ground-truth eval: Jira r@10 +5pp (gte_v8_fallback.json) and runtime benchmarks +2-8pp (the basis for prod deploy on 2026-04-21). **Decisions:** v8 stays prod (ground truth canonical); **P1c landed** as an objective fix for 11 doc-intent + 1 CI-yml failure modes independent of judge disagreement; v12 FT remains gated on P1c validation + a proper gold-label sample of the judged pairs. See §"2026-04-22 P1b.2/P1b.3 dual judge".
 
+## 2026-04-23 evening: Doc search diagnostics — 6-agent synthesis
+
+User report: search requires 3-4 reformulations to surface relevant docs. Ran 6 readonly diagnostic agents in parallel: coverage heatmap, chunk quality, reformulation patterns, gotchas inventory, link rot, Obsidian-style redesign proposal.
+
+### Critical findings
+
+| # | Area | Finding | Impact | Fix Status |
+|---|---|---|---|---|
+| 1 | Chunking | `chunk_markdown()` does NOT enforce MAX_CHUNK. 1509 doc chunks >4k chars (exceed CrossEncoder window). Worst: Plaid `llms-full.txt` = 1 chunk, 5.5 MB. | +3-6pp R@10 if fixed (provider docs become reachable) | In-flight (agent `a1b24ec514a571526`) |
+| 2 | Chunking | 550 exact-duplicate chunks (138 provider_doc + 22 reference clusters). Boilerplate like `### Responses\n\nOK` appears 66-69×. | +2pp R@10 (reduces noise floor) | In-flight |
+| 3 | Chunking | 28% of doc chunks <200 chars. MIN_CHUNK=50 includes `[Repo: X]` prefix, so effective body threshold is ~15 chars. | +1-2pp R@10 (drop ~5000 orphan headings) | In-flight |
+| 4 | Coverage | 21 provider code repos have ZERO external docs scraped (credentials, configurations, features, aptpay, paynt, sandbox = highest value). | Blind spots in retrieval | Open — needs scrape-docs run per `feedback_scrape_docs_prefer_sitemap` |
+| 5 | Coverage | Only 4 of 67 provider code repos have `docs/GOTCHAS.md`. 63 providers silent. | `gotchas` file_type has strong rerank weight but only 75 chunks total | Open — human/agent authoring task |
+| 6 | Reformulation | 82% of reformulation chains end with same `result_len` — user reformulates in vain. 56% of transitions are provider-swap (user manually fanning-out across nuvei/payper/volt). | High-user-pain, 1700+ wasted search calls in logs | Open — new tool: cross-provider fan-out for `provider × topic` queries |
+| 7 | Link rot | Scraped provider docs have 9,807 broken internal links (99.6%) — scraper emits HTML nav residue (`/devdocs/*`, `#__docusaurus_skipToContent_fallback`) without host-rewrite. | Noise in FTS; some "answers" never resolve | Open — fix in `.claude/skills/scrape-docs` pipeline |
+| 8 | Link rot | Plaid `provider-plaid-docs_llms-full.txt.md` has 8,394 outbound links = 62% of all externals; also 5.5MB single chunk. | Skews graph metrics + unusable in retrieval | Split or archive to `.archive/` |
+| 9 | Gotchas | Directory `profiles/pay-com/docs/gotchas/` is CLEAN: 0 duplicate blocks, 0 stale versions, layered (canonical in `global-conventions.md` + per-provider specialization). | Not a problem source; false positive fear | Only cosmetic: add `_index.md`, linkify `CLAUDE.md:12` |
+| 10 | Structure | Dominant filesystem axis is per-provider (87%) but retrieval needs per-topic. 64 hand-authored docs have 0 inbound markdown links (orphans). | Discoverability for users and reranker | Open — Obsidian-style redesign proposal (11h migration plan, 3 phases) |
+
+### Three-prong fix plan
+
+**Phase A — Chunker fixes (in-flight agent, landing this session):**
+- Enforce MAX_CHUNK via paragraph subsplit + overlap (fix #1)
+- Dedup by content_hash before insert (fix #2)
+- Orphan heading filter: strip prefix before MIN_CHUNK check (fix #3)
+- After code lands: **requires full reindex** (~overnight, 20 GB RAM per CLAUDE.md).
+
+**Phase B — Coverage + link hygiene (next session, ~6h human + agents):**
+- Re-scrape 21 missing providers via scrape-docs skill
+- Split Plaid mega-dump into sitemap-aligned per-section files
+- Fix scrape-docs post-processor to rewrite `/path/` → `https://host/path/` (or drop internal links)
+- Author `docs/GOTCHAS.md` for top-20 providers by code-chunk count
+
+**Phase C — Structural (when v12a settled, ~15h):**
+- Cross-provider fan-out tool — new `analyze/cross_provider_pattern.py` (addresses 56% of reformulation chains)
+- Doc-intent reranker routing in `hybrid.py:85-97` (addresses docs-strip regression even without explicit `docs` keyword in query)
+- Obsidian-style migration: `notes/` tree + 7 MOCs + 12 tags + `[[WikiLink]]` syntax. Per proposal.
+
+### Notes / caveats
+
+- All 6 diagnostic agents are readonly audits (no modifications made in this sweep).
+- Proposals and recipes are documented in agent output logs — not lost.
+- Chunker fix does NOT trigger reindex automatically; that's a separate operator action.
+
+### Relevant files
+
+- Chunker: `src/index/builders/docs_chunks.py`, `src/index/builders/_common.py`
+- Scraper: `.claude/skills/scrape-docs/` skill
+- Search: `src/search/hybrid.py` (penalties, reranker, doc-intent detection)
+- Data: `db/knowledge.db`, `profiles/pay-com/docs/{gotchas,references,providers}`
+- Logs: `logs/tool_calls.jsonl` (reformulation source data)
+
 ## 2026-04-22 13-agent audit: synthesis, fixes landed, open items
 
 Ran 13 parallel agents — 5 blind auditors (src, scripts, tests, index pipeline, daemon+MCP), 5 context-aware critics (P1c, v8 FT data, MCP tool design, benchmarks, recall-lever history), 3 methodology auditors (eval metrics, churn metrics, benchmark realism).
