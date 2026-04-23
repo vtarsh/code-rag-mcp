@@ -1,10 +1,18 @@
 """Embedding and reranking provider abstraction.
 
-Local-only: SentenceTransformer (CodeRankEmbed / MiniLM) + CrossEncoder reranker.
+Local-only: SentenceTransformer (CodeRankEmbed / nomic-embed-text / MiniLM) + CrossEncoder reranker.
+
+Two-tower (2026-04-23): callers can request a specific model by key.
+`get_embedding_provider("coderank")` returns the code tower; "docs" returns the
+docs tower. Singletons are cached per key so both towers can coexist. Default
+key falls back to the configured `EMBEDDING_MODEL_KEY` (coderank for pay-com).
 
 Usage:
-    provider, _ = get_embedding_provider()
+    provider, _ = get_embedding_provider()              # configured default
     vectors = provider.embed(["some code snippet"])
+
+    docs_provider, _ = get_embedding_provider("docs")   # docs tower
+    vectors = docs_provider.embed(["doc query"], task_type="query")
 
     reranker, _ = get_reranker_provider()
     scores = reranker.rerank("query", ["doc1", "doc2", ...])
@@ -17,10 +25,6 @@ import threading
 from typing import Protocol
 
 log = logging.getLogger(__name__)
-
-
-# --- Protocols ---
-
 
 class EmbeddingProvider(Protocol):
     """Interface for embedding backends."""
@@ -35,7 +39,6 @@ class EmbeddingProvider(Protocol):
         """Embed texts. task_type: 'query' or 'document'."""
         ...
 
-
 class RerankerProvider(Protocol):
     """Interface for reranking backends."""
 
@@ -45,10 +48,6 @@ class RerankerProvider(Protocol):
     def rerank(self, query: str, documents: list[str], limit: int = 10) -> list[float]:
         """Score documents against query. Returns relevance scores (higher = better)."""
         ...
-
-
-# --- Local providers ---
-
 
 class LocalEmbeddingProvider:
     """SentenceTransformer embedding — lazy loaded on first use."""
@@ -81,12 +80,14 @@ class LocalEmbeddingProvider:
 
     def embed(self, texts: list[str], task_type: str = "query") -> list[list[float]]:
         self._ensure_model()
-        if task_type == "query" and self._cfg and self._cfg.query_prefix:
-            texts = [f"{self._cfg.query_prefix}{t}" for t in texts]
+        if self._cfg:
+            if task_type == "query" and self._cfg.query_prefix:
+                texts = [f"{self._cfg.query_prefix}{t}" for t in texts]
+            elif task_type == "document" and self._cfg.document_prefix:
+                texts = [f"{self._cfg.document_prefix}{t}" for t in texts]
         assert self._model is not None
         vectors = self._model.encode(texts)
         return [v.tolist() for v in vectors]
-
 
 class LocalRerankerProvider:
     """CrossEncoder reranker — lazy loaded on first use.
@@ -136,23 +137,42 @@ class LocalRerankerProvider:
         scores = self._model.predict(pairs)
         return [float(s) for s in scores]
 
+# --- Singletons (per model key) ---
 
-# --- Singletons ---
-
+# Per-key cache so coderank and docs towers can coexist. `_embedding_provider`
+# kept as a compatibility alias so legacy callers that inspect module-level
+# state (daemon.py /health, is_model_loaded()) still work. It tracks whichever
+# provider was loaded FIRST via the default-key call.
+_embedding_providers: dict[str, EmbeddingProvider] = {}
 _embedding_provider: EmbeddingProvider | None = None
 _reranker_provider: RerankerProvider | None = None
 _provider_lock = threading.Lock()
 
+def _default_model_key() -> str:
+    """Resolve the configured default embedding model key."""
+    try:
+        from src.config import EMBEDDING_MODEL_KEY
+    except ImportError:
+        return "coderank"
+    return EMBEDDING_MODEL_KEY or "coderank"
 
-def get_embedding_provider() -> tuple[EmbeddingProvider, str | None]:
-    """Get the active embedding provider. Returns (provider, None)."""
+def get_embedding_provider(model_key: str | None = None) -> tuple[EmbeddingProvider, str | None]:
+    """Get the embedding provider for the given model key.
+
+    Omitting `model_key` returns the configured default provider (EMBEDDING_MODEL_KEY,
+    typically "coderank"). Pass "docs" to get the docs-tower provider.
+
+    Returns (provider, None). The provider is cached per key.
+    """
     global _embedding_provider
 
+    key = model_key or _default_model_key()
     with _provider_lock:
-        if _embedding_provider is None:
-            _embedding_provider = LocalEmbeddingProvider()
-        return _embedding_provider, None
-
+        if key not in _embedding_providers:
+            _embedding_providers[key] = LocalEmbeddingProvider(model_key=key)
+            if _embedding_provider is None:
+                _embedding_provider = _embedding_providers[key]
+        return _embedding_providers[key], None
 
 def get_reranker_provider() -> tuple[RerankerProvider, str | None]:
     """Get the active reranker provider. Returns (provider, None)."""
@@ -163,18 +183,18 @@ def get_reranker_provider() -> tuple[RerankerProvider, str | None]:
             _reranker_provider = LocalRerankerProvider()
         return _reranker_provider, None
 
-
 def _reset_providers_locked() -> None:
     """Reset cached providers while _provider_lock is already held. Unloads local models to free RAM."""
-    global _embedding_provider, _reranker_provider
+    global _embedding_provider, _reranker_provider, _embedding_providers
     import gc
 
     need_gc = False
-    if isinstance(_embedding_provider, LocalEmbeddingProvider) and _embedding_provider._model is not None:
-        log.info("Unloading embedding model to free RAM")
-        del _embedding_provider._model
-        _embedding_provider._model = None
-        need_gc = True
+    for provider in list(_embedding_providers.values()):
+        if isinstance(provider, LocalEmbeddingProvider) and provider._model is not None:
+            log.info(f"Unloading embedding model {provider.provider_name} to free RAM")
+            del provider._model
+            provider._model = None
+            need_gc = True
     if isinstance(_reranker_provider, LocalRerankerProvider) and _reranker_provider._model is not None:
         log.info("Unloading reranker model to free RAM")
         del _reranker_provider._model
@@ -182,11 +202,23 @@ def _reset_providers_locked() -> None:
         need_gc = True
     if need_gc:
         gc.collect()
+    _embedding_providers = {}
     _embedding_provider = None
     _reranker_provider = None
-
 
 def reset_providers() -> None:
     """Reset cached providers. Unloads local models to free RAM."""
     with _provider_lock:
         _reset_providers_locked()
+
+def loaded_provider_names() -> list[str]:
+    """Return provider_name for every embedding provider currently holding a model.
+
+    Used by daemon /health to report which towers are resident.
+    """
+    with _provider_lock:
+        return [
+            p.provider_name
+            for p in _embedding_providers.values()
+            if isinstance(p, LocalEmbeddingProvider) and p._model is not None
+        ]

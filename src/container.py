@@ -21,11 +21,10 @@ from typing import Any
 
 from src.config import CACHE_SIZE, DB_PATH, DB_TASKS_PATH, EMBEDDING_MODEL_KEY, MMAP_SIZE
 
-# --- Lazy-loaded singletons ---
+_lance_tables: dict[str, Any] = {}
 _lance_table: Any = None
 _wal_set: bool = False
 _lock = threading.Lock()
-
 
 def get_db() -> sqlite3.Connection:
     """Get a new database connection. Caller must close it.
@@ -40,21 +39,15 @@ def get_db() -> sqlite3.Connection:
     global _wal_set
     conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    # Guard the check-then-act under `_lock`. The pragma itself is idempotent
-    # (WAL is a DB-file-level setting), but without the lock two threads may
-    # race on first connection and both flip `_wal_set` — harmless in effect
-    # but a check-then-act footgun.
     with _lock:
         if not _wal_set:
             conn.execute("PRAGMA journal_mode=WAL")
             _wal_set = True
     conn.execute(f"PRAGMA mmap_size={MMAP_SIZE}")
     conn.execute(f"PRAGMA cache_size={CACHE_SIZE}")
-    # Attach supplementary DB so task_history et al. are transparent.
     if DB_TASKS_PATH.exists():
         conn.execute(f"ATTACH DATABASE '{DB_TASKS_PATH}' AS tasks")
     return conn
-
 
 @contextlib.contextmanager
 def db_connection() -> Generator[sqlite3.Connection, None, None]:
@@ -71,7 +64,6 @@ def db_connection() -> Generator[sqlite3.Connection, None, None]:
         yield conn
     finally:
         conn.close()
-
 
 def check_db_health() -> str | None:
     """Verify knowledge.db exists and has expected tables.
@@ -93,9 +85,12 @@ def check_db_health() -> str | None:
         return f"Knowledge base error: {e}. Run: python3 scripts/build_index.py"
     return None
 
+def get_vector_search(model_key: str | None = None) -> tuple[Any, Any, str | None]:
+    """Get embedding provider and LanceDB table for the given model key.
 
-def get_vector_search() -> tuple[Any, Any, str | None]:
-    """Get embedding provider and LanceDB table.
+    Pass `model_key="docs"` for the docs tower; omit for the configured default
+    (EMBEDDING_MODEL_KEY, typically "coderank"). Per-key caching so both towers
+    stay open once loaded.
 
     Returns (embedding_provider, lance_table, error_string | None).
     The provider has .embed(texts, task_type) method.
@@ -103,32 +98,39 @@ def get_vector_search() -> tuple[Any, Any, str | None]:
     global _lance_table
     from src.embedding_provider import get_embedding_provider
 
-    provider, warning = get_embedding_provider()
+    key = model_key or EMBEDDING_MODEL_KEY
+    provider, warning = get_embedding_provider(key)
 
-    if _lance_table is not None:
-        return provider, _lance_table, warning
+    if key in _lance_tables:
+        return provider, _lance_tables[key], warning
 
     with _lock:
-        if _lance_table is not None:
-            return provider, _lance_table, warning
+        if key in _lance_tables:
+            return provider, _lance_tables[key], warning
         try:
             import lancedb
 
             from src.models import get_model_config
 
-            mcfg = get_model_config(EMBEDDING_MODEL_KEY)
+            mcfg = get_model_config(key)
             lance_path = DB_PATH.parent / mcfg.lance_dir
 
             if not lance_path.exists():
-                return provider, None, f"No vector table at {lance_path}. Run: python3 scripts/build_vectors.py"
+                return (
+                    provider,
+                    None,
+                    f"No vector table at {lance_path}. Run: python3 scripts/build_vectors.py --model {key}",
+                )
 
             db = lancedb.connect(str(lance_path))
-            _lance_table = db.open_table("chunks")
+            table = db.open_table("chunks")
+            _lance_tables[key] = table
+            if _lance_table is None:
+                _lance_table = table
         except Exception as e:
             return provider, None, str(e)
 
-    return provider, _lance_table, warning
-
+    return provider, _lance_tables[key], warning
 
 def get_reranker() -> tuple[Any, str | None]:
     """Get reranker provider.
@@ -140,7 +142,6 @@ def get_reranker() -> tuple[Any, str | None]:
 
     provider, warning = get_reranker_provider()
     return provider, warning
-
 
 def require_db[**P, T](func: Callable[P, T]) -> Callable[P, T]:
     """Decorator that checks DB health before running a tool function."""
@@ -154,13 +155,11 @@ def require_db[**P, T](func: Callable[P, T]) -> Callable[P, T]:
 
     return wrapper  # type: ignore[return-value]
 
-
 def is_model_loaded() -> bool:
-    """Check if embedding provider is ready."""
-    from src.embedding_provider import _embedding_provider
+    """Check if any embedding provider is ready."""
+    from src.embedding_provider import _embedding_providers
 
-    return _embedding_provider is not None
-
+    return bool(_embedding_providers)
 
 def is_reranker_loaded() -> bool:
     """Check if reranker provider is ready."""
