@@ -11,8 +11,8 @@ so the output is reproducible.
 
 Usage:
     python3.12 scripts/convert_to_listwise.py \
-      --in profiles/pay-com/finetune_data_v6_2/train.jsonl \
-      --out profiles/pay-com/finetune_data_v8/train.jsonl \
+      --in profiles/pay-com/finetune_data_v8/train.jsonl \
+      --out profiles/pay-com/finetune_data_v12a/train.jsonl \
       --max-negs 31 --seed 42
 """
 
