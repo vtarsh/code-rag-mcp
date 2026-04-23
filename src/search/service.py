@@ -15,7 +15,6 @@ from src.search.fts import expand_query
 from src.search.hybrid import hybrid_search
 from src.search.suggestions import format_no_results
 
-
 _HIGHLIGHT_RE = re.compile(r">>>|<<<")
 # FTS5 truncates the "[Repo: repo-name]" prefix via its ellipsis to leave a
 # "...repo-name]" residue at the start of each snippet. strip_repo_tag() only
@@ -33,6 +32,7 @@ def search_tool(
     limit: int = 10,
     brief: bool = False,
     cross_provider: bool = False,
+    docs_index: bool | None = None,
 ) -> str:
     """Search the knowledge base using keyword + semantic hybrid search.
 
@@ -50,6 +50,9 @@ def search_tool(
             also returns top-1 analogous chunk from up to 6 sibling providers —
             eliminates provider-swap reformulation chains. Default False preserves
             current output byte-for-byte.
+        docs_index: Debug/eval override for two-tower routing.
+            None (default) = auto-route by query intent. True = force docs tower.
+            False = force code tower. Operators typically leave this unset.
     """
     # Defensive validation: callers sometimes omit `query` entirely (observed 74x
     # KeyError('query') in logs/tool_calls.jsonl before this guard was added).
@@ -57,7 +60,7 @@ def search_tool(
     if query is None or not isinstance(query, str) or not query.strip():
         return (
             "Error: 'query' parameter is required and must be a non-empty string. "
-            "Example: search(query=\"payment provider integration\")"
+            'Example: search(query="payment provider integration")'
         )
 
     limit = min(max(1, limit), 20)
@@ -72,6 +75,7 @@ def search_tool(
         limit=limit,
         brief=brief,
         cross_provider=cross_provider,
+        docs_index=docs_index,
     )
 
     def _compute() -> str:
@@ -82,6 +86,7 @@ def search_tool(
             exclude_file_types,
             limit,
             cross_provider=cross_provider,
+            docs_index=docs_index,
         )
 
         log_search("search", expanded, {"repo": repo, "file_type": file_type, "limit": limit}, ranked, total_candidates)
