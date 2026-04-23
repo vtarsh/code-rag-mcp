@@ -134,7 +134,12 @@ def decide_verdict(
     min_net_improved: int = MIN_NET_IMPROVED,
     diagnostic_metrics: dict | None = None,
 ) -> VerdictResult:
-    """Return PROMOTE / HOLD / REJECT on the full eval set.
+    """[v1 / legacy] Return PROMOTE / HOLD / REJECT on the full eval set.
+
+    Kept for snapshots that pre-date the file-level GT schema (no
+    ``file_recall_at_10``). New runs should consume both v1 and v2 via
+    ``verdict_from_snapshot_dual`` so the dispatcher can fall back here
+    when v2 is unavailable. See ``decide_verdict_v2`` for the current gate.
 
     Contract:
       - delta_r10_all, delta_hit5_all: aggregate deltas on the FULL eval
@@ -318,10 +323,12 @@ def decide_verdict_v2(
     delta_file_r10_threshold: float = DELTA_FILE_R10_THRESHOLD_V2,
     min_net_stratum: int = MIN_NET_STRATUM_V2,
 ) -> dict:
-    """v2 gate: primary triple + stratified net on ``n_gt_repos`` strata.
+    """v2 gate (current): primary triple + stratified net on ``n_gt_repos``.
 
-    Proposal §3. Primary (ALL must pass): Δr@10 ≥ +0.02, ΔHit@5 ≥ +0.02,
-    Δfile_r@10 ≥ +0.01. Stratified net: `min(net_n1, net_n2plus) ≥ 15`.
+    Proposal §3. PROMOTE iff ALL primaries pass (Δr@10 ≥ +0.02,
+    ΔHit@5 ≥ +0.02, Δfile_r@10 ≥ +0.01) AND
+    ``min(net_n1, net_n2plus) ≥ 15``. REJECT iff any primary Δ<0 or either
+    stratum net<0. Otherwise HOLD (positive but sub-threshold).
 
     Args:
       delta_metrics: dict with keys `delta_r10_all`, `delta_hit5_all`,

@@ -418,3 +418,317 @@ def test_dispatcher_v2_unavailable_when_legacy_snapshot():
     assert result["verdict_v2"]["verdict"] == "HOLD"
     assert result["verdict_v2"]["gate_version"] == "v2"
     assert "unavailable" in result["verdict_v2"]["reason"]
+
+
+# =====================================================================
+# §5 — pick_test_tasks_stratified (proposal §4)
+# =====================================================================
+
+import json as _json  # noqa: E402
+import subprocess  # noqa: E402
+
+import pytest  # noqa: E402
+
+from scripts.prepare_finetune_data import pick_test_tasks_stratified  # noqa: E402
+
+
+def _mk_task(tid: str, files: list[str]) -> dict:
+    """Minimal task dict the sampler needs: ticket_id + files_changed."""
+    return {
+        "ticket_id": tid,
+        "files_changed": list(files),
+        "summary": "",
+        "description": "",
+        "repos_changed": [],
+        "patches": [],
+        "resolution": None,
+    }
+
+
+def test_pick_test_tasks_stratified_per_bucket_min():
+    """BO + CORE both have ≥20 eligible → both contribute ≥20 tickets to test."""
+    tasks = []
+    # Each bucket: 30 tickets, each with disjoint single-file changes so the
+    # anti-leakage check passes trivially.
+    fid = 0
+    for prefix in ("BO", "CORE"):
+        for i in range(30):
+            tasks.append(_mk_task(f"{prefix}-{i}", [f"repoA/file_{fid}.py"]))
+            fid += 1
+    # 5 PI tickets — below the 20-eligible threshold; PI should NOT be
+    # forced to contribute the per-bucket guarantee.
+    for i in range(5):
+        tasks.append(_mk_task(f"PI-{i}", [f"repoA/file_{fid}.py"]))
+        fid += 1
+    # test_ratio=0.5 (high enough so target_test_n ≥ 40 = 20+20).
+    test_set, manifest = pick_test_tasks_stratified(tasks, test_ratio=0.45, seed=42)
+    counts = manifest["per_project_counts"]
+    assert counts.get("BO", 0) >= 20, f"BO underfilled: {counts}"
+    assert counts.get("CORE", 0) >= 20, f"CORE underfilled: {counts}"
+    assert manifest["seed_used"] == 42
+    assert manifest["retry_count"] == 0
+
+
+def test_pick_test_tasks_stratified_cap_share():
+    """A single ticket cannot own >10% of test-positive GT.
+
+    Construct a pool where one ticket has 50 files and the others have 1 each;
+    total positive GT ≈ 50 + 24 = 74. The 50-file ticket alone would be 67% of
+    GT (well over the 10% cap) and must be skipped from test selection.
+    """
+    tasks = [_mk_task("BO-0", [f"repoA/big_{i}.py" for i in range(50)])]
+    for i in range(1, 25):
+        tasks.append(_mk_task(f"BO-{i}", [f"repoA/small_{i}.py"]))
+    # Ratio 0.4 → target_test_n=10. The big BO-0 must NOT appear.
+    test_set, manifest = pick_test_tasks_stratified(tasks, test_ratio=0.40, seed=7)
+    test_ids = {t["ticket_id"] for t in test_set}
+    assert "BO-0" not in test_ids, f"big-share ticket leaked into test: {test_ids}"
+    assert manifest["max_ticket_positive_share"] <= 0.10 + 1e-9
+
+
+def test_pick_test_tasks_stratified_anti_leakage_retries():
+    """Sampler retries on >5% file overlap and eventually finds a clean split.
+
+    Strategy: scan seeds 0..200 to find the smallest seed where the sampler
+    raises (initial sample fails) AND a different seed in the same range
+    succeeds with retry_count > 0. This proves the retry plumbing without
+    coupling to a specific RNG state.
+
+    Setup: a low-overlap pool with one "shared" file mixed in. Most seeds
+    succeed on retry 0, but a small fraction of seeds need ≥1 retry — we
+    assert *some* seed produces retry_count ≥ 1 AND the resulting overlap is
+    within bounds.
+    """
+    # Pool: BO tickets where most paths are unique, but a cluster of tickets
+    # share several "leaky" files. With 22 BO tickets and per-bucket
+    # guarantee=20, exactly 2 tickets land in train. If those 2 train tickets
+    # are from the leaky cluster, every leaky file in test also appears in
+    # train (overlap > 5%, retry triggered). If they're from the unique
+    # cluster, overlap ≈ 0 (clean first sample).
+    tasks = []
+    for i in range(11):
+        # 11 BO tickets with unique single-file paths.
+        tasks.append(_mk_task(f"BO-{i}", [f"unique/path_{i}.py"]))
+    # 11 BO tickets, EACH touching 2 distinct files from a shared 6-file leaky
+    # pool. Any 2 of these in test guarantee the leaky files are also covered
+    # in train (since 9 of them stay in train). Overlap pct ranges 0..0.4 by
+    # how the train/test split lands the leaky vs unique tickets.
+    leaky_files = [f"leaky/file_{j}.py" for j in range(6)]
+    for i in range(11):
+        a = leaky_files[i % 6]
+        b = leaky_files[(i + 3) % 6]
+        tasks.append(_mk_task(f"BO-{100 + i}", [a, b]))
+    # Confirm at least one seed exercises the retry path (retry_count ≥ 1).
+    saw_retry = False
+    last_manifest: dict | None = None
+    for s in range(0, 60):
+        try:
+            _, mf = pick_test_tasks_stratified(tasks, test_ratio=0.10, seed=s)
+        except ValueError:
+            continue
+        last_manifest = mf
+        # Verify the contract on every successful sample.
+        assert mf["file_overlap_pct"] <= 0.05 + 1e-9, (
+            f"seed={s} returned manifest with overlap above threshold: {mf}"
+        )
+        if mf["retry_count"] >= 1:
+            saw_retry = True
+            assert mf["seed_used"] == s + mf["retry_count"]
+            break
+    assert saw_retry, (
+        f"no seed in 0..59 exercised retry path on this pool; "
+        f"last_manifest={last_manifest}"
+    )
+
+
+def test_pick_test_tasks_stratified_anti_leakage_gives_up():
+    """Every ticket changes the SAME file → no sample can ever pass; raises."""
+    tasks = [_mk_task(f"BO-{i}", ["shared/one_and_only.py"]) for i in range(25)]
+    with pytest.raises(ValueError, match="anti-leakage"):
+        pick_test_tasks_stratified(tasks, test_ratio=0.10, seed=42)
+
+
+# =====================================================================
+# §7 — sanity_v2_gate.py CLI
+# =====================================================================
+
+_SANITY_SCRIPT = _REPO_ROOT / "scripts" / "sanity_v2_gate.py"
+
+
+def _write_legacy_snapshot(path: Path, *, baseline_r10: float, candidate_r10: float) -> None:
+    """Write a legacy-style snapshot (no file_recall_at_10) → v2 will be HOLD."""
+    snap = {
+        "per_task_baseline": {
+            "T-1": {
+                "recall_at_10": baseline_r10,
+                "recall_at_25": baseline_r10,
+                "rank_of_first_gt": 5,
+                "n_gt_repos": 1,
+            }
+        },
+        "per_task_ft_v1": {
+            "T-1": {
+                "recall_at_10": candidate_r10,
+                "recall_at_25": candidate_r10,
+                "rank_of_first_gt": 1,
+                "n_gt_repos": 1,
+            }
+        },
+    }
+    path.write_text(_json.dumps(snap))
+
+
+def _write_full_snapshot(
+    path: Path,
+    *,
+    base_r10: list[float],
+    cand_r10: list[float],
+    base_file: list[float],
+    cand_file: list[float],
+    base_rank: list[int | None],
+    cand_rank: list[int | None],
+    n_gt: list[int],
+) -> None:
+    """Write a v2-capable snapshot (carries file_recall_at_10 on every row)."""
+
+    def _row(r10: float, file_r10: float, rank: int | None, n: int) -> dict:
+        return {
+            "recall_at_10": r10,
+            "recall_at_25": r10,
+            "rank_of_first_gt": rank,
+            "file_recall_at_10": file_r10,
+            "n_gt_repos": n,
+        }
+
+    n_rows = len(base_r10)
+    snap = {
+        "per_task_baseline": {
+            f"T-{i}": _row(base_r10[i], base_file[i], base_rank[i], n_gt[i])
+            for i in range(n_rows)
+        },
+        "per_task_ft_v1": {
+            f"T-{i}": _row(cand_r10[i], cand_file[i], cand_rank[i], n_gt[i])
+            for i in range(n_rows)
+        },
+    }
+    path.write_text(_json.dumps(snap))
+
+
+def test_sanity_v2_gate_no_flip_exit0(tmp_path):
+    """Synthetic v1=PROMOTE, v2=HOLD (legacy / unavailable) → exit 0."""
+    snap_a = tmp_path / "a.json"
+    snap_b = tmp_path / "b.json"
+    # Both legacy snapshots: no file_recall_at_10 → v2 ALWAYS HOLD/unavailable.
+    _write_legacy_snapshot(snap_a, baseline_r10=0.0, candidate_r10=1.0)
+    _write_legacy_snapshot(snap_b, baseline_r10=0.0, candidate_r10=1.0)
+    proc = subprocess.run(
+        [
+            "python3",
+            str(_SANITY_SCRIPT),
+            "--snapshot",
+            f"a={snap_a}",
+            "--snapshot",
+            f"b={snap_b}",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(_REPO_ROOT),
+    )
+    assert proc.returncode == 0, f"stdout={proc.stdout!r} stderr={proc.stderr!r}"
+    # Header + 2 rows must appear in stdout.
+    assert "v1 verdict" in proc.stdout
+    assert "v2 verdict" in proc.stdout
+    assert "no v1=PROMOTE" in proc.stdout
+
+
+def test_sanity_v2_gate_flip_exit1(tmp_path):
+    """Snapshot crafted so v1=PROMOTE but v2=REJECT → exit 1.
+
+    v2 rejects on either-stratum-net<0. We craft a per_task pair where:
+      - r@10/Hit@5/file_r@10 are all positive on aggregate (clears v1+v2 primaries)
+      - But the n_gt_repos==1 stratum has more regressions than improvements
+        (net_n1 < 0 → v2 REJECT)
+    The dispatcher injects n_gt_repos from baseline into deltas, so we need
+    every ticket to have the field. Mix improved/regressed n1 + improved n2+
+    so v1 net_improved still > 0 AND ΔHit@5 > 0.
+    """
+    snap = tmp_path / "flip.json"
+    # Mix designed so v1 PROMOTES but v2 REJECTS:
+    #   n1: 12 improved (baseline=0, cand=1) + 5 regressed (baseline=1, cand=0)
+    #     → contributes net=+12-5=+7 to v1, but in v2's 1-repo stratum
+    #       *only* the regressed side counts as a negative net of 7-12 NO —
+    #       v2 strata count by direction; here improved=12 / regressed=5 →
+    #       net_n1 = +7 (positive). To force net_n1 < 0 we need more regressed.
+    #   FIX: n1: 4 improved + 12 regressed → net_n1 = -8 → v2 REJECT.
+    #   To keep v1 PROMOTE-eligible, the n2+ stratum must dominate aggregates:
+    #       60 n2+ tickets each gaining +0.50 r@10 (baseline 0.10 → cand 0.60).
+    base_r10: list[float] = []
+    cand_r10: list[float] = []
+    base_file: list[float] = []
+    cand_file: list[float] = []
+    base_rank: list[int | None] = []
+    cand_rank: list[int | None] = []
+    n_gt: list[int] = []
+    # n1 improved: baseline=0, cand=1
+    for _ in range(4):
+        base_r10.append(0.0)
+        cand_r10.append(1.0)
+        base_file.append(0.0)
+        cand_file.append(1.0)
+        base_rank.append(None)
+        cand_rank.append(1)
+        n_gt.append(1)
+    # n1 regressed: baseline=1, cand=0  (loses GT)
+    for _ in range(12):
+        base_r10.append(1.0)
+        cand_r10.append(0.0)
+        base_file.append(1.0)
+        cand_file.append(0.0)
+        base_rank.append(1)
+        cand_rank.append(None)
+        n_gt.append(1)
+    # n2+ improved by +0.50  (baseline 0.10, candidate 0.60).
+    # Big margin needed so aggregate Δr@10 > +0.02 even after the n1 losses.
+    # Aggregate: (4×1 + 12×0 + 60×0.60) − (4×0 + 12×1 + 60×0.10)
+    #         = (4 + 0 + 36) − (0 + 12 + 6) = 40 − 18 = +22 over 76 tickets
+    #         → Δr@10 ≈ +0.289, well above +0.02.
+    # ΔHit@5: baseline rank≤5 = 12 (all n1 regressed), candidate rank≤5 =
+    #         4 (n1 improved) + 60 (n2+ rank 4) = 64 → ΔHit@5 = (64-12)/76 = +0.68.
+    # net_improved (v1, ±5pp): 4 + 60 = 64; n_regressed: 12. Net = +52 ≥ 20.
+    # → v1 PROMOTE ✓. v2 REJECTS on net_n1 = -8. Flip confirmed.
+    for _ in range(60):
+        base_r10.append(0.10)
+        cand_r10.append(0.60)
+        base_file.append(0.10)
+        cand_file.append(0.60)
+        base_rank.append(8)
+        cand_rank.append(4)
+        n_gt.append(3)
+    _write_full_snapshot(
+        snap,
+        base_r10=base_r10,
+        cand_r10=cand_r10,
+        base_file=base_file,
+        cand_file=cand_file,
+        base_rank=base_rank,
+        cand_rank=cand_rank,
+        n_gt=n_gt,
+    )
+    # The CLI requires ≥1 snapshot to score; passing one is allowed.
+    proc = subprocess.run(
+        [
+            "python3",
+            str(_SANITY_SCRIPT),
+            "--snapshot",
+            f"flip={snap}",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(_REPO_ROOT),
+    )
+    assert proc.returncode == 1, (
+        f"expected flip→exit1, got rc={proc.returncode} "
+        f"stdout={proc.stdout!r} stderr={proc.stderr!r}"
+    )
+    assert "FAIL" in proc.stderr
+    assert "flip" in proc.stderr

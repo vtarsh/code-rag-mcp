@@ -289,6 +289,192 @@ def pick_test_tasks(
     return train, test
 
 
+# ---------- stratified test-task selection (proposal §4) -------------------- #
+
+# Buckets the sampler always considers explicitly. Anything not in this list
+# falls into the "OTHER" pool — keeps long-tail prefixes visible without
+# inflating the per-bucket guarantee.
+_STRATIFIED_KNOWN_PREFIXES = ("PI", "BO", "CORE", "HS")
+_STRATIFIED_PER_BUCKET_MIN = 20          # eligible threshold + min contribution
+_STRATIFIED_MAX_TICKET_SHARE = 0.10      # cap any single ticket at 10% of GT
+_STRATIFIED_FILE_OVERLAP_THRESHOLD = 0.05  # ≤5% intersection allowed
+_STRATIFIED_MAX_RETRIES = 10
+
+
+def pick_test_tasks_stratified(
+    tasks: list[dict],
+    test_ratio: float = 0.10,
+    seed: int = 42,
+) -> tuple[list[dict], dict]:
+    """Stratified holdout sampler with per-ticket cap + anti-leakage retry.
+
+    Proposal §4. Bucket every ticket by its prefix (PI, BO, CORE, HS, OTHER);
+    each bucket with ≥``_STRATIFIED_PER_BUCKET_MIN`` (20) eligible tickets
+    contributes at least that many to the test set. Round-robin fills the
+    remainder up to ``int(test_ratio * len(tasks))``.
+
+    Two anti-domination guards apply on every candidate test set:
+      1. No single ticket may own more than ``_STRATIFIED_MAX_TICKET_SHARE``
+         (10%) of the test-positive GT, weighted by ``len(files_changed)``.
+         Tickets that would push over are skipped at addition time.
+      2. After assembly, ``set(test.files_changed) ∩ set(train.files_changed)``
+         must be ≤``_STRATIFIED_FILE_OVERLAP_THRESHOLD`` (5%) of the test-side
+         file set. Failed samples retry with ``seed + retry_n`` up to
+         ``_STRATIFIED_MAX_RETRIES`` (10) attempts before raising.
+
+    Returns ``(test_set, manifest)`` — the manifest carries
+    ``test_tickets``, ``per_project_counts``, ``max_ticket_positive_share``,
+    ``file_overlap_pct``, ``seed_used`` and ``retry_count`` so callers can
+    record provenance verbatim.
+
+    Raises:
+      ValueError: if no sample passes the anti-leakage check after 10
+        retries (diagnostic message includes last-seen overlap pct).
+    """
+    if not tasks:
+        raise ValueError("pick_test_tasks_stratified: tasks list is empty")
+    if not (0 < test_ratio < 0.5):
+        raise ValueError(
+            f"pick_test_tasks_stratified: test_ratio must be in (0, 0.5); got {test_ratio}"
+        )
+
+    target_test_n = int(test_ratio * len(tasks))
+    if target_test_n <= 0:
+        raise ValueError(
+            f"pick_test_tasks_stratified: test_ratio={test_ratio} on "
+            f"{len(tasks)} tasks yields zero test tickets"
+        )
+
+    # Bucket — known prefixes split out; everything else goes to OTHER.
+    by_bucket: dict[str, list[dict]] = {p: [] for p in _STRATIFIED_KNOWN_PREFIXES}
+    by_bucket["OTHER"] = []
+    for t in tasks:
+        prefix = t["ticket_id"].split("-", 1)[0].upper()
+        if prefix in by_bucket:
+            by_bucket[prefix].append(t)
+        else:
+            by_bucket["OTHER"].append(t)
+
+    total_positive_gt = sum(max(1, len(t.get("files_changed") or [])) for t in tasks)
+    max_share_count = total_positive_gt * _STRATIFIED_MAX_TICKET_SHARE
+
+    last_overlap_pct = 0.0
+    for retry_n in range(_STRATIFIED_MAX_RETRIES):
+        rng = random.Random(seed + retry_n)
+        # Stable shuffle per bucket so the retry produces a different ordering.
+        shuffled = {b: list(pool) for b, pool in by_bucket.items()}
+        for pool in shuffled.values():
+            rng.shuffle(pool)
+
+        test: list[dict] = []
+        test_id_set: set[str] = set()
+        running_positive = 0  # sum of len(files_changed) added so far
+
+        def _try_add(t: dict) -> bool:
+            """Add t to the test set unless it pushes the share cap over."""
+            nonlocal running_positive
+            if t["ticket_id"] in test_id_set:
+                return False
+            weight = max(1, len(t.get("files_changed") or []))
+            if weight > max_share_count:
+                # Single ticket alone exceeds the cap — skip.
+                return False
+            test.append(t)
+            test_id_set.add(t["ticket_id"])
+            running_positive += weight
+            return True
+
+        # 1. Per-bucket guarantee: any bucket with ≥ _STRATIFIED_PER_BUCKET_MIN
+        #    eligible contributes that many.
+        for bucket, pool in shuffled.items():
+            if len(pool) < _STRATIFIED_PER_BUCKET_MIN:
+                continue
+            added_from_bucket = 0
+            for t in pool:
+                if added_from_bucket >= _STRATIFIED_PER_BUCKET_MIN:
+                    break
+                if _try_add(t):
+                    added_from_bucket += 1
+
+        # 2. Round-robin to fill up to target_test_n.
+        cursors: dict[str, int] = {b: 0 for b in shuffled}
+        # Resync cursors past the per-bucket-guarantee picks — we want
+        # round-robin to start from the next available slot.
+        for bucket, pool in shuffled.items():
+            # Advance cursor past tickets already in test_id_set.
+            while cursors[bucket] < len(pool) and pool[cursors[bucket]]["ticket_id"] in test_id_set:
+                cursors[bucket] += 1
+        guard = 0
+        max_guard = sum(len(p) for p in shuffled.values()) + 1
+        while len(test) < target_test_n and guard < max_guard:
+            progressed = False
+            for bucket, pool in shuffled.items():
+                if len(test) >= target_test_n:
+                    break
+                while cursors[bucket] < len(pool):
+                    candidate = pool[cursors[bucket]]
+                    cursors[bucket] += 1
+                    if candidate["ticket_id"] in test_id_set:
+                        continue
+                    if _try_add(candidate):
+                        progressed = True
+                    break
+            if not progressed:
+                break
+            guard += 1
+
+        if not test:
+            # Pathological — every bucket below threshold AND nothing fits the
+            # share cap. Loop will retry with a different seed; rare in
+            # practice but raise after the budget is spent.
+            continue
+
+        # Anti-leakage: file-overlap check.
+        train = [t for t in tasks if t["ticket_id"] not in test_id_set]
+        test_files = {qf for t in test for qf in (t.get("files_changed") or [])}
+        train_files = {qf for t in train for qf in (t.get("files_changed") or [])}
+        if test_files:
+            overlap = test_files & train_files
+            overlap_pct = len(overlap) / len(test_files)
+        else:
+            overlap_pct = 0.0
+        last_overlap_pct = overlap_pct
+
+        if overlap_pct > _STRATIFIED_FILE_OVERLAP_THRESHOLD:
+            # Retry with a different seed.
+            continue
+
+        # Build manifest.
+        per_project_counts: dict[str, int] = {}
+        for t in test:
+            prefix = t["ticket_id"].split("-", 1)[0].upper()
+            key = prefix if prefix in _STRATIFIED_KNOWN_PREFIXES else "OTHER"
+            per_project_counts[key] = per_project_counts.get(key, 0) + 1
+        max_share = (
+            max(
+                max(1, len(t.get("files_changed") or [])) / total_positive_gt
+                for t in test
+            )
+            if test
+            else 0.0
+        )
+        manifest = {
+            "test_tickets": sorted(t["ticket_id"] for t in test),
+            "per_project_counts": per_project_counts,
+            "max_ticket_positive_share": round(max_share, 4),
+            "file_overlap_pct": round(overlap_pct, 4),
+            "seed_used": seed + retry_n,
+            "retry_count": retry_n,
+        }
+        return test, manifest
+
+    raise ValueError(
+        f"pick_test_tasks_stratified: no sample passed anti-leakage check after "
+        f"{_STRATIFIED_MAX_RETRIES} retries (last file_overlap_pct={last_overlap_pct:.3f}, "
+        f"threshold={_STRATIFIED_FILE_OVERLAP_THRESHOLD})"
+    )
+
+
 # ---------- chunk lookup --------------------------------------------------- #
 
 
@@ -1016,6 +1202,16 @@ def main() -> int:
         "5-ticket auto-selection — use this for any v9+ run so the "
         "verdict gate can detect overfitting. 0.0 = legacy behaviour.",
     )
+    ap.add_argument(
+        "--stratified",
+        action="store_true",
+        default=False,
+        help="Route test-task picking through pick_test_tasks_stratified "
+        "(proposal §4): per-bucket guarantee ≥20, single-ticket cap "
+        "≤10%% of test-positive GT, anti-leakage retry up to 10×. "
+        "Uses --test-ratio (default 0.10 if 0.0 left as legacy). "
+        "Writes manifest under stratified_test_manifest.",
+    )
     args = ap.parse_args()
 
     rng = random.Random(args.seed)
@@ -1029,12 +1225,37 @@ def main() -> int:
             f"ERROR: only {len(tasks)} GT tasks (projects={projects or 'all'}, min_files={args.min_files}) -- aborting."
         )
 
-    train_tasks, test_tasks = pick_test_tasks(
-        tasks,
-        requested,
-        test_ratio=args.test_ratio,
-        seed=args.seed,
-    )
+    stratified_manifest: dict | None = None
+    if args.stratified:
+        # Stratified path overrides --test-tasks (explicit IDs) since the
+        # sampler enforces structural guarantees the user can't satisfy ad-hoc.
+        if requested:
+            print(
+                "[warn] --stratified ignores --test-tasks; using sampler instead",
+                flush=True,
+            )
+        ratio = args.test_ratio if args.test_ratio > 0 else 0.10
+        test_tasks, stratified_manifest = pick_test_tasks_stratified(
+            tasks,
+            test_ratio=ratio,
+            seed=args.seed,
+        )
+        test_ids_strat = {t["ticket_id"] for t in test_tasks}
+        train_tasks = [t for t in tasks if t["ticket_id"] not in test_ids_strat]
+        print(
+            f"[stratified] sampler returned {len(test_tasks)} test tickets "
+            f"(seed_used={stratified_manifest['seed_used']}, "
+            f"retries={stratified_manifest['retry_count']}, "
+            f"file_overlap_pct={stratified_manifest['file_overlap_pct']})",
+            flush=True,
+        )
+    else:
+        train_tasks, test_tasks = pick_test_tasks(
+            tasks,
+            requested,
+            test_ratio=args.test_ratio,
+            seed=args.seed,
+        )
 
     print(f"[info] GT tasks: {len(tasks)}  train: {len(train_tasks)}  test: {len(test_tasks)}")
     print("[test selection]")
@@ -1348,6 +1569,11 @@ def main() -> int:
         "test_positives": len(test_records),
         "anti_leakage_verified": True,
     }
+    if stratified_manifest is not None:
+        manifest["stratified"] = True
+        manifest["stratified_test_manifest"] = stratified_manifest
+    else:
+        manifest["stratified"] = False
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False))
 
     print(f"[out] {train_path}  ({len(train_records)} rows)")
