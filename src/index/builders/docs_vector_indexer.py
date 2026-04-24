@@ -31,6 +31,9 @@ from typing import Any
 
 import src.index.builders._memguard as _memguard
 
+# File types that live in the docs tower. Code types (service / workflow /
+# frontend / provider_config / test_script / code_file) stay in the coderank
+# tower. Keep this list in sync with profiles/*/docs/ layout.
 DOC_FILE_TYPES: tuple[str, ...] = (
     "doc",
     "docs",
@@ -44,8 +47,14 @@ DOC_FILE_TYPES: tuple[str, ...] = (
 )
 
 CHECKPOINT_EVERY = 5000
+# Run memory_pressure + table.optimize() on this cadence even when RSS/avail
+# are still ok. Amortises fragmentation of the on-disk LanceDB fragments.
 COMPACT_EVERY_BATCHES = 20
 _VALID_REPO_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
+# ------------------------------- DB helpers -----------------------------------
+
 
 def _ensure_chunks_table(conn: sqlite3.Connection) -> None:
     """Raise a clean RuntimeError if the `chunks` table is missing.
@@ -56,6 +65,7 @@ def _ensure_chunks_table(conn: sqlite3.Connection) -> None:
     row = conn.execute("SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name='chunks'").fetchone()
     if row is None:
         raise RuntimeError("knowledge.db has no 'chunks' table — run build_index first")
+
 
 def fetch_doc_chunks(
     conn: sqlite3.Connection,
@@ -79,6 +89,10 @@ def fetch_doc_chunks(
     sql += " ORDER BY rowid"
     return conn.execute(sql, params).fetchall()
 
+
+# ---------------------------- Checkpoint helpers ------------------------------
+
+
 def _load_checkpoint(path: Path | None) -> set[int]:
     """Return the set of already-embedded rowids.
 
@@ -95,6 +109,7 @@ def _load_checkpoint(path: Path | None) -> set[int]:
     except Exception as e:
         print(f"  [checkpoint] failed to load ({e}); starting fresh")
         return set()
+
 
 def _save_checkpoint(path: Path | None, done_rowids) -> None:
     """Write done rowids atomically via tmp + rename.
@@ -113,6 +128,10 @@ def _save_checkpoint(path: Path | None, done_rowids) -> None:
     tmp.rename(path)
     print(f"  [checkpoint] saved {len(done_rowids)} rowids to {path.name}", flush=True)
 
+
+# -------------------------- Text preparation ----------------------------------
+
+
 def _prepare_text(
     content: str,
     repo_name: str,
@@ -129,6 +148,7 @@ def _prepare_text(
     body = f"[{repo_name}] [{file_type}/{chunk_type}] {content[:truncate_at]}"
     return f"{document_prefix}{body}" if document_prefix else body
 
+
 def _make_record(row: tuple, vector) -> dict:
     rowid, content, repo_name, file_path, file_type, chunk_type = row
     return {
@@ -141,17 +161,21 @@ def _make_record(row: tuple, vector) -> dict:
         "content_preview": content[:300],
     }
 
+
 def _to_list(vec) -> list[float]:
     """Normalize encoder output (np.ndarray or list) to list[float]."""
     if hasattr(vec, "tolist"):
         return vec.tolist()
     return list(vec)
 
+
 # ------------------------------- Encoding -------------------------------------
+
 
 def _encode(model, texts: list[str], batch_size: int) -> list[list[float]]:
     raw = model.encode(texts, batch_size=batch_size, show_progress_bar=False)
     return [_to_list(v) for v in raw]
+
 
 def _progress(done: int, total: int, start_time: float, remaining_at_start: int) -> str:
     pct = (done * 100 // total) if total else 0
@@ -161,7 +185,9 @@ def _progress(done: int, total: int, start_time: float, remaining_at_start: int)
     eta_min = ((total - done) / rate / 60) if rate > 0 else 0
     return f"{done}/{total} ({pct}%) — {rate:.1f} emb/s — ETA {eta_min:.0f}min"
 
+
 # --------------------- Streaming embed-and-write loop -------------------------
+
 
 def _embed_and_write_streaming(
     model,
@@ -274,7 +300,9 @@ def _embed_and_write_streaming(
     print(f"\n  Docs tower: embedded {embedded_this_run} rows this run in {time.time() - start:.1f}s")
     return embedded_this_run
 
+
 # --------------------------- LanceDB write --------------------------------
+
 
 def _build_ivfpq_index(table, num_vectors: int, dim: int) -> None:
     """IVF-PQ index tuning consistent with scripts/build_vectors.py."""
@@ -292,6 +320,7 @@ def _build_ivfpq_index(table, num_vectors: int, dim: int) -> None:
     )
     print(f"  Index built in {time.time() - start:.1f}s")
 
+
 def _reindex_with_replace(table, num_vectors: int, dim: int) -> None:
     """Like _build_ivfpq_index but uses replace=True for incremental updates."""
     if num_vectors < 256:
@@ -308,6 +337,7 @@ def _reindex_with_replace(table, num_vectors: int, dim: int) -> None:
         replace=True,
     )
     print(f"  Index rebuilt in {time.time() - start:.1f}s")
+
 
 def _open_or_create_writer(
     lance_dir: Path,
@@ -378,7 +408,9 @@ def _open_or_create_writer(
 
     return writer_fn, optimize_cb, get_table
 
+
 # ------------------------------- Entry point ----------------------------------
+
 
 def _load_sentence_transformer(cfg):
     """Load the SentenceTransformer for the docs tower on the best device.
@@ -398,6 +430,7 @@ def _load_sentence_transformer(cfg):
 
     model = SentenceTransformer(cfg.name, trust_remote_code=cfg.trust_remote_code, device=device)
     return model, device
+
 
 def build_docs_vectors(
     db_path: Path,
@@ -510,6 +543,7 @@ def build_docs_vectors(
         "vectors_stored": vectors_stored,
         "lance_path": str(lance_dir),
     }
+
 
 __all__ = [
     "DOC_FILE_TYPES",
