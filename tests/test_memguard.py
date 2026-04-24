@@ -17,6 +17,7 @@ import pytest
 
 from src.index.builders import _memguard
 
+
 class TestGetLimits:
     def test_defaults(self, monkeypatch):
         for k in (
@@ -31,6 +32,7 @@ class TestGetLimits:
         assert limits.rss_soft_bytes == 8 * 1024**3
         assert limits.rss_hard_bytes == 10 * 1024**3
         assert limits.sys_avail_soft_bytes == 2 * 1024**3
+        # 0.8 GB
         assert limits.sys_avail_hard_bytes == int(0.8 * 1024**3)
         assert limits.daemon_port == 8742
 
@@ -46,6 +48,7 @@ class TestGetLimits:
         assert limits.sys_avail_soft_bytes == int(1.5 * 1024**3)
         assert limits.sys_avail_hard_bytes == int(0.5 * 1024**3)
         assert limits.daemon_port == 9999
+
 
 class TestPauseDaemon:
     def test_returns_false_on_econnrefused(self):
@@ -75,6 +78,7 @@ class TestPauseDaemon:
             assert _memguard.pause_daemon(port=8742) is False
         out = capsys.readouterr().out
         assert "shutdown" in out  # "shutdown error" or "shutdown failed"
+
 
 class TestMemoryPressure:
     """Mock psutil so we can drive RSS / available memory deterministically."""
@@ -110,9 +114,11 @@ class TestMemoryPressure:
         assert level == "hard"
 
     def test_hard_when_avail_critical(self):
+        # Below default 0.8 GB
         with self._patch_psutil(rss_bytes=2 * 1024**3, avail_bytes=int(0.5 * 1024**3)):
             level, _, _ = _memguard.memory_pressure()
         assert level == "hard"
+
 
 class TestCheckAndMaybeExit:
     """Top-level state machine: ok → no-op, soft → compact + maybe sleep,
@@ -154,6 +160,7 @@ class TestCheckAndMaybeExit:
         # hard path goes straight to sys.exit(0); compact_cb is intentionally
         # not called there — checkpoint is what saves us, not another compact.
         assert exc.value.code == 0
+
 
 class TestFreeMemory:
     def test_runs_gc_collect(self):
