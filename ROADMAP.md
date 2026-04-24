@@ -1,6 +1,59 @@
 # P5 Reranker — Roadmap
 
-**Status (2026-04-24 late-day):** Two-tower v13 landed on main; **memguard fix** landed on main (streaming writes + psutil watchdog for full-build paths); weekly full rebuild scheduled via launchd (Sat 04:00 EEST, first fire 2026-04-25). Reranker = `reranker_ft_gte_v8` (unchanged). 668/668 pytest green (was 651; +16 memguard + 1 force-clear). Remote `vtarsh/code-rag-mcp` HEAD = `e429776`. Remote `vtarsh/pay-knowledge-profile` HEAD = `5df59e43`.
+**Status (2026-04-24 15:45 EEST — mid-day context switch):** Full rebuild running за 3h15m at ~87% (stuck on long-chunks tail). Decision: kill + apply batch-long-chunks speedup + restart from checkpoint. New session in parallel chat handles Priority 1b + RunPod Priority 0. Two-tower v13 + memguard fix + weekly launchd schedule all landed earlier today. Reranker = `reranker_ft_gte_v8` (unchanged). 668/668 pytest green. Remote `vtarsh/code-rag-mcp` HEAD = `c0b5107 → 71bc507` (doc-intent A/B prep landed by parallel session). Remote `vtarsh/pay-knowledge-profile` HEAD = `5df59e43`.
+
+## 2026-04-24 15:45 EEST: build-speedup discovery + decision to apply Priority 1b mid-rebuild
+
+**Context:** 2nd full rebuild of the day (started 12:28 EEST, triggered by user watch to validate memguard fix). At 15:43 / 87% real progress (74k / 86k chunks), rate dropped to ~1 chunk/sec. Remaining 12k chunks ETA ~3h more. First 60-70k chunks (short/batched) flew by at ~30 emb/sec in first hour; last 15k long chunks (file_type service/workflow/library with 2000-8000 char content) dragged the tail.
+
+**Root cause:** `scripts/build_vectors.py::embed_and_write_streaming` and `src/index/builders/docs_vector_indexer.py::_embed_and_write_streaming` long-chunks path processes `len(content) > mcfg.short_limit` (1500 chars for coderank) **one chunk at a time** via `_encode(model, [text], mcfg)`. Python overhead + tokenize + MPS CPU↔GPU transfer dominate over forward pass. Batching 4 long chunks with padding eliminates this overhead per chunk.
+
+**Fix plan (Priority 1b — full doc in NEXT_SESSION_PROMPT.md):**
+- #1 `batch long chunks (LONG_BATCH=4 with padding)` — 5-8× speedup, low risk.
+- #2 `short_limit 1500 → 2500` — 2× speedup, **HIGH risk** (breaks vector coherence across old+new chunks in same table).
+- #3 `fp16 (model.half())` — 1.5× speedup, low risk.
+- #4 `torch.compile` — 1.3× speedup, medium risk (arch-sensitive).
+- #5 chunker tuning, #6 long_limit reduction — deferred.
+
+**Decision (2026-04-24):** apply **only #1** mid-run. Path:
+1. Kill current `full_update.sh` — checkpoint at 74512 + 75k vectors in LanceDB preserved.
+2. Edit build_vectors.py + docs_vector_indexer.py long-chunks loop (batched with LONG_BATCH=4).
+3. Smoke test `/tmp/smoke_batch_long.py`: 20 pending long chunks via old vs new code, assert cos≥0.999 per pair, RSS stable across 5 iterations.
+4. pytest 668+ green.
+5. Commit + push via MCP (Read+strip+md5-verify discipline).
+6. Relaunch `full_update.sh --full` → resume from checkpoint → remaining 12k in ~25 min (vs 3h without fix) + step 5c docs tower ~25 min + step 6-7 ~5 min. **Total ~60 min to full finish.**
+7. If smoke/pytest fail → `git checkout` the 2 files → rollback → original build continues eventually.
+
+**Delegated to parallel session** via copy-paste prompt (full 7-stage plan with expected timings, commit message, rollback procedure).
+
+**#2 short_limit change intentionally NOT applied** — would break semantic coherence between the 74k chunks already embedded with short_limit=1500 and the remaining 12k that would be embedded with short_limit=2500. Different text prefix = different vectors in the same LanceDB table = inconsistent retrieval ranking. Would require full `--force` rebuild from scratch (another 45-60 min). Defer #2 + #3 + #4 to separate session after validating #1.
+
+## 2026-04-24 afternoon: docs-tower model A/B harness landed (parallel session)
+
+Commits `cf5da9a + 71bc507` by parallel session landed 5 files for A/B testing of alternative docs embedders:
+- `src/models.py` — registered 3 candidate models: `docs-gte-large`, `docs-arctic-l-v2`, `docs-bge-m3-dense` (each writes to separate `vectors.lance.docs.<key>/`).
+- `src/index/builders/docs_vector_indexer.py::build_docs_vectors(..., model_key)` — extended.
+- `scripts/build_doc_intent_eval.py` — eval-set generator. Already executed: `profiles/pay-com/doc_intent_eval_v1.jsonl` = 50 rows (20 gold + 30 prod-sampled).
+- `scripts/benchmark_doc_indexing_ab.py` — sequential A/B build harness, sys-avail ≥5 GB hard guard.
+- `scripts/benchmark_doc_intent.py` — file-level Recall@10 harness.
+
+**Refinement 2026-04-24 evening:** add `nomic-ai/nomic-embed-text-v2-moe` as **#0 candidate** (drop-in 768d compat with v1.5, MoE 305M/75M active, +3-5% MTEB per nomic blog). Run order: nomic-v2-moe → gte-large → arctic-l-v2 → bge-m3 dense. Stop-early if v2-moe lift ≥3pp (free upgrade, zero arch change).
+
+**Second-opinion research** (ChatGPT-level review 2026-04-24) confirmed: CodeRankEmbed + `reranker_ft_gte_v8` stay prod; only docs tower in A/B scope. Flagged hallucination: `Qwen3-Embedding-0.6B-Code` doesn't exist (other LLM confused naming).
+
+## 2026-04-24 evening: RunPod capability plan landed
+
+User registered RunPod + added $15 credits. Plan in NEXT_SESSION_PROMPT.md Priority 0. First use-case: **fine-tune pay-com-specific docs model** from `nomic-embed-text-v1.5` base on 103 doc-intent positive pairs. Budget ~$5-10, ~4-6 h on A100 Secure Cloud.
+
+Safety rails (refined 2026-04-24 after user feedback):
+- Secure Cloud only for pay-com data, never Community.
+- Pre-upload `grep -rn "secret\|password\|token\|api_key\|Bearer \|MerchantSecret\|PrivateKey\|X-Api-Key" <dataset>/` must return empty.
+- API key in `~/.runpod/credentials` (chmod 600), never in Claude context, never in git, never in MCP.
+- Bulletproof teardown: atexit + signal handlers + RunPod pod auto-terminate (1h first run) + spending limit $5/day.
+- First run = 10% subset (10 of 103 pairs), 100 steps, 1h cap, $1 spend — catches pipeline bugs cheap.
+- Evaluation: holdout test set (not training pairs), accept fine-tuned only if Recall@10 ≥ baseline + 10pp AND train-test gap < 20pp.
+
+Delegated to parallel session via separate copy-paste prompt (Stage A skeleton → B pre-flight → C 10% run → D full run).
 
 ## 2026-04-24 late: memguard fix — full-build no longer leaks RAM
 
