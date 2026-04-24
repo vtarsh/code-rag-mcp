@@ -36,6 +36,7 @@ from dataclasses import dataclass
 
 _GIB = 1024**3
 
+
 @dataclass(frozen=True)
 class Limits:
     rss_soft_bytes: int
@@ -43,6 +44,7 @@ class Limits:
     sys_avail_soft_bytes: int
     sys_avail_hard_bytes: int
     daemon_port: int
+
 
 def get_limits() -> Limits:
     """Read env vars with defaults matching the 2026-04-18 baseline."""
@@ -53,6 +55,7 @@ def get_limits() -> Limits:
         sys_avail_hard_bytes=int(float(os.getenv("CODE_RAG_EMBED_SYS_AVAIL_HARD_GB", "0.8")) * _GIB),
         daemon_port=int(os.getenv("CODE_RAG_DAEMON_PORT", "8742")),
     )
+
 
 def pause_daemon(port: int | None = None, timeout: float = 5.0) -> bool:
     """Request ``/admin/shutdown`` on the MCP daemon so launchd restarts it fresh.
@@ -81,6 +84,7 @@ def pause_daemon(port: int | None = None, timeout: float = 5.0) -> bool:
         print(f"  [daemon shutdown error: {e}; continuing without pause]", flush=True)
         return False
 
+
 def free_memory() -> None:
     """Best-effort release of Python + MPS buffers. Never raises."""
     gc.collect()
@@ -89,6 +93,7 @@ def free_memory() -> None:
 
         if torch.backends.mps.is_available():
             torch.mps.empty_cache()
+
 
 def memory_pressure(limits: Limits | None = None) -> tuple[str, int, int]:
     """Classify current pressure. Returns (level, rss_bytes, avail_bytes).
@@ -111,6 +116,7 @@ def memory_pressure(limits: Limits | None = None) -> tuple[str, int, int]:
     if rss >= limits.rss_soft_bytes or avail <= limits.sys_avail_soft_bytes:
         return "soft", rss, avail
     return "ok", rss, avail
+
 
 def check_and_maybe_exit(
     limits: Limits | None = None,
@@ -156,6 +162,7 @@ def check_and_maybe_exit(
             time.sleep(30)
         return "soft"
 
+    # hard
     free_memory()
     print(
         f"  [hard memory pressure: {reason}; exiting cleanly at {done}/{total} — next run resumes from delta]",
