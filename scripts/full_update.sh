@@ -1,19 +1,10 @@
-#!/usr/bin/env bash
 set -euo pipefail
-
-# Full pipeline: clone → extract → facts/staleness → index → graph → vectors
-# Designed for cron/launchd. Logs to ~/.code-rag/logs/
-#
-# Usage:
-#   ./full_update.sh           # incremental (only changed repos)
-#   ./full_update.sh --full    # force full rebuild
 
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 BASE_DIR="${CODE_RAG_HOME:-$HOME/.code-rag}"
 LOG_DIR="$BASE_DIR/logs"
 mkdir -p "$LOG_DIR"
 
-# --- Singleton lock (prevents two launchd agents or manual run + cron overlap) ---
 LOCK_DIR="$LOG_DIR/full_update.lock.d"
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   OLD_PID="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
@@ -28,7 +19,6 @@ fi
 echo "$$" > "$LOCK_DIR/pid"
 trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM
 
-# Resolve active profile
 export ACTIVE_PROFILE="${ACTIVE_PROFILE:-$(cat "$BASE_DIR/.active_profile" 2>/dev/null || echo "example")}"
 PROFILE_CONFIG="$BASE_DIR/profiles/$ACTIVE_PROFILE/config.json"
 LEGACY_CONFIG="$BASE_DIR/config.json"
@@ -45,7 +35,6 @@ MODEL_KEY=$(jq -r '.embedding_model // "coderank"' "$CONFIG_FILE")
 LOG_FILE="$LOG_DIR/update_$(date +%Y%m%d_%H%M%S).log"
 LATEST_LOG="$LOG_DIR/latest.log"
 
-# Tee to both log file and stdout
 exec > >(tee "$LOG_FILE") 2>&1
 ln -sf "$LOG_FILE" "$LATEST_LOG"
 
@@ -68,20 +57,17 @@ echo "Started: $(date)"
 echo "Mode: ${FULL_FLAG:-incremental}"
 echo "=========================================="
 
-# Save state before to detect changes
 if [[ -f "$STATE_FILE" ]]; then
   cp "$STATE_FILE" "$STATE_BEFORE"
 else
   echo '{}' > "$STATE_BEFORE"
 fi
 
-# Step 1: Clone/fetch repos
 echo ""
 echo "[1/7] Fetching repos..."
 "$SCRIPTS_DIR/clone_repos.sh" 2>&1 | tail -5
 echo ""
 
-# Step 2: Check what changed
 CHANGED_COUNT=0
 if [[ "$FULL_FLAG" != "--full" ]] && [[ -f "$STATE_BEFORE" ]]; then
   CHANGED_COUNT=$(python3 -c "
@@ -89,7 +75,6 @@ import json, os
 before = json.load(open('$STATE_BEFORE'))
 after = json.load(open('$STATE_FILE'))
 changed = [r for r, sha in after.items() if r not in before or before[r] != sha]
-# Also count repos never extracted
 extracted_dir = os.environ.get('CODE_RAG_HOME', os.path.expanduser('~/.code-rag')) + '/extracted'
 for repo in after:
     if not os.path.isdir(os.path.join(extracted_dir, repo)) and repo not in changed:
@@ -101,7 +86,6 @@ fi
 
 if [[ "$FULL_FLAG" == "--full" ]] || [[ "$CHANGED_COUNT" -gt 0 ]]; then
 
-  # Determine changed repo list for incremental mode
   REPOS_FLAG=""
   if [[ "$FULL_FLAG" != "--full" ]] && [[ -f "$STATE_BEFORE" ]]; then
     CHANGED_LIST=$(python3 -c "
@@ -121,23 +105,18 @@ print(','.join(changed))
     fi
   fi
 
-  # Step 2: Extract artifacts
   echo ""
   echo "[2/7] Extracting artifacts..."
   python3 "$SCRIPTS_DIR/extract_artifacts.py" $REPOS_FLAG 2>&1 | tail -3
 
-  # Step 3: Build FTS5 index
   echo ""
   echo "[3/7] Building search index..."
   python3 "$SCRIPTS_DIR/build_index.py" $REPOS_FLAG 2>&1 | tail -3
 
-  # Step 4: Build dependency graph
   echo ""
   echo "[4/7] Building dependency graph..."
   python3 "$SCRIPTS_DIR/build_graph.py" 2>&1 | tail -3
 
-  # Step 5: Build vector embeddings (batched to limit memory)
-  # Skip vectors during daytime runs (--skip-vectors flag)
   if [[ "${SKIP_VECTORS:-}" == "1" ]]; then
     echo ""
     echo "[5/7] Skipping vector embeddings (daytime mode)"
@@ -146,7 +125,6 @@ print(','.join(changed))
     echo ""
     echo "[5/7] Building vector embeddings..."
     if [[ -n "$REPOS_FLAG" ]]; then
-      # Split repos into batches to avoid OOM — each batch is a separate process
       REPO_LIST="${REPOS_FLAG#--repos=}"
       IFS=',' read -ra ALL_REPOS <<< "$REPO_LIST"
       TOTAL_REPOS=${#ALL_REPOS[@]}
@@ -156,7 +134,6 @@ print(','.join(changed))
         BATCH=("${ALL_REPOS[@]:i:BATCH_SIZE}")
         BATCH_STR=$(IFS=','; echo "${BATCH[*]}")
         BATCH_NUM=$((BATCH_NUM + 1))
-        # Skip ANN reindex for all batches except the last one
         REINDEX_FLAG=""
         if [[ "$BATCH_NUM" -lt "$BATCH_TOTAL" ]]; then
           REINDEX_FLAG="--no-reindex"
@@ -168,24 +145,12 @@ print(','.join(changed))
       python3 "$SCRIPTS_DIR/build_vectors.py" --model="$MODEL_KEY" --force 2>&1 | tail -3
     fi
 
-    # Step 5b: Sync missing doc vectors — build_index.py re-indexes profile docs
-    # (gotchas/flows/references/providers) which creates new SQLite rowids, but
-    # build_vectors.py --repos=X only touches the listed code repos. This syncs
-    # both sides and prunes orphans so chunks == vectors after every run.
-    # Doc chunks are a small subset, so OOM risk on 16GB Macs is acceptable
-    # vs code-vector batches.
     echo ""
     echo "[5b/7] Syncing doc vectors (missing + orphan cleanup)..."
-    # 3h hard timeout — prevents hanging process eating RAM for days
-    "$SCRIPTS_DIR/run_with_timeout.sh" 10800 \
+    bash "$SCRIPTS_DIR/run_with_timeout.sh" 10800 \
         python3 "$SCRIPTS_DIR/embed_missing_vectors.py" --model=coderank 2>&1 | tail -10 || \
         echo "  ⚠️ sync failed or timed out — chunks/vectors will reconcile next run"
 
-    # Step 5c: Build docs tower (two-tower migration, 2026-04-23).
-    # Runs SEQUENTIALLY after the code tower — parallelism would peak ~3 GB RAM
-    # (both SentenceTransformer models loaded) which is too tight on 16 GB Macs.
-    # Sequential peak is ~1 GB at any time. See profiles/pay-com/docs/gotchas/two-tower-migration.md
-    # Env vars (CODE_RAG_HOME, ACTIVE_PROFILE, PYTORCH_MPS_*) are inherited from this shell.
     echo ""
     echo "[5c/7] Building docs vector tower (nomic-embed-text-v1.5)..."
     DOCS_ARGS=()
@@ -198,7 +163,6 @@ print(','.join(changed))
         echo "  ⚠️ docs tower build failed — router will fall back to code tower only"
   fi
 
-  # Step 6: Build shadow types (YAMLs for each known provider)
   echo ""
   echo "[6/7] Building shadow types..."
   if [[ -f "$SCRIPTS_DIR/build_shadow_types.py" ]]; then
@@ -216,7 +180,6 @@ print(','.join(changed))
     echo "  Skipping — build_shadow_types.py not found"
   fi
 
-  # Step 7: Post-build diagnostics
   echo ""
   echo "[7/7] Running diagnostics..."
 
@@ -240,18 +203,11 @@ else
   echo "Finished: $(date)"
 fi
 
-# Always-run: regenerate repo facts + doc staleness report.
-# These are cheap (no LLM, no vectors) and useful even on quiet days
-# when no repos changed but curated docs keep aging. Must run after
-# clone so that raw/ is present.
 echo ""
 echo "[post] Regenerating repo facts + staleness report..."
 python3 "$SCRIPTS_DIR/gen_repo_facts.py" 2>&1 | tail -3
 python3 "$SCRIPTS_DIR/detect_doc_staleness.py" 2>&1 | tail -3
 
-# Always-run: append health check snapshot to history log.
-# Gives a per-run record that chunks==vectors, graph OK, etc.
-# Reads via the daemon HTTP endpoint so it reflects the running process state.
 echo ""
 echo "[post] Appending health check to history..."
 HEALTH_LOG="$LOG_DIR/health_history.log"
@@ -265,11 +221,8 @@ HEALTH_LOG="$LOG_DIR/health_history.log"
   fi
   echo ""
 } >> "$HEALTH_LOG" 2>&1
-# Prune health log (keep last 200 snapshots)
 tail -n 4000 "$HEALTH_LOG" > "$HEALTH_LOG.tmp" && mv "$HEALTH_LOG.tmp" "$HEALTH_LOG" 2>/dev/null || true
 
-# Cleanup
 rm -f "$STATE_BEFORE"
 
-# Prune old logs (keep last 30)
 ls -t "$LOG_DIR"/update_*.log 2>/dev/null | tail -n +31 | xargs rm -f 2>/dev/null || true
