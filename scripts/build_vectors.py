@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Build vector embeddings for all chunks and store in LanceDB.
 
 Supports multiple embedding models via --model flag.
@@ -31,16 +32,20 @@ from pathlib import Path
 
 import lancedb
 
+# --- Resolve paths from environment or defaults ---
 BASE_DIR = Path(os.getenv("CODE_RAG_HOME", Path.home() / ".code-rag"))
 DB_PATH = BASE_DIR / "db" / "knowledge.db"
 CHECKPOINT_EVERY = 2000
+# Run optimize() / memory_pressure() this often even when RSS/avail still ok.
 COMPACT_EVERY_BATCHES = 25
 _VALID_REPO_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
+# --- Add project root to path for imports (use script location, not BASE_DIR) ---
 _SCRIPT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_SCRIPT_DIR))
 from src.index.builders import _memguard  # noqa: E402
 from src.models import DEFAULT_MODEL, EMBEDDING_MODELS, get_model_config  # noqa: E402
+
 
 def parse_args():
     """Parse CLI arguments."""
@@ -75,6 +80,7 @@ def parse_args():
 
     return model_key, force, only_repos, no_reindex, pause_daemon_flag
 
+
 def get_all_chunks(conn):
     cursor = conn.execute(
         "SELECT rowid, content, repo_name, file_path, file_type, chunk_type FROM chunks ORDER BY rowid"
@@ -82,6 +88,7 @@ def get_all_chunks(conn):
     rows = cursor.fetchall()
     print(f"  Loaded {len(rows)} chunks from SQLite")
     return rows
+
 
 def get_repo_chunks(conn, repo_names):
     placeholders = ",".join("?" for _ in repo_names)
@@ -93,9 +100,11 @@ def get_repo_chunks(conn, repo_names):
     print(f"  Loaded {len(rows)} chunks for {len(repo_names)} repos")
     return rows
 
+
 def prepare_text(content, repo_name, file_type, chunk_type, truncate_at):
     prefix = f"[{repo_name}] [{file_type}/{chunk_type}] "
     return prefix + content[:truncate_at]
+
 
 def make_record(row, vector):
     rowid, content, repo_name, file_path, file_type, chunk_type = row
@@ -109,7 +118,9 @@ def make_record(row, vector):
         "content_preview": content[:300],
     }
 
+
 # ---------------------------- Checkpoint helpers ------------------------------
+
 
 def load_checkpoint_rowids(checkpoint_path):
     """Return set of already-embedded rowids.
@@ -130,6 +141,7 @@ def load_checkpoint_rowids(checkpoint_path):
         print(f"  [checkpoint] Failed to load ({e}), starting fresh")
         return set()
 
+
 def save_checkpoint_rowids(checkpoint_path, done_rowids):
     """Atomically write done rowids (streaming format)."""
     payload = {"done_rowids": sorted(done_rowids)}
@@ -139,10 +151,15 @@ def save_checkpoint_rowids(checkpoint_path, done_rowids):
     tmp.rename(checkpoint_path)
     print(f"  [checkpoint] Saved {len(done_rowids)} rowids to disk", flush=True)
 
+
+# Back-compat shim — embed_missing_vectors.py imports embed_simple. Returns
+# data list (no streaming) so callers can decide how to write it. The full
+# build path uses embed_and_write_streaming() instead.
 def _encode(model, texts, mcfg, batch_size=None):
     bs = batch_size or mcfg.batch_size
     embeddings = model.encode(texts, batch_size=bs, show_progress_bar=False)
     return [e.tolist() for e in embeddings]
+
 
 def embed_simple(model, rows, mcfg):
     """Embed all chunks in simple batches and return data list.
@@ -174,6 +191,10 @@ def embed_simple(model, rows, mcfg):
     print(f"\n  Done! {len(all_data)} embeddings in {time.time() - start:.1f}s")
     return all_data
 
+
+# --------------------- Streaming embed-and-write loop -------------------------
+
+
 def _progress_line(done, total, start_time, remaining_at_start):
     pct = (done * 100 // total) if total else 0
     elapsed = max(time.time() - start_time, 1e-6)
@@ -181,6 +202,7 @@ def _progress_line(done, total, start_time, remaining_at_start):
     rate = processed_now / elapsed if elapsed > 0 else 0
     eta_min = ((total - done) / rate / 60) if rate > 0 else 0
     return f"{done}/{total} ({pct}%) — {rate:.1f} emb/s — ETA {eta_min:.0f}min"
+
 
 def embed_and_write_streaming(model, rows, mcfg, writer_fn, optimize_cb, checkpoint_path):
     """Embed ``rows`` and write each batch via ``writer_fn`` immediately.
@@ -224,6 +246,7 @@ def embed_and_write_streaming(model, rows, mcfg, writer_fn, optimize_cb, checkpo
                 save_checkpoint_rowids(checkpoint_path, done_rowids)
             since_checkpoint = 0
 
+    # Short chunks — batched.
     if short_rows:
         print(f"\n  --- Short chunks ({len(short_rows)}) ---")
         for i in range(0, len(short_rows), mcfg.batch_size):
@@ -253,6 +276,7 @@ def embed_and_write_streaming(model, rows, mcfg, writer_fn, optimize_cb, checkpo
                 batches_since_compact = 0
             _memguard.check_and_maybe_exit(limits=limits, done=done, total=total, compact_cb=optimize_cb)
 
+    # Long chunks — one by one.
     if long_rows and mcfg.long_limit > mcfg.short_limit:
         print(f"\n  --- Long chunks ({len(long_rows)}) ---")
         for row in long_rows:
@@ -281,6 +305,10 @@ def embed_and_write_streaming(model, rows, mcfg, writer_fn, optimize_cb, checkpo
         save_checkpoint_rowids(checkpoint_path, done_rowids)
     print(f"\n  Done! Embedded {embedded_this_run} rows this run in {time.time() - total_start:.1f}s")
     return embedded_this_run
+
+
+# --------------------------- LanceDB write helpers ----------------------------
+
 
 def _open_or_create_writer(lance_path, only_repos, force):
     """Open/create the LanceDB target for streaming writes.
@@ -332,6 +360,7 @@ def _open_or_create_writer(lance_path, only_repos, force):
 
     return writer_fn, optimize_cb, get_table
 
+
 def _build_or_replace_index(table, mcfg, replace=False):
     """IVF-PQ index builder shared by full + incremental paths."""
     num_vectors = table.count_rows()
@@ -352,6 +381,7 @@ def _build_or_replace_index(table, mcfg, replace=False):
     )
     print(f"  Index {'rebuilt' if replace else 'built'} in {time.time() - start:.1f}s")
 
+
 def _print_summary(table, lance_path, mcfg):
     lance_size = sum(f.stat().st_size for f in lance_path.rglob("*") if f.is_file()) / (1024 * 1024)
     print(f"\n{'=' * 60}")
@@ -361,6 +391,7 @@ def _print_summary(table, lance_path, mcfg):
     print(f"Model: {mcfg.name} ({mcfg.key})")
     print(f"Size on disk: {lance_size:.1f}MB")
     print(f"{'=' * 60}")
+
 
 def main():
     model_key, force, only_repos, no_reindex, pause_daemon_flag = parse_args()
@@ -476,6 +507,7 @@ def main():
             print("Checkpoint file removed.")
 
     conn.close()
+
 
 if __name__ == "__main__":
     main()
