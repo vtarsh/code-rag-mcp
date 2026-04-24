@@ -19,6 +19,9 @@ from src.index.builders.docs_vector_indexer import (
     fetch_doc_chunks,
 )
 
+# ------------------------------- Fixtures -------------------------------------
+
+
 def _mixed_db(tmp_path: Path) -> Path:
     """Create a knowledge.db with mixed file_types so we can exercise the filter."""
     db_path = tmp_path / "knowledge.db"
@@ -61,6 +64,7 @@ def _mixed_db(tmp_path: Path) -> Path:
     conn.close()
     return db_path
 
+
 class _FakeModel:
     """Replacement for SentenceTransformer that records encode calls."""
 
@@ -78,6 +82,7 @@ class _FakeModel:
             raise RuntimeError("simulated encoder crash")
         return [[0.01 * (i + 1)] * self.dim for i in range(len(texts))]
 
+
 class _FakeTable:
     def __init__(self, initial: list[dict] | None = None):
         self.rows: list[dict] = list(initial or [])
@@ -90,7 +95,9 @@ class _FakeTable:
         return len(self.rows)
 
     def _delete(self, _filter: str) -> None:
+        # Tests don't rely on filter parsing; clear everything.
         self.rows.clear()
+
 
 class _FakeLanceDB:
     def __init__(self):
@@ -114,6 +121,7 @@ class _FakeLanceDB:
         if name == "chunks":
             self.table = None
 
+
 def _patch_model_and_lance(fake_model: _FakeModel, fake_lance: _FakeLanceDB):
     """Context-manager style helper to patch both deps at once."""
     fake_st = MagicMock(return_value=fake_model)
@@ -135,7 +143,9 @@ def _patch_model_and_lance(fake_model: _FakeModel, fake_lance: _FakeLanceDB):
     ]
     return patches, fake_st, fake_lancedb
 
+
 # ------------------------------- DOC_FILE_TYPES --------------------------------
+
 
 class TestDocFileTypesContract:
     def test_every_expected_type_is_present(self):
@@ -156,7 +166,9 @@ class TestDocFileTypesContract:
         forbidden = {"service", "frontend", "workflow", "provider_config", "test_script", "code_file"}
         assert forbidden & set(DOC_FILE_TYPES) == set()
 
+
 # ----------------------------- SQL filter -------------------------------------
+
 
 class TestFetchDocChunks:
     def test_returns_only_doc_rows(self, tmp_path):
@@ -190,7 +202,9 @@ class TestFetchDocChunks:
         finally:
             conn.close()
 
+
 # ----------------------------- Full build flow --------------------------------
+
 
 class TestBuildDocsVectors:
     def test_force_creates_lancedb_table_with_expected_schema(self, tmp_path, monkeypatch):
@@ -246,7 +260,9 @@ class TestBuildDocsVectors:
         assert all(s.startswith("search_document: ") for s in batch_texts)
         assert first_call_kwargs.get("show_progress_bar") is False
 
+
 # ------------------------------ Checkpoint resume -----------------------------
+
 
 class TestCheckpointResume:
     def test_resumes_from_saved_state_after_crash(self, tmp_path):
