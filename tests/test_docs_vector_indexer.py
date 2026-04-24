@@ -19,9 +19,6 @@ from src.index.builders.docs_vector_indexer import (
     fetch_doc_chunks,
 )
 
-# ------------------------------- Fixtures -------------------------------------
-
-
 def _mixed_db(tmp_path: Path) -> Path:
     """Create a knowledge.db with mixed file_types so we can exercise the filter."""
     db_path = tmp_path / "knowledge.db"
@@ -64,7 +61,6 @@ def _mixed_db(tmp_path: Path) -> Path:
     conn.close()
     return db_path
 
-
 class _FakeModel:
     """Replacement for SentenceTransformer that records encode calls."""
 
@@ -82,7 +78,6 @@ class _FakeModel:
             raise RuntimeError("simulated encoder crash")
         return [[0.01 * (i + 1)] * self.dim for i in range(len(texts))]
 
-
 class _FakeTable:
     def __init__(self, initial: list[dict] | None = None):
         self.rows: list[dict] = list(initial or [])
@@ -95,9 +90,7 @@ class _FakeTable:
         return len(self.rows)
 
     def _delete(self, _filter: str) -> None:
-        # Tests don't rely on filter parsing; clear everything.
         self.rows.clear()
-
 
 class _FakeLanceDB:
     def __init__(self):
@@ -121,7 +114,6 @@ class _FakeLanceDB:
         if name == "chunks":
             self.table = None
 
-
 def _patch_model_and_lance(fake_model: _FakeModel, fake_lance: _FakeLanceDB):
     """Context-manager style helper to patch both deps at once."""
     fake_st = MagicMock(return_value=fake_model)
@@ -143,9 +135,7 @@ def _patch_model_and_lance(fake_model: _FakeModel, fake_lance: _FakeLanceDB):
     ]
     return patches, fake_st, fake_lancedb
 
-
 # ------------------------------- DOC_FILE_TYPES --------------------------------
-
 
 class TestDocFileTypesContract:
     def test_every_expected_type_is_present(self):
@@ -166,9 +156,7 @@ class TestDocFileTypesContract:
         forbidden = {"service", "frontend", "workflow", "provider_config", "test_script", "code_file"}
         assert forbidden & set(DOC_FILE_TYPES) == set()
 
-
 # ----------------------------- SQL filter -------------------------------------
-
 
 class TestFetchDocChunks:
     def test_returns_only_doc_rows(self, tmp_path):
@@ -202,9 +190,7 @@ class TestFetchDocChunks:
         finally:
             conn.close()
 
-
 # ----------------------------- Full build flow --------------------------------
-
 
 class TestBuildDocsVectors:
     def test_force_creates_lancedb_table_with_expected_schema(self, tmp_path, monkeypatch):
@@ -260,54 +246,79 @@ class TestBuildDocsVectors:
         assert all(s.startswith("search_document: ") for s in batch_texts)
         assert first_call_kwargs.get("show_progress_bar") is False
 
-
 # ------------------------------ Checkpoint resume -----------------------------
-
 
 class TestCheckpointResume:
     def test_resumes_from_saved_state_after_crash(self, tmp_path):
+        """Streaming-mode resume: checkpoint records done rowids, LanceDB holds
+        the actual vectors. New run with force=False skips done rowids and
+        appends the rest to the existing LanceDB table.
+        """
         db_path = _mixed_db(tmp_path)
         lance_dir = tmp_path / "db" / "vectors.lance.docs"
         checkpoint = tmp_path / "docs_checkpoint.json"
 
-        # Simulate: first run embeds 4 rows then dies.
-        crashing_model = _FakeModel(dim=768, fail_after=4)
-        fake_lance = _FakeLanceDB()
-        patches, _, _ = _patch_model_and_lance(crashing_model, fake_lance)
+        # Simulate prior crashed run state:
+        #   - checkpoint says rowids 1-4 are done (streaming format — rowids only)
+        #   - LanceDB already holds stub vectors for those rowids (the streaming
+        #     writer landed them before the crash)
+        checkpoint.write_text(json.dumps({"done_rowids": [1, 2, 3, 4]}))
+        pre_populated_rows = [
+            {
+                "rowid": rid,
+                "vector": [0.0] * 768,
+                "repo_name": "stub",
+                "file_path": "stub.md",
+                "file_type": "docs",
+                "chunk_type": "markdown",
+                "content_preview": "stub",
+            }
+            for rid in (1, 2, 3, 4)
+        ]
 
-        with patches[0], pytest.raises(RuntimeError, match="simulated encoder crash"):
-            build_docs_vectors(
+        resume_model = _FakeModel(dim=768)
+        fake_lance = _FakeLanceDB()
+        fake_lance.table = _FakeTable(pre_populated_rows)
+        patches, _, _ = _patch_model_and_lance(resume_model, fake_lance)
+
+        with patches[0]:
+            result = build_docs_vectors(
                 db_path,
                 lance_dir,
-                force=True,
+                force=False,  # keep checkpoint + LanceDB; resume from delta
                 checkpoint_path=checkpoint,
                 log_every=100,
             )
 
-        # The indexer writes checkpoints on every CHECKPOINT_EVERY boundary.
-        # For tiny runs (<5000 rows) the on-crash checkpoint won't exist, so
-        # we emulate a partial checkpoint ourselves to verify the resume path.
-        partial_data = []
-        for rowid in (1, 2, 3, 4):
-            partial_data.append(
-                {
-                    "rowid": rowid,
-                    "vector": [0.0] * 768,
-                    "repo_name": "stub",
-                    "file_path": "stub.md",
-                    "file_type": "docs",
-                    "chunk_type": "markdown",
-                    "content_preview": "stub",
-                }
-            )
-        checkpoint.write_text(json.dumps({"done_rowids": [1, 2, 3, 4], "data": partial_data}))
+        sent_texts = "\n".join(t for batch in resume_model.calls for t in batch)
+        # First 4 rows must NOT be re-embedded (checkpoint marked them done).
+        assert "nuvei refund handling notes" not in sent_texts  # rowid 1
+        assert "gotcha: expiration behaviour" not in sent_texts  # rowid 2
+        # Remaining rows WERE embedded on the resume run.
+        assert "dictionary entry" in sent_texts  # rowid 7
+        # Streaming semantics: chunks_embedded counts THIS run only.
+        assert result["chunks_embedded"] == 5
+        # LanceDB total = 4 prepopulated + 5 newly streamed.
+        assert result["vectors_stored"] == 9
+        # Checkpoint stays (force=False). The next run would skip everything
+        # because all 9 rowids are recorded as done.
+        assert checkpoint.exists()
+        assert set(json.loads(checkpoint.read_text())["done_rowids"]) == {1, 2, 3, 4, 5, 6, 7, 8, 9}
 
-        # Second run: fresh model instance that should only see rows 5..9.
-        resume_model = _FakeModel(dim=768)
-        fake_lance2 = _FakeLanceDB()
-        patches2, _, _ = _patch_model_and_lance(resume_model, fake_lance2)
+    def test_force_clears_stale_checkpoint(self, tmp_path):
+        """`--force` must wipe the checkpoint at start so the loop doesn't skip
+        rowids whose embeddings only existed in the about-to-be-dropped table.
+        """
+        db_path = _mixed_db(tmp_path)
+        lance_dir = tmp_path / "db" / "vectors.lance.docs"
+        checkpoint = tmp_path / "docs_checkpoint.json"
+        checkpoint.write_text(json.dumps({"done_rowids": [1, 2, 3, 4]}))
 
-        with patches2[0]:
+        fake_model = _FakeModel(dim=768)
+        fake_lance = _FakeLanceDB()
+        patches, _, _ = _patch_model_and_lance(fake_model, fake_lance)
+
+        with patches[0]:
             result = build_docs_vectors(
                 db_path,
                 lance_dir,
@@ -316,13 +327,8 @@ class TestCheckpointResume:
                 log_every=100,
             )
 
-        sent_rowids_payload = "\n".join(t for batch in resume_model.calls for t in batch)
-        # First 4 rows should NOT be re-embedded (their content lives only in partial_data).
-        assert "nuvei refund handling notes" not in sent_rowids_payload  # rowid 1
-        assert "gotcha: expiration behaviour" not in sent_rowids_payload  # rowid 2
-        # Remaining rows WERE embedded on the resume run.
-        assert "dictionary entry" in sent_rowids_payload  # rowid 7
+        # All 9 rows re-embedded — the stale checkpoint did not cause skips.
         assert result["chunks_embedded"] == 9
         assert result["vectors_stored"] == 9
-        # Checkpoint is cleaned up on a successful full run.
+        # Force build cleared checkpoint at the end.
         assert not checkpoint.exists()
