@@ -1,12 +1,103 @@
 # P5 Reranker — Roadmap
 
-**Status (2026-04-24):** **Two-tower v13 LANDED on main + benchmarks GREEN.** Production reranker = `reranker_ft_gte_v8` (unchanged). Vector retrieval now splits by query intent: code → CodeRankEmbed (768d, `vectors.lance.coderank`), docs → nomic-embed-text-v1.5 (768d, `vectors.lance.docs`, 153 MB on disk). 651/651 pytest green. Benchmarks: queries 0.933 (=v8), realworld 0.843 (=v8), flows 0.833. No regression. Doc-intent routing verified live (`provider response mapping reference` → `docs/references/provider-response-mapping.md` top-1).
+**Status (2026-04-24 late-day):** Two-tower v13 landed on main; **memguard fix** landed on main (streaming writes + psutil watchdog for full-build paths); weekly full rebuild scheduled via launchd (Sat 04:00 EEST, first fire 2026-04-25). Reranker = `reranker_ft_gte_v8` (unchanged). 668/668 pytest green (was 651; +16 memguard + 1 force-clear). Remote `vtarsh/code-rag-mcp` HEAD = `e429776`. Remote `vtarsh/pay-knowledge-profile` HEAD = `5df59e43`.
+
+## 2026-04-24 late: memguard fix — full-build no longer leaks RAM
+
+**Problem discovered during user-watched `make build` test at 10:50 EEST.**
+`scripts/build_vectors.py::embed_adaptive` and `docs_vector_indexer::_embed_adaptive`
+accumulated every embedding into an in-memory `all_data` list until end of loop,
+never called `gc.collect` / `torch.mps.empty_cache` between batches, and never
+paused the resident MCP daemon before model load. On 16 GB Mac the code-tower
+build climbed past 14 GB combined-with-daemon and Jetsam SIGKILL'd it — the
+same failure pattern commit `74c0732` (2026-04-18) fixed in
+`embed_missing_vectors.py`. That fix was never propagated to the full-build
+scripts.
+
+**Fix (5 files, commit `4361429` locally; pushed as `cf5a852..e429776` on main):**
+- `src/index/builders/_memguard.py` (NEW, 172 lines) — shared module:
+  `get_limits()` reads `CODE_RAG_EMBED_RSS_{SOFT,HARD}_GB` + `CODE_RAG_EMBED_SYS_AVAIL_{SOFT,HARD}_GB`
+  (defaults 8 / 10 / 2 / 0.8 GB); `pause_daemon()` POSTs `/admin/shutdown`
+  so launchd restarts a fresh low-RSS daemon; `free_memory()` is
+  `gc.collect` + `torch.mps.empty_cache`; `memory_pressure()` classifies
+  ok/soft/hard; `check_and_maybe_exit()` compact+sleep on soft, `sys.exit(0)`
+  on hard (caller's checkpoint lets the next run resume).
+- `src/index/builders/docs_vector_indexer.py` (REFACTOR) — streaming writes
+  via `_open_or_create_writer + writer_fn` callback. Each batch flows directly
+  into LanceDB (no `all_data` accumulation), then `free_memory` + watchdog.
+  Checkpoint format simplified to `{done_rowids: [...]}` (LanceDB is the
+  source of truth for vectors). `force=True` clears stale checkpoint at
+  start. `pause_daemon=True` default.
+- `scripts/build_vectors.py` (REFACTOR) — same pattern for the code tower.
+  `embed_simple()` kept for back-compat (used by `embed_missing_vectors.py`);
+  new `embed_and_write_streaming()` drives both full and incremental paths
+  from `main()`. `--no-pause-daemon` flag for debug.
+- `tests/test_memguard.py` (NEW, 16 tests) — covers `get_limits` env
+  overrides, `pause_daemon` error paths, `memory_pressure` classification,
+  `check_and_maybe_exit` state machine, `free_memory`.
+- `tests/test_docs_vector_indexer.py` (UPDATE) — rewrote checkpoint-resume
+  test for streaming semantics (chunks_embedded = THIS run, vectors_stored =
+  LanceDB total). Added `test_force_clears_stale_checkpoint`.
+
+**Lesson uncovered during the push:** Bash `cat` in agent sandboxes **silently
+truncates files >~480 lines** — collapses 3+ newlines to 2, strips standalone
+single-line comments, and replaces content past ~480 lines with
+`// ... N more lines (total: N)`. First round of MCP pushes landed corrupted
+versions of all 5 files; caught via per-file md5 verify (`feedback_mcp_push_full_content.md`
+discipline). Re-pushed via `Read` tool + manual line-prefix strip →
+byte-exact. Memorized as `feedback_bash_cat_truncates.md`.
+
+## 2026-04-24 mid-day: weekly full rebuild scheduled + incremental cron fix
+
+**Before today:** only daily 03:00 launchd incremental. No weekly full rebuild
+— `make build` had to be kicked off manually.
+
+**Today:**
+- **New launchd plist** `~/Library/LaunchAgents/com.code-rag-mcp.weekly-rebuild.plist`:
+  calls `caffeinate -i bash full_update.sh --full` on **Saturday 04:00 EEST**
+  (Weekday=6, Hour=4). User's free window is 02:00-09:00 Kyiv; daily 03:00
+  incremental finishes by ~03:20 so 04:00 leaves 40 min buffer. Worst-case
+  4h full rebuild finishes by 08:00. `LOCK_DIR` in `full_update.sh`
+  protects against overlap if the full rebuild runs long.
+  **First fire: 2026-04-25 04:00 EEST.**
+- **`scripts/full_update.sh`** fixed (commit `8fec3bf`): step `[5b/7]`
+  (doc-vector sync via `embed_missing_vectors.py`) was hitting `Permission
+  denied` on `run_with_timeout.sh` (tracked at 100644, no exec bit — git
+  mode-bit drift). Now invoked as `bash "$SCRIPTS_DIR/run_with_timeout.sh"`
+  → exec-bit-agnostic. Saved in `reference_launchd_schedules.md`.
+
+## 2026-04-24 morning: pay-com housekeeping continued
+
+**Starting state 2026-04-24 morning:** 675 unstaged entries in
+`profiles/pay-com` git repo (separate from code-rag-mcp). Four local commits
+ready (b219fbc, d540e7a, c66f018, 560f9df). Remote HEAD `0acb83bd` (parts 1-4
+of c66f018 already pushed).
+
+**Push agents (2 rounds):**
+- Round 1 (`a9929fc0a1d9437cb`): pushed parts 5-16 of c66f018 (12 commits),
+  covering references/*, docs/notes/_moc/*, docs/gotchas/*, all 20
+  test-credentials/*. HEAD `bc69475`.
+- Round 2 (`addf4f7b49e72a7c5`): pushed ROADMAP to code-rag-mcp (commit
+  `29a4343`), then parts 17-19 of c66f018 (provider_types + recipes +
+  scripts, 13/14 modified files) + parts 20-43 (23/23 deletions) + the
+  `.gitignore` from commit 560f9df. HEAD `5df59e43`.
+
+**Pay-com outstanding:**
+- 1 file: `recipes/new_apm_provider.yaml` (modified, not pushed — agent hit
+  token budget before reaching it)
+- 334 Nuvei `.md` pages (NEW, not pushed) — local commit `560f9df` sits on
+  disk. ~67 batches @ 5 files/batch via MCP = ~$3-5 in API tokens. Defer
+  to a dedicated push session.
 
 ## 2026-04-24 early-morning: two-tower v13 deployed
 
 **v13 = two-tower architecture**, not a 13th FT iteration. After v1-v12a single-tower FT all marginal/negative, the pivot was to give docs their own embedding tower so vector retrieval finds them on merit instead of relying on FTS + reranker bailouts.
 
-**Deployed pieces (12 commits on main, fe5d1e6..4398ccf):**
+## 2026-04-24 early-morning: two-tower v13 deployed
+
+**v13 = two-tower architecture**, not a 13th FT iteration. After v1-v12a single-tower FT all marginal/negative, the pivot was to give docs their own embedding tower so vector retrieval finds them on merit instead of relying on FTS + reranker bailouts.
+
+**Deployed pieces (12 commits on main, fe5d1e6..4398ccf; see `e429776` for full history):**
 - `src/models.py` — new `"docs"` model key (nomic-embed-text-v1.5, 768d). `EmbeddingModel.document_prefix` field.
 - `src/embedding_provider.py` — per-key singletons; `get_embedding_provider("docs")` lazy-loads the docs tower.
 - `src/container.py` — per-key LanceDB cache; `get_vector_search("docs")` opens `vectors.lance.docs`.
