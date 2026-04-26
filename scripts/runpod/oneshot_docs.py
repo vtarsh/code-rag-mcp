@@ -271,17 +271,24 @@ def main() -> int:
         push_cmd = (
             "set -euxo pipefail && "
             'python3 -c "'
-            "from huggingface_hub import HfApi;"
-            " api = HfApi();"
+            "import os;"
+            " token = os.environ.get('HF_TOKEN');"
+            " assert token, 'HF_TOKEN missing in pod env';"
+            " from huggingface_hub import HfApi;"
+            " api = HfApi(token=token);"
             f" api.create_repo('{args.hf_repo}', private=True, exist_ok=True);"
             f" api.upload_folder(folder_path='{train_out}',"
-            f" repo_id='{args.hf_repo}')"
+            f" repo_id='{args.hf_repo}', token=token)"
             '"'
         )
         _log(f"hf push: → {args.hf_repo}")
         cp = _ssh(host, port, push_cmd, timeout=20 * 60)
         if cp.returncode != 0:
-            _log(f"FAIL hf push rc={cp.returncode} stderr={cp.stderr[:300]}")
+            _log(f"FAIL hf push rc={cp.returncode}")
+            print("--- HF push STDOUT (last 800) ---")
+            print((cp.stdout or "")[-800:])
+            print("--- HF push STDERR (last 1500) ---")
+            print((cp.stderr or "")[-1500:])
             sys.exit(cp.returncode)
         _log("hf push: OK")
 
