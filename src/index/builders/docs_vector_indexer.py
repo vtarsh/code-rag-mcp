@@ -442,6 +442,7 @@ def build_docs_vectors(
     log_every: int = 500,
     no_reindex: bool = False,
     pause_daemon: bool = True,
+    model_key: str = "docs",
 ) -> dict:
     """Embed all doc-flavoured chunks from ``db_path`` into ``lance_dir``.
 
@@ -452,13 +453,16 @@ def build_docs_vectors(
       compete for RAM. launchd respawns the daemon after the build.
     - ``no_reindex``: skip IVF-PQ (re)build — useful when chaining multiple
       incremental runs that share one reindex at the end.
+    - ``model_key`` (default "docs"): which entry in ``src.models``'s
+      EMBEDDING_MODELS to load. Switch to a Run-1 candidate key (e.g.
+      "docs-nomic-ft-run1") to bench an FT'd model into its own lance dir.
     - The embed loop streams each batch directly into LanceDB and releases
       refs + MPS cache between batches; a psutil watchdog hard-exits on
       memory pressure so the next run resumes from the rowid checkpoint.
     """
     from src.models import get_model_config
 
-    mcfg = get_model_config("docs")
+    mcfg = get_model_config(model_key)
     db_path = Path(db_path)
     lance_dir = Path(lance_dir)
     checkpoint_path = Path(checkpoint_path) if checkpoint_path else None

@@ -27,8 +27,8 @@ from pathlib import Path
 # --- Resolve paths from environment or defaults ---
 BASE_DIR = Path(os.getenv("CODE_RAG_HOME", Path.home() / ".code-rag"))
 DB_PATH = BASE_DIR / "db" / "knowledge.db"
-LANCE_DIR = BASE_DIR / "db" / "vectors.lance.docs"
-CHECKPOINT_PATH = BASE_DIR / "db" / "docs_checkpoint.json"
+DEFAULT_lance_dir = BASE_DIR / "db" / "vectors.lance.docs"
+DEFAULT_CHECKPOINT_PATH = BASE_DIR / "db" / "docs_checkpoint.json"
 
 # --- Add project root to sys.path so `src...` imports resolve from this script ---
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -42,11 +42,19 @@ def _print_help() -> None:
     print(HELP_TEXT.strip())
 
 
-def parse_args() -> tuple[bool, set[str] | None, bool]:
-    """Parse CLI arguments. Returns (force, only_repos, no_reindex)."""
+def parse_args() -> tuple[bool, set[str] | None, bool, str]:
+    """Parse CLI arguments. Returns (force, only_repos, no_reindex, model_key).
+
+    ``--model={key}`` selects an entry in ``src.models.EMBEDDING_MODELS``;
+    defaults to ``"docs"`` (the production nomic-v1.5). For Run 1 docs FT
+    candidates pass e.g. ``--model=docs-nomic-ft-run1``; the lance dir is
+    derived from the EmbeddingModel.lance_dir field so each candidate gets
+    its own table.
+    """
     force = False
     only_repos: set[str] | None = None
     no_reindex = False
+    model_key = "docs"
 
     for arg in sys.argv[1:]:
         if arg in {"-h", "--help"}:
@@ -60,16 +68,21 @@ def parse_args() -> tuple[bool, set[str] | None, bool]:
                 only_repos = {r.strip() for r in raw.split(",") if r.strip()}
         elif arg == "--no-reindex":
             no_reindex = True
+        elif arg.startswith("--model="):
+            model_key = arg.split("=", 1)[1].strip()
+            if not model_key:
+                print("--model= requires a value", file=sys.stderr)
+                sys.exit(2)
         else:
             print(f"Unknown argument: {arg}", file=sys.stderr)
             print("Run with --help for usage.", file=sys.stderr)
             sys.exit(2)
 
-    return force, only_repos, no_reindex
+    return force, only_repos, no_reindex, model_key
 
 
 def main() -> int:
-    force, only_repos, no_reindex = parse_args()
+    force, only_repos, no_reindex, model_key = parse_args()
 
     # Basic sanity check — fail fast with an actionable message if the DB is missing.
     if not DB_PATH.exists():
@@ -77,10 +90,20 @@ def main() -> int:
         print("Run the indexer first (make build or scripts/build_index.py).", file=sys.stderr)
         return 1
 
+    # Resolve per-model lance dir + checkpoint via the registry. Each candidate
+    # gets its own LanceDB table + checkpoint so a Run-1 FT bench cannot
+    # corrupt the production "docs" index.
+    sys.path.insert(0, str(_PROJECT_ROOT))
+    from src.models import get_model_config
+
+    mcfg = get_model_config(model_key)
+    lance_dir = BASE_DIR / "db" / mcfg.lance_dir
+    checkpoint_path = BASE_DIR / "db" / f"docs_checkpoint_{mcfg.key}.json"
+
     print("=" * 60)
     print("Building Docs Vector Embeddings (two-tower)")
-    print("Model: nomic-ai/nomic-embed-text-v1.5 (768d)")
-    print(f"Output: {LANCE_DIR}")
+    print(f"Model: {mcfg.name} ({mcfg.dim}d) [key={mcfg.key}]")
+    print(f"Output: {lance_dir}")
     if only_repos:
         print(f"Mode: incremental ({len(only_repos)} repos)")
     elif force:
@@ -111,12 +134,13 @@ def main() -> int:
     try:
         result = build_docs_vectors(
             db_path=DB_PATH,
-            lance_dir=LANCE_DIR,
+            lance_dir=lance_dir,
             force=force,
-            checkpoint_path=CHECKPOINT_PATH,
+            checkpoint_path=checkpoint_path,
             only_repos=only_repos,
             log_every=500,
             no_reindex=no_reindex,
+            model_key=model_key,
         )
     except Exception as exc:
         print(f"ERROR: docs vector build failed: {exc}", file=sys.stderr)
@@ -129,28 +153,28 @@ def main() -> int:
         total_vectors = result.get("total_vectors") or result.get("vectors") or result.get("count")
         size_mb = result.get("size_mb") or result.get("size_on_disk_mb")
 
-    if total_vectors is None and LANCE_DIR.exists():
+    if total_vectors is None and lance_dir.exists():
         try:
             import lancedb  # local import — lancedb is heavy
 
-            db = lancedb.connect(str(LANCE_DIR))
+            db = lancedb.connect(str(lance_dir))
             if "chunks" in db.table_names():
                 total_vectors = db.open_table("chunks").count_rows()
         except Exception:
             total_vectors = None
 
-    if size_mb is None and LANCE_DIR.exists():
+    if size_mb is None and lance_dir.exists():
         try:
-            size_mb = sum(f.stat().st_size for f in LANCE_DIR.rglob("*") if f.is_file()) / (1024 * 1024)
+            size_mb = sum(f.stat().st_size for f in lance_dir.rglob("*") if f.is_file()) / (1024 * 1024)
         except Exception:
             size_mb = None
 
     print()
     print("=" * 60)
-    print(f"Docs vector store: {LANCE_DIR}")
+    print(f"Docs vector store: {lance_dir}")
     print(f"Total vectors: {total_vectors if total_vectors is not None else 'unknown'}")
-    print("Dimensions: 768")
-    print("Model: nomic-ai/nomic-embed-text-v1.5 (docs)")
+    print(f"Dimensions: {mcfg.dim}")
+    print(f"Model: {mcfg.name} ({mcfg.key})")
     if size_mb is not None:
         print(f"Size on disk: {size_mb:.1f} MB")
     else:

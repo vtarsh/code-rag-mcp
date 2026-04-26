@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+
 @dataclass(frozen=True)
 class EmbeddingModel:
     """Configuration for an embedding model."""
@@ -22,6 +23,7 @@ class EmbeddingModel:
     lance_dir: str  # Subdirectory under db/ for this model's vectors
     description: str  # Shown in setup wizard
     document_prefix: str = ""  # Prepended to documents at index time (empty = no prefix)
+
 
 EMBEDDING_MODELS: dict[str, EmbeddingModel] = {
     "coderank": EmbeddingModel(
@@ -66,10 +68,54 @@ EMBEDDING_MODELS: dict[str, EmbeddingModel] = {
         lance_dir="vectors.lance.docs",
         description="General-text embeddings for docs tower. ~550MB RAM.",
     ),
+    # Run 1 docs FT candidates (registered before train so the bench step
+    # can resolve {tag} via this registry). HF Hub repos are populated at
+    # the end of the train pod's run; if the repo is missing locally and
+    # offline, sentence-transformers will try to download and fail clearly.
+    "docs-nomic-ft-run1": EmbeddingModel(
+        key="docs-nomic-ft-run1",
+        name="Tarshevskiy/pay-com-docs-nomic-ft-run1",
+        dim=768,
+        query_prefix="search_query: ",
+        document_prefix="search_document: ",
+        trust_remote_code=True,
+        batch_size=16,
+        short_limit=2000,
+        long_limit=8000,
+        lance_dir="vectors.lance.docs.docs-nomic-ft-run1",
+        description="FT'd nomic-embed-text-v1.5 on pay-com docs (Run 1).",
+    ),
+    "docs-mxbai-ft-run1": EmbeddingModel(
+        key="docs-mxbai-ft-run1",
+        name="Tarshevskiy/pay-com-docs-mxbai-ft-run1",
+        dim=1024,
+        query_prefix="",
+        document_prefix="",
+        trust_remote_code=False,
+        batch_size=12,
+        short_limit=2000,
+        long_limit=8000,
+        lance_dir="vectors.lance.docs.docs-mxbai-ft-run1",
+        description="FT'd mxbai-embed-large-v1 on pay-com docs (Run 1).",
+    ),
+    "docs-gte-base-ft-run1": EmbeddingModel(
+        key="docs-gte-base-ft-run1",
+        name="Tarshevskiy/pay-com-docs-gte-base-ft-run1",
+        dim=768,
+        query_prefix="",
+        document_prefix="",
+        trust_remote_code=True,
+        batch_size=16,
+        short_limit=2000,
+        long_limit=8000,
+        lance_dir="vectors.lance.docs.docs-gte-base-ft-run1",
+        description="FT'd Alibaba-NLP/gte-base-en-v1.5 on pay-com docs (Run 1).",
+    ),
 }
 
 DEFAULT_MODEL = "coderank"
 DOCS_MODEL = "docs"
+
 
 def get_model_config(key: str | None = None) -> EmbeddingModel:
     """Get model config by key. Returns default if key is None or invalid."""
