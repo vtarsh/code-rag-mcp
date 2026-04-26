@@ -135,13 +135,16 @@ def _tar_overlay(host: str, port: int, local_dirs: list[str], timeout: int = 120
                 stdout="",
                 stderr=f"missing local dir: {d}",
             )
+    # COPYFILE_DISABLE=1: prevent macOS from injecting AppleDouble (._*) files.
+    # --no-same-owner / --no-xattrs on remote: pod runs as root, so any uid 501
+    # mapping from Mac would error noisily and tar exits non-zero.
     cmd = (
         "set -o pipefail; "
-        f"tar -czf - -C {str(REPO_ROOT)!r} {' '.join(local_dirs)} | "
+        f"COPYFILE_DISABLE=1 tar --no-xattrs -czf - -C {str(REPO_ROOT)!r} {' '.join(local_dirs)} | "
         f"ssh -i {str(DEFAULT_SSH_KEY)!r} -p {port} "
         "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "
         f"-o LogLevel=ERROR root@{host} "
-        f"'mkdir -p {REMOTE_REPO_DIR} && cd {REMOTE_REPO_DIR} && tar -xzf -'"
+        f"'mkdir -p {REMOTE_REPO_DIR} && cd {REMOTE_REPO_DIR} && tar --no-same-owner -xzf -'"
     )
     return subprocess.run(["bash", "-c", cmd], capture_output=True, text=True, timeout=timeout)
 
