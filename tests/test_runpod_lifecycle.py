@@ -1284,6 +1284,39 @@ def test_gpu_alias_resolution_maps_friendly_tags():
     assert full_pipeline.GPU_ALIASES["a100"] == "a100-80g"
 
 
+def test_make_train_command_routes_docs_kind_to_bi_encoder_trainer():
+    """`kind=docs` must invoke train_docs_embedder.py (the bi-encoder trainer)."""
+    cmd = full_pipeline._make_train_command(
+        kind="docs",
+        base_model="nomic-ai/nomic-embed-text-v1.5",
+        train_data_remote="/workspace/train.jsonl",
+        out_dir_remote="/workspace/tag_full",
+        max_steps=500,
+    )
+    assert "scripts/runpod/train_docs_embedder.py" in cmd
+    assert "scripts/runpod/train_reranker_ce.py" not in cmd
+    assert "--steps=500" in cmd
+
+
+def test_make_train_command_routes_reranker_kind_to_ce_trainer():
+    """`kind=reranker` must invoke train_reranker_ce.py (the cross-encoder trainer).
+
+    This is the contract that lets full_pipeline run a reranker candidate with
+    the same orchestrator as a docs candidate — only the trainer script path
+    differs."""
+    cmd = full_pipeline._make_train_command(
+        kind="reranker",
+        base_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        train_data_remote="/workspace/combined_train.jsonl",
+        out_dir_remote="/workspace/rerank-l6_full",
+        max_steps=300,
+    )
+    assert "scripts/runpod/train_reranker_ce.py" in cmd
+    assert "scripts/runpod/train_docs_embedder.py" not in cmd
+    assert "--steps=300" in cmd
+    assert "--base=cross-encoder/ms-marco-MiniLM-L-6-v2" in cmd
+
+
 def test_run_pipeline_rejects_unknown_kind(smoke_inputs):
     with pytest.raises(ValueError, match="kind"):
         full_pipeline.run_pipeline(
@@ -1557,3 +1590,207 @@ def test_tar_overlay_to_returns_nonzero_when_local_dir_missing(tmp_path):
     )
     assert cp.returncode != 0
     assert "missing local dir" in cp.stderr
+
+
+# ============================================================================
+# wait_for_ssh_ready: post-spawn SSH-endpoint polling guard
+# ============================================================================
+#
+# RunPod's POST /pods returns desiredStatus="RUNNING" immediately, but
+# publicIp="" and portMappings={} for ~30-90 seconds while the container
+# actually boots. Without polling, _spawn_pod raced into
+# "pod missing ssh_host/ssh_port" → exit 1 every time. The contract:
+#   - returns immediately if SSH info is already populated;
+#   - polls until publicIp + portMappings.22 land;
+#   - raises PodLifecycleError after timeout_sec if they never land.
+
+
+def test_wait_for_ssh_ready_returns_immediately_when_endpoint_populated():
+    """If the very first GET /pods/<id> already has publicIp + portMappings,
+    we must NOT sleep or poll a second time."""
+    sleep_calls: list[float] = []
+    poll_calls: list[str] = []
+
+    def _get_pod(pod_id):
+        poll_calls.append(pod_id)
+        # Schema confirmed against live RunPod 2026-04-26 — both running pods
+        # had this exact shape (string-keyed portMappings, str publicIp).
+        return {
+            "id": pod_id,
+            "desiredStatus": "RUNNING",
+            "publicIp": "63.141.33.57",
+            "portMappings": {"22": 22130},
+        }
+
+    out = pod_lifecycle.wait_for_ssh_ready(
+        "pod_ready",
+        timeout_sec=300,
+        sleep_sec=10,
+        get_pod_fn=_get_pod,
+        sleep_fn=lambda s: sleep_calls.append(s),
+        now_fn=lambda: 0.0,
+    )
+    assert out == {
+        "ssh_host": "63.141.33.57",
+        "ssh_port": 22130,
+        "pod_id": "pod_ready",
+    }
+    assert poll_calls == ["pod_ready"], "exactly one GET when info is already there"
+    assert sleep_calls == [], "must not sleep when SSH info is present on first poll"
+
+
+def test_wait_for_ssh_ready_polls_until_endpoint_appears():
+    """Mock get_pod to return empty publicIp twice, then the populated dict."""
+    fake_now = [0.0]
+    sleep_calls: list[float] = []
+
+    def _sleep(s):
+        sleep_calls.append(s)
+        fake_now[0] += s
+
+    responses = [
+        # tick 0: pod created, no IP yet (the bug-causing race)
+        {"id": "p", "desiredStatus": "RUNNING", "publicIp": "", "portMappings": {}},
+        # tick 1: still booting
+        {"id": "p", "desiredStatus": "RUNNING", "publicIp": "", "portMappings": {}},
+        # tick 2: container up, SSH endpoint published
+        {
+            "id": "p",
+            "desiredStatus": "RUNNING",
+            "publicIp": "194.68.245.198",
+            "portMappings": {"22": 22145},
+        },
+    ]
+    polls = [0]
+
+    def _get_pod(pod_id):
+        i = polls[0]
+        polls[0] += 1
+        return responses[i]
+
+    out = pod_lifecycle.wait_for_ssh_ready(
+        "p",
+        timeout_sec=300,
+        sleep_sec=10,
+        get_pod_fn=_get_pod,
+        sleep_fn=_sleep,
+        now_fn=lambda: fake_now[0],
+    )
+    assert out == {"ssh_host": "194.68.245.198", "ssh_port": 22145, "pod_id": "p"}
+    assert polls[0] == 3, "should poll until endpoint appears"
+    assert sleep_calls == [10, 10], "two sleeps before the third (successful) poll"
+
+
+def test_wait_for_ssh_ready_raises_after_timeout():
+    """If publicIp + portMappings.22 never appear, raise PodLifecycleError
+    with the last seen pod info attached for postmortem."""
+    fake_now = [0.0]
+
+    def _sleep(s):
+        fake_now[0] += s
+
+    def _get_pod(pod_id):
+        # Stuck in the boot race forever.
+        return {
+            "id": pod_id,
+            "desiredStatus": "RUNNING",
+            "publicIp": "",
+            "portMappings": {},
+            "templateId": "",
+        }
+
+    with pytest.raises(pod_lifecycle.PodLifecycleError) as exc_info:
+        pod_lifecycle.wait_for_ssh_ready(
+            "stuck_pod",
+            timeout_sec=30,
+            sleep_sec=10,
+            get_pod_fn=_get_pod,
+            sleep_fn=_sleep,
+            now_fn=lambda: fake_now[0],
+        )
+    msg = str(exc_info.value)
+    assert "stuck_pod" in msg
+    assert "30s" in msg
+    # Error message should embed the last known pod state for postmortem.
+    assert "publicIp" in msg or "portMappings" in msg
+
+
+# --- _spawn_pod integration: ensures wait_for_ssh_ready is wired in ---------
+
+
+def test_spawn_pod_calls_wait_for_ssh_ready_and_returns_populated_endpoint(
+    monkeypatch,
+    tmp_path,
+):
+    """`_spawn_pod` must invoke `wait_for_ssh_ready` so the returned dict
+    always has non-empty ssh_host/ssh_port — even when start_pod's response
+    has them blank (the actual RunPod race condition)."""
+    # Empty ssh pubkey path so _spawn_pod skips the read step.
+    fake_pub = tmp_path / "missing.pub"
+
+    def _start_pod(**_):
+        # Simulate the real-world race: pod created, but no IP/port yet.
+        return {
+            "id": "pod_race",
+            "desiredStatus": "RUNNING",
+            "publicIp": "",
+            "portMappings": {},
+            "env": {"PUBLIC_KEY": "ssh-ed25519 AAAA test"},
+        }
+
+    wait_calls: list[dict] = []
+
+    def _wait(pod_id, **kwargs):
+        wait_calls.append({"pod_id": pod_id, **kwargs})
+        return {
+            "ssh_host": "1.2.3.4",
+            "ssh_port": 22130,
+            "pod_id": pod_id,
+        }
+
+    monkeypatch.setattr(full_pipeline.pod_lifecycle, "start_pod", _start_pod)
+    monkeypatch.setattr(full_pipeline.pod_lifecycle, "wait_for_ssh_ready", _wait)
+
+    out = full_pipeline._spawn_pod(
+        candidate_tag="t",
+        gpu="4090",
+        volume_gb=20,
+        time_limit_min=60,
+        ssh_public_key_path=fake_pub,
+        spending_cap_usd=1.0,
+    )
+    assert out["ssh_host"] == "1.2.3.4"
+    assert out["ssh_port"] == 22130
+    assert out["pod_id"] == "pod_race"
+    assert len(wait_calls) == 1
+    assert wait_calls[0]["pod_id"] == "pod_race"
+    # env still redacted in the merged dict.
+    assert out["env"] == {"PUBLIC_KEY": "***"}
+
+
+def test_spawn_pod_propagates_ssh_ready_timeout(monkeypatch, tmp_path):
+    """If `wait_for_ssh_ready` times out, `_spawn_pod` must propagate the
+    PodLifecycleError so run_pipeline maps it to EXIT_SMOKE_FAILED with
+    failure_step='spawn' (instead of pretending the pod is reachable)."""
+    fake_pub = tmp_path / "missing.pub"
+
+    monkeypatch.setattr(
+        full_pipeline.pod_lifecycle,
+        "start_pod",
+        lambda **_: {"id": "pod_stuck", "publicIp": "", "portMappings": {}},
+    )
+
+    def _wait(pod_id, **_):
+        raise pod_lifecycle.PodLifecycleError(f"Pod {pod_id} did not become SSH-ready in 300s. Last info: ...")
+
+    monkeypatch.setattr(full_pipeline.pod_lifecycle, "wait_for_ssh_ready", _wait)
+
+    with pytest.raises(pod_lifecycle.PodLifecycleError, match="SSH-ready"):
+        full_pipeline._spawn_pod(
+            candidate_tag="t",
+            gpu="4090",
+            volume_gb=20,
+            time_limit_min=60,
+            ssh_public_key_path=fake_pub,
+            spending_cap_usd=1.0,
+        )

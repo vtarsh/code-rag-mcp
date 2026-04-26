@@ -280,10 +280,18 @@ def _spawn_pod(
     time_limit_min: int = SMOKE_TIME_LIMIT_MIN,
     ssh_public_key_path: Path = DEFAULT_SSH_PUB,
     spending_cap_usd: float = 5.0,
+    ssh_ready_timeout_sec: int = 300,
+    ssh_ready_sleep_sec: int = 10,
 ) -> dict:
     """Spawn a TRAIN pod via pod_lifecycle.start_pod with Bug-3-fixed defaults.
 
-    Returns the redacted pod dict (with `ssh_host`, `ssh_port`, `pod_id`).
+    Returns the redacted pod dict with ``ssh_host``, ``ssh_port``, ``pod_id``
+    guaranteed populated — we poll
+    :func:`pod_lifecycle.wait_for_ssh_ready` after the create call because
+    RunPod returns the pod object with ``publicIp=""`` / ``portMappings={}``
+    for ~30-90 seconds while the container actually boots. Without the wait,
+    every spawn raced into "pod missing ssh_host/ssh_port" → exit 1.
+
     Raises PodLifecycleError on failure (caller catches at orchestrator level).
 
     Forwards HF_TOKEN from the local environment as a pod env var so that
@@ -313,7 +321,23 @@ def _spawn_pod(
         purpose="train",
         name=f"pipeline-{candidate_tag}",
     )
-    return pod_lifecycle._redact_pod_for_print(pod)
+    redacted = pod_lifecycle._redact_pod_for_print(pod)
+    pod_id = redacted.get("pod_id") or pod.get("id") or pod.get("podId")
+    if not pod_id:
+        raise PodLifecycleError(f"start_pod returned no id; cannot poll for SSH readiness: {redacted!r}")
+    # Race window: the POST response often has publicIp="" / portMappings={}
+    # for ~30-90s while the container actually boots. Poll GET /pods/<id>
+    # until both fields appear; raise PodLifecycleError on timeout so the
+    # caller treats it as a spawn failure (not a silent provisioning hang).
+    ssh = pod_lifecycle.wait_for_ssh_ready(
+        pod_id,
+        timeout_sec=ssh_ready_timeout_sec,
+        sleep_sec=ssh_ready_sleep_sec,
+    )
+    redacted["ssh_host"] = ssh["ssh_host"]
+    redacted["ssh_port"] = ssh["ssh_port"]
+    redacted["pod_id"] = ssh["pod_id"]
+    return redacted
 
 
 def _stop_pod_safely(pod_id: str | None, result: PipelineResult) -> None:
@@ -565,17 +589,32 @@ def _make_smoke_command(
 
 def _make_train_command(
     *,
+    kind: str,
     base_model: str,
     train_data_remote: str,
     out_dir_remote: str,
     max_steps: int,
     extra_args: str = "",
 ) -> str:
-    """Bash command for the full-train step (run on pod)."""
+    """Bash command for the full-train step (run on pod).
+
+    Routes to the right trainer based on `kind`:
+      * "docs"     -> ``scripts/runpod/train_docs_embedder.py`` (bi-encoder ST)
+      * "reranker" -> ``scripts/runpod/train_reranker_ce.py`` (cross-encoder)
+
+    The two trainers share enough of a CLI surface (``--base``/``--train``/
+    ``--steps``/``--out``) that the only thing that differs is the script
+    path. Keeping the routing here means ``run_pipeline`` doesn't need to
+    know about the per-kind trainer implementation details.
+    """
+    if kind == "reranker":
+        trainer = "scripts/runpod/train_reranker_ce.py"
+    else:
+        trainer = "scripts/runpod/train_docs_embedder.py"
     parts = [
         "set -euxo pipefail",
         f"cd {REMOTE_REPO_DIR}",
-        f"python3 scripts/runpod/train_docs_embedder.py "
+        f"python3 {trainer} "
         f"--base={base_model} --train={train_data_remote} "
         f"--steps={max_steps} --out={out_dir_remote} {extra_args}".strip(),
     ]
@@ -815,6 +854,7 @@ def run_pipeline(
         # --- Step 3: full train -------------------------------------------
         train_out_remote = f"/workspace/{candidate_tag}_full"
         train_cmd = _make_train_command(
+            kind=kind,
             base_model=base_model,
             train_data_remote=train_data_remote,
             out_dir_remote=train_out_remote,
