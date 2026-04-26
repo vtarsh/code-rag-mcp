@@ -1,4 +1,36 @@
-# Next-Session Prompt — 2026-04-24 late (15:45 EEST, mid-rebuild handoff)
+# Next-Session Prompt — 2026-04-27 (Run 1+2+3 + Jira eval + routing finding)
+
+> **READ FIRST:** `.claude/debug/run2_final_report.md` — повний звіт, грабли, всі знайдені числа, бекмарки, що працює/що ні.
+
+## TL;DR за день 2026-04-26 → 27
+
+**Найбільша знахідка:** РОУТИНГ замість заміни. Один реранкер на все = trade-off. Розділення:
+- `if is_doc_intent: skip reranker` (або mxbai FT — ідентично) → docs +4.5pp top-10 vs прод L6
+- `else: use l12 FT instead of L6` → code +3.31pp top-10 vs прод L6 (POSITIVE on n=908 jira eval, bootstrap-confirmed)
+- **Зважений combined: +3.22pp top-10 vs поточного прод (47% docs / 53% code).** Один з небагатьох ship-able win'ів.
+
+**Що тренували сьогодні (FT'd на HF Hub Tarshevskiy/...):**
+- `pay-com-rerank-l12-ft-run1` — **WINNER на коді** (n=908)
+- `pay-com-rerank-mxbai-ft-run1` — на коді pass-through (=raw retrieval), на доках NOISE vs L6
+- `pay-com-rerank-bge-h100-{bs2,bs8}-perftest` — програв всім, дорого
+- `pay-com-docs-mxbai-ft-run1` — empty vectors (Bug 6o NaN)
+- `pay-com-docs-gte-base-ft-run1` — built (109m), R@10 0.2093 (-3pp vs nomic)
+- `pay-com-docs-nomic-ft-run1` — train+HF push OK (Bug 6p ROOT FIX landed `27afc27`), build_vectors timed out 2h, model на Hub але без локальних векторів
+
+**Перший action для наступної сесії:**
+1. Впровадити роутинг у `src/search/hybrid.py`: `is_doc_intent → skip rerank; else → l12 FT replaces L6`. ~30 LOC. Real +3.22pp top-10.
+2. Re-eval після впровадження на jira_eval_n900 + doc_intent_eval_v3_n200.
+
+**Що НЕ робити:**
+- mxbai-large + ST.fit() — гарантовано NaN (Bug 6o, loss-agnostic)
+- mxbai-rerank як рerankerа на коді — pass-through, без бенефіту
+- bge-reranker-v2-m3 — 5x дорожче за mxbai, гірше за все
+- Робити висновки з n=80/n=90 evals — bootstrap CI ширші за дельти
+- pool size sweep для l12 — параметр для нього мертвий (тестував 50/100/200/300, всі ідентичні)
+
+---
+
+# Next-Session Prompt — 2026-04-24 late (15:45 EEST, mid-rebuild handoff) [LEGACY BELOW]
 
 Copy this into the first user message of a new Claude Code session. Next session starts with zero conversation memory; everything important is captured below.
 
