@@ -6,19 +6,37 @@ First-ever successful end-to-end pod training cycle for 6 candidates.
 mxbai-rerank-base / bge-reranker-v2-m3). Defaults recipe (1 epoch,
 lr=2e-5). Find candidates worth sweep-tuning in Run 2.
 
-## Live results — docs eval (doc_intent_eval_v3.jsonl, n_eval=100)
+## Live results — DUAL-AXIS
 
-| candidate          | kind     | base                              | R@10   | hit@5  | hit@10 | p50ms | p95ms | status |
-|--------------------|----------|-----------------------------------|--------|--------|--------|-------|-------|--------|
-| rerank-l12 (run1)  | reranker | ms-marco-MiniLM-L-12-v2           | 0.1891 | 0.3889 | 0.4222 | 596   | 964   | DONE (HF push fail; respawned) |
-| rerank-mxbai (run1)| reranker | mxbai-rerank-base-v1              | **0.2609** | **0.4556** | **0.5778** | 632 | **851** | DONE (HF push fail; respawned) |
-| rerank-bge         | reranker | bge-reranker-v2-m3                | …      | …      | …      | …     | …     | running (batch=4) |
-| docs-nomic-ft      | docs     | nomic-embed-text-v1.5             | …      | …      | …      | …     | …     | retry (HF fix) |
-| docs-mxbai-ft      | docs     | mxbai-embed-large-v1              | …      | …      | …      | …     | …     | retry (HF fix) |
-| docs-gte-base-ft   | docs     | gte-base-en-v1.5                  | …      | …      | …      | …     | …     | retry (HF fix) |
+### Docs eval (doc_intent_eval_v3.jsonl, n_eval=100)
 
-Baseline reference (vanilla nomic + L6 reranker, eval-v3): R@10 = 0.2509.
-Stratum-gated A2 (P10 deployed): R@10 = 0.2427.
+| candidate          | R@10   | hit@5  | hit@10 | p50ms | p95ms |
+|--------------------|--------|--------|--------|-------|-------|
+| baseline L6 (prod) | ~0.25  | …      | …      | …     | …     |
+| rerank-l12 (FT)    | 0.1891 | 0.3889 | 0.4222 | 596   | 964   |
+| **rerank-mxbai (FT)** | **0.2609** | **0.4556** | **0.5778** | 632 | **851** |
+
+### Code eval (code_intent_eval_v1.jsonl, n_eval=80) — LOCAL Mac MPS
+
+| candidate          | R@10   | hit@5  | p95ms |
+|--------------------|--------|--------|-------|
+| baseline L6 (prod) | 0.1756 | 0.525  | **341** |
+| **rerank-l12 (FT)** | **0.1869** | **0.55** | 500 |
+| rerank-mxbai (FT)  | 0.1288 | 0.4875 | 1046  |
+
+### Combined verdict
+- **rerank-l12 (FT)**: docs **-6pp**, code **+1.1pp**, latency 1.5x. *Marginal code win, big docs regression.*
+- **rerank-mxbai (FT)**: docs **+1pp**, code **-4.7pp**, latency 3x. *Docs win cancelled by code regression.*
+- **Neither dominates the production L6.** Single-axis bench would have crowned mxbai falsely.
+
+### Docs-tower candidates — all FAILED Run 1 (3 distinct bugs)
+| candidate         | failure mode                                     | bug |
+|-------------------|--------------------------------------------------|-----|
+| docs-nomic-ft     | state_dict missing keys when loading from HF Hub | 6p  |
+| docs-mxbai-ft     | NaN vectors in embeddings                        | 6o (FIXED, on_bad_vectors='drop' filter) |
+| docs-gte-base-ft  | CUDA index out of bounds (tokenizer mismatch?)  | 6q  |
+
+Defer docs candidates investigation to next iteration.
 
 ## Code eval gap (KNOWN)
 All Run 1 benches use `doc_intent_eval_v3` only. Reranker trained on
