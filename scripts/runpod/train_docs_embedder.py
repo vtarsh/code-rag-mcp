@@ -202,6 +202,105 @@ def _build_loss_and_data(loss_name: str, rows: list[dict], model: Any) -> tuple[
 # ----- training entrypoint ---------------------------------------------------
 
 
+def _save_st_format_proper(model: Any, base: str, out_dir: Path) -> None:
+    """Save a SentenceTransformer that uses a custom-arch base (nomic-bert, gte/new-impl)
+    in a way that survives reload.
+
+    Bug 6p root cause: ``transformers.PreTrainedModel.save_pretrained`` adds an
+    extra ``encoder.`` prefix to nomic-bert (and similar custom-arch) state_dict
+    keys when serializing to safetensors. So a vanilla ``model.save(out_dir)``
+    writes ``encoder.encoder.layers.X.*`` keys but reload via SentenceTransformer
+    (which calls ``AutoModel.from_pretrained`` → custom modeling ``from_pretrained``)
+    expects ``encoder.layers.X.*`` and silently falls back to random weights
+    (cosine_sim of post-reload embedding ≈ -0.0001 vs original ≈ +0.0066).
+
+    Workaround: bypass ``save_pretrained``, dump the inner ``auto_model``'s
+    ``state_dict()`` directly via ``safetensors.torch.save_file``. ``state_dict()``
+    has the *correct* (clean) keys; only the saver wraps them.
+
+    Layout written matches the original `nomic-ai/nomic-embed-text-v1.5` repo:
+      - model.safetensors, config.json, tokenizer.* — at TOP
+      - sentence_bert_config.json, modules.json, config_sentence_transformers.json — at TOP
+      - 1_Pooling/config.json
+      - modeling_*.py + configuration_*.py — at TOP (trust_remote_code looks here)
+
+    Verified locally 2026-04-26: post-reload cosine = 1.000000.
+    """
+    import shutil
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    inner = model._first_module().auto_model
+
+    try:
+        from safetensors.torch import save_file
+    except ImportError as e:
+        raise RuntimeError("safetensors is required for Bug-6p-safe save") from e
+
+    save_file(inner.state_dict(), str(out_dir / "model.safetensors"))
+    inner.config.save_pretrained(str(out_dir))
+    model.tokenizer.save_pretrained(str(out_dir))
+
+    pooling_dir = out_dir / "1_Pooling"
+    pooling_dir.mkdir(exist_ok=True)
+    pooling_module = model._modules["1"]
+    (pooling_dir / "config.json").write_text(json.dumps(pooling_module.get_config_dict()))
+
+    (out_dir / "modules.json").write_text(
+        json.dumps(
+            [
+                {"idx": 0, "name": "0", "path": "", "type": "sentence_transformers.models.Transformer"},
+                {"idx": 1, "name": "1", "path": "1_Pooling", "type": "sentence_transformers.models.Pooling"},
+            ]
+        )
+    )
+    (out_dir / "sentence_bert_config.json").write_text(
+        json.dumps(
+            {
+                "max_seq_length": model._first_module().max_seq_length,
+                "do_lower_case": model._first_module().do_lower_case,
+            }
+        )
+    )
+    (out_dir / "config_sentence_transformers.json").write_text(json.dumps({}))
+
+    # Custom modeling .py files live in a *companion* repo for nomic
+    # (`nomic-ai/nomic-bert-2048`); auto_map in config.json points to it.
+    # base repo's snapshot_download with allow_patterns=['*.py'] returns
+    # nothing for nomic-embed-text-v1.5 (it has no .py at root). Pull from
+    # config.auto_map's referenced repo when present.
+    py_repos = []
+    auto_map = getattr(inner.config, "auto_map", None) or {}
+    for v in auto_map.values():
+        # Strings of the form "nomic-ai/nomic-bert-2048--modeling_hf_nomic_bert.NomicBertModel"
+        if isinstance(v, str) and "--" in v:
+            repo = v.split("--", 1)[0]
+            if repo and repo not in py_repos:
+                py_repos.append(repo)
+    if not py_repos:
+        py_repos.append(base)  # standard arch — base repo holds the .py
+
+    from huggingface_hub import snapshot_download
+
+    copied: list[str] = []
+    for repo in py_repos:
+        try:
+            cache = Path(snapshot_download(repo_id=repo, allow_patterns=["*.py"]))
+        except Exception as e:
+            print(f"[train] WARN snapshot_download({repo}, *.py): {e}", flush=True)
+            continue
+        for py in cache.glob("*.py"):
+            dest = out_dir / py.name
+            if dest.exists():
+                continue
+            shutil.copy2(py, dest)
+            copied.append(py.name)
+
+    print(
+        f"[train] saved (Bug-6p-safe) to {out_dir}; copied modeling files: {sorted(set(copied))}",
+        flush=True,
+    )
+
+
 def _copy_custom_modeling_files(base: str, out_dir: Path) -> None:
     """Copy *.py custom modeling files from base model's HF cache into out_dir.
 
@@ -475,13 +574,14 @@ def train(
         print(f"[train] pushed to https://huggingface.co/{target}")
     else:
         out_path = Path(target)
-        out_path.mkdir(parents=True, exist_ok=True)
-        model.save(str(out_path))
-        print(f"[train] saved to {out_path}")
-        # Bug 6p: SentenceTransformer.save() does NOT copy custom modeling files
-        # (modeling_hf_nomic_bert.py for nomic, modeling.py for Alibaba-NLP/new-impl)
-        # that the base model's config.json auto_map points to. A downstream
-        # HF Hub upload of this dir + reload via
+        # Bug 6p root-cause fix (verified locally 2026-04-26 cos=1.000000):
+        # bypass ST.save() / save_pretrained(), dump state_dict directly via
+        # safetensors. Custom-arch (nomic-bert, gte/new-impl) get an extra
+        # `encoder.` prefix from the standard saver, breaking reload silently
+        # (model loads with random weights, cos~=-0.0001).
+        _save_st_format_proper(model, base, out_path)
+        # Legacy fallback comment (no-op now — _save_st_format_proper handles
+        # everything including .py files):
         # SentenceTransformer(repo, trust_remote_code=True) then falls back to
         # standard BertModel arch and the state_dict mismatches the FT'd weights.
         # Copy *.py files from the base model's HF cache so the saved repo is
