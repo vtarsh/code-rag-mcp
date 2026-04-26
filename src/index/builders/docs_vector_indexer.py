@@ -384,20 +384,40 @@ def _open_or_create_writer(
 
     state: dict[str, Any] = {"table": None}
 
+    def _drop_bad_vectors(rows: list[dict]) -> list[dict]:
+        # Bug 6o: FT'd models occasionally emit NaN/Inf embeddings on edge-case
+        # chunks (mixed precision, tokenizer overflow). LanceDB rejects the
+        # whole batch on the first bad vector, killing a 48k-row build over
+        # one bad row. Pre-filter so the build continues — losing a handful
+        # of chunks beats losing the entire run.
+        import math
+
+        clean = []
+        dropped = 0
+        for r in rows:
+            v = r.get("vector") or []
+            if any(math.isnan(x) or math.isinf(x) for x in v):
+                dropped += 1
+                continue
+            clean.append(r)
+        if dropped:
+            print(f"  [writer] dropped {dropped} rows with NaN/Inf vectors", flush=True)
+        return clean
+
     def writer_fn(batch_data: list[dict]) -> None:
         if not batch_data:
             return
+        clean = _drop_bad_vectors(batch_data)
+        if not clean:
+            return
         if state["table"] is None:
-            # First write of the run — try to attach to existing table
-            # (non-force / non-initial-drop scenarios). Fall through to
-            # create_table if attach fails.
             try:
                 state["table"] = db.open_table("chunks")
-                state["table"].add(batch_data)
+                state["table"].add(clean)
             except Exception:
-                state["table"] = db.create_table("chunks", data=batch_data)
+                state["table"] = db.create_table("chunks", data=clean)
         else:
-            state["table"].add(batch_data)
+            state["table"].add(clean)
 
     def optimize_cb() -> None:
         if state["table"] is not None:
