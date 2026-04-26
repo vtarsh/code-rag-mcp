@@ -382,14 +382,18 @@ def _open_or_create_writer(
             # No existing table; first write will create it.
             pass
 
-    state: dict[str, Any] = {"table": None}
+    state: dict[str, Any] = {"table": None, "seen": 0, "dropped": 0, "fast_fail_armed": True}
+
+    # Fast-fail thresholds for the FIRST FAST_FAIL_PROBE rows. If the FT'd
+    # encoder produces >=FAST_FAIL_RATIO NaN/Inf in that probe window, the
+    # build will produce an empty index (LanceDB no_table) and waste 30-40
+    # min on optimize-of-nothing — observed twice on docs-mxbai-ft-run1.
+    # Fail loud immediately so the orchestrator can mark the candidate dead
+    # and free the pod.
+    FAST_FAIL_PROBE = 200
+    FAST_FAIL_RATIO = 0.5
 
     def _drop_bad_vectors(rows: list[dict]) -> list[dict]:
-        # Bug 6o: FT'd models occasionally emit NaN/Inf embeddings on edge-case
-        # chunks (mixed precision, tokenizer overflow). LanceDB rejects the
-        # whole batch on the first bad vector, killing a 48k-row build over
-        # one bad row. Pre-filter so the build continues — losing a handful
-        # of chunks beats losing the entire run.
         import math
 
         clean = []
@@ -400,8 +404,27 @@ def _open_or_create_writer(
                 dropped += 1
                 continue
             clean.append(r)
+        state["seen"] += len(rows)
+        state["dropped"] += dropped
         if dropped:
-            print(f"  [writer] dropped {dropped} rows with NaN/Inf vectors", flush=True)
+            print(
+                f"  [writer] dropped {dropped} rows with NaN/Inf vectors "
+                f"(cumulative {state['dropped']}/{state['seen']})",
+                flush=True,
+            )
+        # Bug 6o++: fast-fail probe — if NaN ratio dominates the first
+        # FAST_FAIL_PROBE rows, abort the build instead of grinding through
+        # an entire pass that produces an empty index.
+        if state["fast_fail_armed"] and state["seen"] >= FAST_FAIL_PROBE:
+            ratio = state["dropped"] / max(1, state["seen"])
+            if ratio >= FAST_FAIL_RATIO:
+                raise RuntimeError(
+                    f"FAST-FAIL: {state['dropped']}/{state['seen']} rows "
+                    f"({ratio:.1%}) in first {FAST_FAIL_PROBE} have NaN/Inf "
+                    f"vectors — FT model is broken; aborting before optimize "
+                    f"phase wastes pod time."
+                )
+            state["fast_fail_armed"] = False
         return clean
 
     def writer_fn(batch_data: list[dict]) -> None:
@@ -432,11 +455,84 @@ def _open_or_create_writer(
 # ------------------------------- Entry point ----------------------------------
 
 
+def _fix_gte_persistent_false_buffers(model) -> None:
+    """Re-seed gte / Alibaba-NLP/new-impl `persistent=False` buffers post-load.
+
+    transformers >= 5 + accelerate lazy-init silently drops `persistent=False`
+    buffer values after `from_pretrained`, leaving `position_ids` and
+    `rotary_emb.inv_freq` filled with uninitialised int64 memory. The first
+    encode call then dereferences garbage indices and crashes:
+      * CPU:  ``IndexError: index <huge> is out of bounds for dimension 0``
+      * CUDA: ``device-side assert triggered`` ``index out of bounds``
+    (Bug 6q, 2026-04-26.)
+
+    No-op for non-new-impl models (mxbai/nomic/bge-m3/etc) — guards on
+    ``type(embeddings).__name__ != 'NewEmbeddings'``.
+
+    Mirrors the inline fix in ``scripts/runpod/train_docs_embedder.py`` so the
+    same patch is applied at train time, build time, and bench time.
+    """
+    try:
+        auto = model._first_module().auto_model
+    except Exception:  # pragma: no cover - defensive: unexpected ST layout
+        return
+    if type(auto.embeddings).__name__ != "NewEmbeddings":
+        return
+    import torch as _torch
+
+    cfg = auto.config
+    auto.embeddings.register_buffer(
+        "position_ids",
+        _torch.arange(cfg.max_position_embeddings, device=auto.device),
+        persistent=False,
+    )
+    rot = auto.embeddings.rotary_emb
+    inv_freq = 1.0 / (rot.base ** (_torch.arange(0, rot.dim, 2, device=auto.device).float() / rot.dim))
+    if hasattr(rot, "scaling_factor") and getattr(rot, "mixed_b", None) is None:
+        inv_freq = inv_freq / (rot.scaling_factor ** (2 / rot.dim))
+    rot.register_buffer("inv_freq", inv_freq, persistent=False)
+    rot._set_cos_sin_cache(int(rot.max_seq_len_cached), inv_freq.device, _torch.float32)
+
+
+def _cap_max_seq_length(model, cap: int) -> None:
+    """Force ``model.max_seq_length`` (and per-module .max_seq_length) to ``cap``.
+
+    Bug 6q: gte-base-en-v1.5 ships ``model.max_seq_length = 8192`` (NTK-rope
+    extended). The build path encodes chunks up to ``mcfg.long_limit`` (8000
+    chars ≈ 1500-2500 BPE tokens) and even with the U1 patch applied, NTK is
+    known-flaky beyond ~4097 tokens AND positional capacity stress wastes GPU
+    memory. Train was capped at 512 — so encode must match, otherwise the
+    encoder sees a context length it was never fine-tuned on.
+    """
+    import contextlib
+
+    with contextlib.suppress(Exception):  # pragma: no cover - defensive
+        model.max_seq_length = cap
+    for module in getattr(model, "_modules", {}).values():
+        if hasattr(module, "max_seq_length"):
+            with contextlib.suppress(Exception):  # pragma: no cover - defensive
+                module.max_seq_length = cap
+
+
+# Train-time max_seq_length cap; matches `--max-seq-length=512` default in
+# scripts/runpod/oneshot_docs.py. Any model_key starting with one of these
+# prefixes will have its encoder context window capped to this value at build
+# time so the index sees the same positional regime as training.
+_GTE_MODEL_KEY_PREFIXES: tuple[str, ...] = ("docs-gte-",)
+_GTE_TRAIN_MAX_SEQ_LENGTH: int = 512
+
+
 def _load_sentence_transformer(cfg):
     """Load the SentenceTransformer for the docs tower on the best device.
 
     Imported lazily + wrapped in a helper so tests can monkeypatch this
     without dragging torch into the suite.
+
+    Bug 6q: for any ``docs-gte-*`` candidate, after load:
+      1. Apply ``_fix_gte_persistent_false_buffers`` (U1 patch) to re-seed the
+         persistent=False buffers transformers >= 5 silently drops.
+      2. Cap ``model.max_seq_length`` to the train-time value (512) so the
+         indexer doesn't push the encoder past positional capacity.
     """
     import torch
     from sentence_transformers import SentenceTransformer
@@ -449,6 +545,17 @@ def _load_sentence_transformer(cfg):
         device = "cpu"
 
     model = SentenceTransformer(cfg.name, trust_remote_code=cfg.trust_remote_code, device=device)
+
+    is_gte = any(cfg.key.startswith(p) for p in _GTE_MODEL_KEY_PREFIXES)
+    if is_gte:
+        try:
+            _fix_gte_persistent_false_buffers(model)
+            print(f"  [load] applied _fix_gte_persistent_false_buffers for {cfg.key}", flush=True)
+        except Exception as e:  # pragma: no cover - defensive safety net
+            print(f"  [load] WARN _fix_gte_persistent_false_buffers skipped: {e}", flush=True)
+        _cap_max_seq_length(model, _GTE_TRAIN_MAX_SEQ_LENGTH)
+        print(f"  [load] capped max_seq_length={_GTE_TRAIN_MAX_SEQ_LENGTH} for {cfg.key}", flush=True)
+
     return model, device
 
 
