@@ -37,12 +37,19 @@ else
 fi
 
 echo "==> [4/4] HF auth check"
-if [ -n "${HF_TOKEN:-}" ]; then
-    "$PYTHON_BIN" -c "from huggingface_hub import login; login(token='${HF_TOKEN}', add_to_git_credential=False)"
+# Pod env injected via start_pod is NOT inherited by SSH bash sessions, so
+# ${HF_TOKEN} here is usually empty. The orchestrator (oneshot_*.py) writes
+# the token to /workspace/.hf-token via a separate SSH command before this
+# script runs; we read from there if env is empty.
+HF_TOKEN_RESOLVED="${HF_TOKEN:-}"
+if [ -z "$HF_TOKEN_RESOLVED" ] && [ -f /workspace/.hf-token ]; then
+    HF_TOKEN_RESOLVED="$(cat /workspace/.hf-token)"
+fi
+if [ -n "$HF_TOKEN_RESOLVED" ]; then
+    "$PYTHON_BIN" -c "from huggingface_hub import login; login(token='${HF_TOKEN_RESOLVED}', add_to_git_credential=False)"
     echo "    HF auth OK"
 else
-    echo "    WARN: HF_TOKEN not set. Push to HF Hub will fail."
-    echo "    Run: huggingface-cli login --token \$HF_TOKEN"
+    echo "    WARN: HF_TOKEN not set in env or /workspace/.hf-token. Push will fail."
 fi
 
 echo "==> Done. Workspace: $WORKSPACE/code-rag-mcp"

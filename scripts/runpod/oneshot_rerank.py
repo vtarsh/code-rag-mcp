@@ -220,6 +220,20 @@ def main() -> int:
         if cp.returncode != 0:
             sys.exit(f"FAIL scp setup_env.sh: rc={cp.returncode} {cp.stderr[:300]}")
 
+        # Bug 6L root cause: SSH session does NOT inherit env={HF_TOKEN}
+        # injected by start_pod. Write the token to /workspace/.hf-token via
+        # a quick SSH echo so setup_env.sh can read it AND the HF push step
+        # has a stable source independent of hf-hub version quirks.
+        if hf_token := os.environ.get("HF_TOKEN"):
+            cp = _ssh(
+                host,
+                port,
+                f"umask 077 && printf '%s' '{hf_token}' > /workspace/.hf-token",
+                timeout=30,
+            )
+            if cp.returncode != 0:
+                sys.exit(f"FAIL write hf-token: rc={cp.returncode}")
+
         _log("provision: bash setup_env.sh (apt + pip + clone + hf login, ~3-5 min)")
         cp = _ssh(host, port, "bash /workspace/setup_env.sh", timeout=20 * 60)
         if cp.returncode != 0:
@@ -286,9 +300,11 @@ def main() -> int:
             " from pathlib import Path;"
             " from huggingface_hub import HfApi;"
             " token = os.environ.get('HF_TOKEN');"
-            " p = Path('/root/.cache/huggingface/token');"
-            " token = token or (p.read_text().strip() if p.exists() else None);"
-            " assert token, 'no HF_TOKEN in env or /root/.cache/huggingface/token';"
+            " p1 = Path('/workspace/.hf-token');"
+            " p2 = Path('/root/.cache/huggingface/token');"
+            " token = token or (p1.read_text().strip() if p1.exists()"
+            " else (p2.read_text().strip() if p2.exists() else None));"
+            " assert token, 'no HF_TOKEN in env, /workspace/.hf-token, or /root/.cache/huggingface/token';"
             " api = HfApi(token=token);"
             f" api.create_repo('{args.hf_repo}', private=True, exist_ok=True);"
             f" api.upload_folder(folder_path='{train_out}',"
