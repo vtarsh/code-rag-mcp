@@ -24,8 +24,9 @@ from src.search.hybrid import _query_wants_docs
         # Code signatures → code-intent
         ("handleCallback(req)", False),  # fn() call
         ("SIGTERM_HANDLER", False),  # SCREAMING_SNAKE
-        # Repo token → code-intent
-        ("grpc-apm-payper payout", False),
+        # Repo token → code-intent. P8 2026-04-25: under V4, `apm` is a Tier-3
+        # doc-marker so we need a non-apm repo-token to assert the legacy path.
+        ("grpc-providers-payper handlePayout(req)", False),
     ],
 )
 def test_query_wants_docs(query: str, expected: bool) -> None:

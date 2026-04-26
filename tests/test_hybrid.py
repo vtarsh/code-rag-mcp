@@ -112,16 +112,19 @@ class TestHybridSearch:
         """
         # Same rowid, DIFFERENT content across sources.
         mock_fts.return_value = [_make_sr(42, repo="fts-repo", snippet="fts content")]
-        mock_vec.return_value = ([
-            {
-                "rowid": 42,
-                "repo_name": "vec-repo",
-                "file_path": "src/vec-repo/vec.ts",
-                "file_type": "library",
-                "chunk_type": "function",
-                "content_preview": "vector content",
-            }
-        ], None)
+        mock_vec.return_value = (
+            [
+                {
+                    "rowid": 42,
+                    "repo_name": "vec-repo",
+                    "file_path": "src/vec-repo/vec.ts",
+                    "file_type": "library",
+                    "chunk_type": "function",
+                    "content_preview": "vector content",
+                }
+            ],
+            None,
+        )
         results, _err, total = hybrid_search("collision test")
         # Two records, not one.
         assert total == 2
@@ -209,10 +212,20 @@ class TestRerankPenalties:
         mock_provider.rerank.return_value = [0.8, 0.8]
         mock_get_reranker.return_value = (mock_provider, None)
         items = [
-            {"score": 0.5, "snippet": "doc snippet", "repo_name": "r1",
-             "file_path": "docs/docs/data-layer.md", "file_type": "doc"},
-            {"score": 0.5, "snippet": "code snippet", "repo_name": "r2",
-             "file_path": "libs/payout/handle.js", "file_type": "library"},
+            {
+                "score": 0.5,
+                "snippet": "doc snippet",
+                "repo_name": "r1",
+                "file_path": "docs/docs/data-layer.md",
+                "file_type": "doc",
+            },
+            {
+                "score": 0.5,
+                "snippet": "code snippet",
+                "repo_name": "r2",
+                "file_path": "libs/payout/handle.js",
+                "file_type": "library",
+            },
         ]
         # Query uses snake_case identifier to trigger code-intent under
         # widened _query_wants_docs() (absence heuristic 2026-04-23). Without a
@@ -229,10 +242,14 @@ class TestRerankPenalties:
         mock_provider.rerank.return_value = [0.8, 0.8]
         mock_get_reranker.return_value = (mock_provider, None)
         items = [
-            {"score": 0.5, "snippet": "spec", "repo_name": "r1",
-             "file_path": "libs/foo.spec.js", "file_type": "library"},
-            {"score": 0.5, "snippet": "code", "repo_name": "r2",
-             "file_path": "libs/foo.js", "file_type": "library"},
+            {
+                "score": 0.5,
+                "snippet": "spec",
+                "repo_name": "r1",
+                "file_path": "libs/foo.spec.js",
+                "file_type": "library",
+            },
+            {"score": 0.5, "snippet": "code", "repo_name": "r2", "file_path": "libs/foo.js", "file_type": "library"},
         ]
         # Code signal (fn() call) forces code-intent under widened heuristic.
         result = rerank("policy_handler(req)", items, limit=2)
@@ -245,12 +262,21 @@ class TestRerankPenalties:
         mock_provider.rerank.return_value = [0.8, 0.8, 0.8]
         mock_get_reranker.return_value = (mock_provider, None)
         items = [
-            {"score": 0.5, "snippet": "guide", "repo_name": "r1",
-             "file_path": "AI-CODING-GUIDE.md", "file_type": "doc"},
-            {"score": 0.5, "snippet": "spec", "repo_name": "r2",
-             "file_path": "foo.spec.js", "file_type": "library"},
-            {"score": 0.5, "snippet": "code", "repo_name": "r3",
-             "file_path": "libs/handler.js", "file_type": "library"},
+            {
+                "score": 0.5,
+                "snippet": "guide",
+                "repo_name": "r1",
+                "file_path": "AI-CODING-GUIDE.md",
+                "file_type": "doc",
+            },
+            {"score": 0.5, "snippet": "spec", "repo_name": "r2", "file_path": "foo.spec.js", "file_type": "library"},
+            {
+                "score": 0.5,
+                "snippet": "code",
+                "repo_name": "r3",
+                "file_path": "libs/handler.js",
+                "file_type": "library",
+            },
         ]
         # fn() call forces code-intent under widened absence heuristic.
         result = rerank("handler_pattern(ctx)", items, limit=3)
@@ -265,10 +291,8 @@ class TestRerankPenalties:
         mock_provider.rerank.return_value = [0.9, 0.5]
         mock_get_reranker.return_value = (mock_provider, None)
         items = [
-            {"score": 0.5, "snippet": "doc", "repo_name": "r1",
-             "file_path": "README.md", "file_type": "doc"},
-            {"score": 0.5, "snippet": "code", "repo_name": "r2",
-             "file_path": "libs/foo.js", "file_type": "library"},
+            {"score": 0.5, "snippet": "doc", "repo_name": "r1", "file_path": "README.md", "file_type": "doc"},
+            {"score": 0.5, "snippet": "code", "repo_name": "r2", "file_path": "libs/foo.js", "file_type": "library"},
         ]
         result = rerank("how to docs for README guide", items, limit=2)
         for r in result:
@@ -280,10 +304,20 @@ class TestRerankPenalties:
         mock_provider.rerank.return_value = [0.7, 0.7]
         mock_get_reranker.return_value = (mock_provider, None)
         items = [
-            {"score": 0.5, "snippet": "handler", "repo_name": "r1",
-             "file_path": "libs/webhooks/handle.js", "file_type": "library"},
-            {"score": 0.5, "snippet": "method", "repo_name": "r2",
-             "file_path": "src/methods/payout.js", "file_type": "grpc_method"},
+            {
+                "score": 0.5,
+                "snippet": "handler",
+                "repo_name": "r1",
+                "file_path": "libs/webhooks/handle.js",
+                "file_type": "library",
+            },
+            {
+                "score": 0.5,
+                "snippet": "method",
+                "repo_name": "r2",
+                "file_path": "src/methods/payout.js",
+                "file_type": "grpc_method",
+            },
         ]
         result = rerank("webhook handler", items, limit=2)
         for r in result:
@@ -298,13 +332,26 @@ class TestRerankPenalties:
         mock_provider.rerank.return_value = [0.8, 0.8]
         mock_get_reranker.return_value = (mock_provider, None)
         items = [
-            {"score": 0.5, "snippet": "ci yaml", "repo_name": "workflow-ach-init",
-             "file_path": "ci/deploy.yml", "file_type": "config"},
-            {"score": 0.5, "snippet": "ach code", "repo_name": "grpc-banks-crb",
-             "file_path": "methods/ach-payment.js", "file_type": "grpc_method"},
+            {
+                "score": 0.5,
+                "snippet": "ci yaml",
+                "repo_name": "workflow-ach-init",
+                "file_path": "ci/deploy.yml",
+                "file_type": "config",
+            },
+            {
+                "score": 0.5,
+                "snippet": "ach code",
+                "repo_name": "grpc-banks-crb",
+                "file_path": "methods/ach-payment.js",
+                "file_type": "grpc_method",
+            },
         ]
-        # `grpc-banks-crb` repo token forces code-intent under widened heuristic.
-        result = rerank("grpc-banks-crb ach service integration", items, limit=2)
+        # P8 2026-04-25: switch query so router stays code-intent under V4.
+        # `grpc-banks-crb ach payment service` — no Tier-3 keyword fires
+        # (`integration` was Tier-3 + intentionally docs-routed under V4),
+        # repo-token + snake_case `ach_payment` keep code-intent path.
+        result = rerank("grpc-banks-crb ach_payment service handler", items, limit=2)
         assert result[0]["repo_name"] == "grpc-banks-crb"
         assert result[1]["penalty"] > 0
 
@@ -315,13 +362,25 @@ class TestRerankPenalties:
         mock_provider.rerank.return_value = [0.8, 0.8]
         mock_get_reranker.return_value = (mock_provider, None)
         items = [
-            {"score": 0.5, "snippet": "gha", "repo_name": "workflow-ach-init",
-             "file_path": "k8s/.github/workflows/deploy.yml", "file_type": "config"},
-            {"score": 0.5, "snippet": "service", "repo_name": "grpc-apm-ach",
-             "file_path": "methods/sale.js", "file_type": "grpc_method"},
+            {
+                "score": 0.5,
+                "snippet": "gha",
+                "repo_name": "workflow-ach-init",
+                "file_path": "k8s/.github/workflows/deploy.yml",
+                "file_type": "config",
+            },
+            {
+                "score": 0.5,
+                "snippet": "service",
+                "repo_name": "grpc-apm-ach",
+                "file_path": "methods/sale.js",
+                "file_type": "grpc_method",
+            },
         ]
-        # `grpc-apm-ach` repo token forces code-intent under widened heuristic.
-        result = rerank("grpc-apm-ach sale service", items, limit=2)
+        # P8 2026-04-25: under V4, `apm` is a Tier-3 doc-marker so any query
+        # with bare `apm` (incl. `grpc-apm-*` repo) routes to docs by design.
+        # Switch to a plain repo-token + snake_case query that keeps code-intent.
+        result = rerank("workflow-ach-init handle_activities sale", items, limit=2)
         assert result[0]["repo_name"] == "grpc-apm-ach"
         assert result[1]["penalty"] > 0
 
@@ -332,11 +391,20 @@ class TestRerankPenalties:
         mock_provider.rerank.return_value = [0.8, 0.8]
         mock_get_reranker.return_value = (mock_provider, None)
         items = [
-            {"score": 0.5, "snippet": "checklist", "repo_name": "provider-integration-checklist",
-             "file_path": "docs/references/provider-integration-checklist.md",
-             "file_type": "reference"},
-            {"score": 0.5, "snippet": "init", "repo_name": "grpc-apm-ppro",
-             "file_path": "methods/initialize.js", "file_type": "grpc_method"},
+            {
+                "score": 0.5,
+                "snippet": "checklist",
+                "repo_name": "provider-integration-checklist",
+                "file_path": "docs/references/provider-integration-checklist.md",
+                "file_type": "reference",
+            },
+            {
+                "score": 0.5,
+                "snippet": "init",
+                "repo_name": "grpc-apm-ppro",
+                "file_path": "methods/initialize.js",
+                "file_type": "grpc_method",
+            },
         ]
         result = rerank("new APM provider integration recipe checklist boilerplate", items, limit=2)
         for r in result:
@@ -349,10 +417,20 @@ class TestRerankPenalties:
         mock_provider.rerank.return_value = [0.8, 0.8]
         mock_get_reranker.return_value = (mock_provider, None)
         items = [
-            {"score": 0.5, "snippet": "framework", "repo_name": "investigation-framework",
-             "file_path": "docs/references/investigation-framework.md", "file_type": "reference"},
-            {"score": 0.5, "snippet": "proto", "repo_name": "libs-types",
-             "file_path": "proto/protos/onboarding.proto", "file_type": "library"},
+            {
+                "score": 0.5,
+                "snippet": "framework",
+                "repo_name": "investigation-framework",
+                "file_path": "docs/references/investigation-framework.md",
+                "file_type": "reference",
+            },
+            {
+                "score": 0.5,
+                "snippet": "proto",
+                "repo_name": "libs-types",
+                "file_path": "proto/protos/onboarding.proto",
+                "file_type": "library",
+            },
         ]
         result = rerank("investigation framework", items, limit=2)
         for r in result:
@@ -365,10 +443,20 @@ class TestRerankPenalties:
         mock_provider.rerank.return_value = [0.8, 0.8]
         mock_get_reranker.return_value = (mock_provider, None)
         items = [
-            {"score": 0.5, "snippet": "rules", "repo_name": "impact-audit-rules",
-             "file_path": "docs/references/impact-audit-rules.md", "file_type": "reference"},
-            {"score": 0.5, "snippet": "code", "repo_name": "graphql",
-             "file_path": "src/resolvers/audit/queries/audits.ts", "file_type": "library"},
+            {
+                "score": 0.5,
+                "snippet": "rules",
+                "repo_name": "impact-audit-rules",
+                "file_path": "docs/references/impact-audit-rules.md",
+                "file_type": "reference",
+            },
+            {
+                "score": 0.5,
+                "snippet": "code",
+                "repo_name": "graphql",
+                "file_path": "src/resolvers/audit/queries/audits.ts",
+                "file_type": "library",
+            },
         ]
         result = rerank("impact audit severity verification", items, limit=2)
         for r in result:
@@ -386,10 +474,20 @@ class TestRerankPenalties:
             "openfinance APM integration overview",
         ]:
             items = [
-                {"score": 0.5, "snippet": "doc", "repo_name": "r1",
-                 "file_path": "docs/references/foo.md", "file_type": "reference"},
-                {"score": 0.5, "snippet": "code", "repo_name": "r2",
-                 "file_path": "libs/bar.js", "file_type": "library"},
+                {
+                    "score": 0.5,
+                    "snippet": "doc",
+                    "repo_name": "r1",
+                    "file_path": "docs/references/foo.md",
+                    "file_type": "reference",
+                },
+                {
+                    "score": 0.5,
+                    "snippet": "code",
+                    "repo_name": "r2",
+                    "file_path": "libs/bar.js",
+                    "file_type": "library",
+                },
             ]
             result = rerank(q, items, limit=2)
             for r in result:
@@ -402,10 +500,20 @@ class TestRerankPenalties:
         mock_provider.rerank.return_value = [0.8, 0.8]
         mock_get_reranker.return_value = (mock_provider, None)
         items = [
-            {"score": 0.5, "snippet": "ci", "repo_name": "workflow-ach-init",
-             "file_path": "ci/deploy.yml", "file_type": "config"},
-            {"score": 0.5, "snippet": "code", "repo_name": "grpc-apm-ach",
-             "file_path": "methods/sale.js", "file_type": "grpc_method"},
+            {
+                "score": 0.5,
+                "snippet": "ci",
+                "repo_name": "workflow-ach-init",
+                "file_path": "ci/deploy.yml",
+                "file_type": "config",
+            },
+            {
+                "score": 0.5,
+                "snippet": "code",
+                "repo_name": "grpc-apm-ach",
+                "file_path": "methods/sale.js",
+                "file_type": "grpc_method",
+            },
         ]
         result = rerank("deploy documentation sandbox", items, limit=2)
         for r in result:
