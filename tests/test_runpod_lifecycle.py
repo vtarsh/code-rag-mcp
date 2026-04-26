@@ -1385,12 +1385,17 @@ def _stage_repo_root_with_setup_env(tmp_path):
 
     `_provision_pod` reads `<repo_root>/scripts/runpod/setup_env.sh` to scp
     over and validates `scripts/` + `src/` exist on disk for the tar overlay
-    pre-flight check.
+    pre-flight check. The Bug-6a fix added a fourth requirement:
+    `<repo_root>/db/knowledge.db` is scp'd to the pod for build_docs_vectors
+    + benchmark_doc_intent to read chunks/FTS metadata from.
     """
     fake_root = tmp_path / "fake_repo"
     (fake_root / "scripts" / "runpod").mkdir(parents=True)
     (fake_root / "src").mkdir(parents=True)
+    (fake_root / "db").mkdir(parents=True)
+    (fake_root / "db" / "vectors.lance.docs").mkdir(parents=True)  # Bug 6e overlay target
     (fake_root / "scripts" / "runpod" / "setup_env.sh").write_text("#!/bin/bash\necho stub\n")
+    (fake_root / "db" / "knowledge.db").write_bytes(b"SQLite stub")
     return fake_root
 
 
@@ -1456,14 +1461,22 @@ def test_full_pipeline_provision_happy_path_then_smoke_runs(
     assert overlay_calls, "tar_overlay_fn was not invoked"
     overlay = overlay_calls[0]
     assert overlay["remote_root"] == "/workspace/code-rag-mcp"
-    assert overlay["local_dirs"] == ["scripts", "src"]
+    # Bug 6e: db/vectors.lance.docs included if locally present.
+    assert overlay["local_dirs"] == ["scripts", "src", "db/vectors.lance.docs"]
     assert overlay["repo_root"] == fake_root
-    # Provision ssh sequence: bash setup_env.sh, then sanity import, both
-    # must precede the smoke / train / bench commands.
+    # Bug 6a: db/knowledge.db must have been scp'd to the cloned repo's db dir.
+    assert any(
+        c["remote_path"] == "/workspace/code-rag-mcp/db/knowledge.db"
+        and c["local_path"] == fake_root / "db" / "knowledge.db"
+        for c in scp_to_calls
+    ), f"knowledge.db not scp'd; scp_to_calls={scp_to_calls}"
+    # Provision ssh sequence: bash setup_env.sh, then sanity import, then mkdir
+    # remote db/, all must precede the smoke / train / bench commands.
     setup_idx = next(i for i, c in enumerate(ssh_calls) if "bash /workspace/setup_env.sh" in c)
     sanity_idx = next(i for i, c in enumerate(ssh_calls) if "import scripts.benchmark_doc_intent" in c)
+    mkdir_idx = next(i for i, c in enumerate(ssh_calls) if "mkdir -p /workspace/code-rag-mcp/db" in c)
     smoke_idx = next(i for i, c in enumerate(ssh_calls) if "FT did NOT change weights" in c)
-    assert setup_idx < sanity_idx < smoke_idx
+    assert setup_idx < sanity_idx < mkdir_idx < smoke_idx
     # All scripts run under the cloned + overlaid repo dir.
     assert any("cd /workspace/code-rag-mcp" in c for c in ssh_calls)
 
@@ -1573,6 +1586,95 @@ def test_full_pipeline_provision_fails_when_tar_overlay_returns_nonzero(
     # Sanity-import + smoke must NOT have fired (overlay never landed).
     assert not any("import scripts.benchmark_doc_intent" in c for c in ssh_calls)
     assert not any("FT did NOT change weights" in c for c in ssh_calls)
+
+
+def test_full_pipeline_provision_fails_when_knowledge_db_missing(
+    smoke_inputs,
+    fake_pod_dict,
+    monkeypatch,
+    tmp_path,
+):
+    """Bug 6a: db/knowledge.db is required on the local repo root (the
+    provision step scp's it to the pod). If it's missing locally, fail
+    fast at provision rather than late at bench time."""
+    fake_root = _stage_repo_root_with_setup_env(tmp_path)
+    # Delete the staged knowledge.db to simulate a fresh checkout that
+    # never ran build_index.
+    (fake_root / "db" / "knowledge.db").unlink()
+
+    monkeypatch.setattr(full_pipeline.pod_lifecycle, "stop_pod", lambda pod_id: {"ok": True})
+    monkeypatch.setattr(full_pipeline.pod_lifecycle, "get_pod", lambda pod_id: {"desiredStatus": "EXITED"})
+
+    result = full_pipeline.run_pipeline(
+        candidate_tag="tag",
+        kind="docs",
+        base_model="base",
+        train_data=smoke_inputs.train,
+        eval_data=smoke_inputs.eval,
+        gpu="4090",
+        max_steps=100,
+        hf_repo="Tarshevskiy/tag",
+        bench_json_path=smoke_inputs.bench_json,
+        spawn_fn=lambda **_: fake_pod_dict,
+        ssh_fn=lambda **_: _ok_proc(),
+        scp_back_fn=lambda **_: _ok_proc(),
+        scp_to_fn=lambda **_: _ok_proc(),
+        tar_overlay_fn=lambda **_: _ok_proc(),
+        repo_root=fake_root,
+        sleep_fn=lambda _s: None,
+    )
+
+    assert result.exit_code == full_pipeline.EXIT_SMOKE_FAILED
+    assert result.failure_step == "provision"
+    assert "knowledge.db" in (result.failure_reason or "")
+    assert result.pod_stopped is True
+
+
+def test_full_pipeline_provision_fails_when_scp_knowledge_db_returns_nonzero(
+    smoke_inputs,
+    fake_pod_dict,
+    monkeypatch,
+    tmp_path,
+):
+    """Bug 6a: scp of knowledge.db from Mac → pod fails (e.g. disk full,
+    network blip). Same contract as the other provision failures: clean
+    abort, no train, pod stopped."""
+    fake_root = _stage_repo_root_with_setup_env(tmp_path)
+    scp_to_calls: list[dict] = []
+
+    def _scp_to(**kwargs):
+        scp_to_calls.append(kwargs)
+        if kwargs.get("remote_path", "").endswith("/db/knowledge.db"):
+            return _fail_proc(stderr="No space left on device")
+        return _ok_proc()
+
+    monkeypatch.setattr(full_pipeline.pod_lifecycle, "stop_pod", lambda pod_id: {"ok": True})
+    monkeypatch.setattr(full_pipeline.pod_lifecycle, "get_pod", lambda pod_id: {"desiredStatus": "EXITED"})
+
+    result = full_pipeline.run_pipeline(
+        candidate_tag="tag",
+        kind="docs",
+        base_model="base",
+        train_data=smoke_inputs.train,
+        eval_data=smoke_inputs.eval,
+        gpu="4090",
+        max_steps=100,
+        hf_repo="Tarshevskiy/tag",
+        bench_json_path=smoke_inputs.bench_json,
+        spawn_fn=lambda **_: fake_pod_dict,
+        ssh_fn=lambda **_: _ok_proc(),
+        scp_back_fn=lambda **_: _ok_proc(),
+        scp_to_fn=_scp_to,
+        tar_overlay_fn=lambda **_: _ok_proc(),
+        repo_root=fake_root,
+        sleep_fn=lambda _s: None,
+    )
+
+    assert result.exit_code == full_pipeline.EXIT_SMOKE_FAILED
+    assert result.failure_step == "provision"
+    assert "knowledge.db" in (result.failure_reason or "")
+    assert "No space left" in (result.failure_reason or "") or "rc=" in (result.failure_reason or "")
+    assert result.pod_stopped is True
 
 
 def test_tar_overlay_to_returns_nonzero_when_local_dir_missing(tmp_path):

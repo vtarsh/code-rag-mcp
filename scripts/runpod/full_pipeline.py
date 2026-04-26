@@ -450,12 +450,18 @@ def _provision_pod(
         result.failure_reason = f"setup_env.sh rc={cp.returncode}: {(cp.stderr or '')[:200]}"
         return False
 
-    # --- (c) tar-overlay our local Phase-0 scripts/ + src/ -----------------
+    # --- (c) tar-overlay our local Phase-0 scripts/ + src/ + docs lance ----
+    # db/vectors.lance.docs (~1 GB) is bundled in the same tar to save an
+    # extra ssh hop. Without it, reranker bench can't run --model=docs (the
+    # production docs index it relies on is otherwise missing on the pod).
+    overlay_dirs = ["scripts", "src"]
+    if (repo_root / "db" / "vectors.lance.docs").is_dir():
+        overlay_dirs.append("db/vectors.lance.docs")
     cp = tar_overlay_fn(
         host=host,
         port=port,
         repo_root=repo_root,
-        local_dirs=["scripts", "src"],
+        local_dirs=overlay_dirs,
         remote_root=REMOTE_REPO_DIR,
         key_path=key_path,
     )
@@ -489,7 +495,39 @@ def _provision_pod(
         result.failure_reason = f"sanity import scripts.benchmark_doc_intent failed: {(cp.stderr or '')[:200]}"
         return False
 
-    _log(result, "provision OK (setup_env + overlay + sanity)")
+    # --- (e) scp db/knowledge.db (Bug 6a) ----------------------------------
+    # build_docs_vectors.py + benchmark_doc_intent.py both read chunks and
+    # FTS metadata from db/knowledge.db. Without it, every bench fails late
+    # with sqlite "no such table" or LanceDB "missing chunks". 209 MB at
+    # typical bandwidth lands in <1 min; well inside the 600s timeout.
+    db_local = repo_root / "db" / "knowledge.db"
+    if not db_local.is_file():
+        _log(result, f"FAIL provision: knowledge.db missing at {db_local}")
+        result.failure_step = "provision"
+        result.failure_reason = f"knowledge.db not found at {db_local}"
+        return False
+    mkdir_cmd = f"mkdir -p {REMOTE_REPO_DIR}/db"
+    cp = ssh_fn(host=host, port=port, cmd=mkdir_cmd, key_path=key_path, timeout_sec=30)
+    if cp.returncode != 0:
+        _log(result, f"FAIL provision (mkdir db): rc={cp.returncode}")
+        result.failure_step = "provision"
+        result.failure_reason = f"mkdir {REMOTE_REPO_DIR}/db rc={cp.returncode}"
+        return False
+    cp = scp_to_fn(
+        host=host,
+        port=port,
+        local_path=db_local,
+        remote_path=f"{REMOTE_REPO_DIR}/db/knowledge.db",
+        key_path=key_path,
+        timeout_sec=600,
+    )
+    if cp.returncode != 0:
+        _log(result, f"FAIL provision (scp knowledge.db): rc={cp.returncode} stderr={(cp.stderr or '')[:300]}")
+        result.failure_step = "provision"
+        result.failure_reason = f"scp knowledge.db rc={cp.returncode}: {(cp.stderr or '')[:200]}"
+        return False
+
+    _log(result, "provision OK (setup_env + overlay + sanity + knowledge.db)")
     return True
 
 
