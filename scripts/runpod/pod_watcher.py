@@ -123,13 +123,14 @@ def _ssh_probe(host: str, port: int) -> dict:
             out["proc_state"] = line.split("=", 1)[1]
         elif line.startswith("DISK_PCT="):
             out["disk_pct"] = int(line.split("=", 1)[1])
-        elif "," in line and "MiB" in cp.stdout:  # nvidia-smi line
+        elif "," in line and not line.startswith(("PID=", "WCHAR=", "CPU_TICKS=", "STATE=", "DISK_PCT=")):
+            # nvidia-smi --nounits CSV line: "<gpu_int>, <vram_int>, <power_float>"
             parts = [p.strip() for p in line.split(",")]
             if len(parts) >= 3:
                 try:
-                    out["gpu_pct"] = int(re.sub(r"\D", "", parts[0]))
-                    out["vram_mib"] = int(re.sub(r"\D", "", parts[1]))
-                    out["power_w"] = float(re.sub(r"[^\d.]", "", parts[2]))
+                    out["gpu_pct"] = int(re.sub(r"\D", "", parts[0]) or 0)
+                    out["vram_mib"] = int(re.sub(r"\D", "", parts[1]) or 0)
+                    out["power_w"] = float(re.sub(r"[^\d.]", "", parts[2]) or 0)
                 except Exception:
                     pass
     return out

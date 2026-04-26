@@ -409,6 +409,21 @@ def train(
     loss_fn, examples = _build_loss_and_data(loss_name, rows, model)
     loader = DataLoader(examples, shuffle=True, batch_size=batch_size)  # type: ignore[arg-type]
 
+    # Bug 6o-debug: snapshot weight stats BEFORE fit so we can detect
+    # mid-train corruption (gradient explosion) post-hoc. mxbai-large +
+    # MNRL was observed to corrupt 389/391 params during fit().
+    import torch as _torch
+
+    pre_param = next(model.parameters())
+    print(
+        f"[train] PRE-FIT first_param shape={tuple(pre_param.shape)} "
+        f"dtype={pre_param.dtype} mean={pre_param.mean().item():.6f} "
+        f"std={pre_param.std().item():.6f} has_nan={bool(_torch.isnan(pre_param).any())}",
+        flush=True,
+    )
+    pre_total = sum(1 for _ in model.parameters())
+    print(f"[train] total parameter tensors: {pre_total}", flush=True)
+
     fit_kwargs: dict[str, Any] = {
         "train_objectives": [(loader, loss_fn)],
         "epochs": epochs,
@@ -423,6 +438,37 @@ def train(
         fit_kwargs["steps_per_epoch"] = steps
 
     model.fit(**fit_kwargs)
+
+    # Bug 6o-debug: snapshot post-fit. Count NaN-bearing parameters; if any,
+    # raise loudly so the orchestrator marks the candidate dead before HF push
+    # and downstream waste.
+    nan_param_names = [n for n, p in model.named_parameters() if _torch.isnan(p).any()]
+    inf_param_names = [n for n, p in model.named_parameters() if _torch.isinf(p).any()]
+    post_param = next(model.parameters())
+    print(
+        f"[train] POST-FIT first_param mean={post_param.mean().item():.6f} "
+        f"std={post_param.std().item():.6f} has_nan={bool(_torch.isnan(post_param).any())}",
+        flush=True,
+    )
+    if nan_param_names or inf_param_names:
+        raise RuntimeError(
+            f"FAST-FAIL post-fit: {len(nan_param_names)}/{pre_total} params "
+            f"contain NaN, {len(inf_param_names)} contain Inf. First NaN: "
+            f"{nan_param_names[:3]}. Train regime corrupts model — abort "
+            f"before HF push wastes uploaded weights."
+        )
+
+    # Quick post-fit encode sanity probe (catches subtle pooling/norm bugs that
+    # leave individual params clean but produce NaN downstream).
+    try:
+        probe_v = model.encode(["sanity probe text"])
+        if _torch.from_numpy(probe_v if probe_v.ndim == 1 else probe_v[0]).isnan().any():
+            raise RuntimeError("FAST-FAIL post-fit: model.encode produces NaN despite clean params.")
+        print(f"[train] POST-FIT encode probe: shape={probe_v.shape} OK", flush=True)
+    except Exception as e:
+        if "FAST-FAIL" in str(e):
+            raise
+        print(f"[train] WARN post-fit probe encode raised: {e}", flush=True)
 
     if kind == "hf":
         model.push_to_hub(target, private=True)

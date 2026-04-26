@@ -107,7 +107,12 @@ EMBEDDING_MODELS: dict[str, EmbeddingModel] = {
         trust_remote_code=True,
         batch_size=16,
         short_limit=2000,
-        long_limit=8000,
+        # Bug 6q: train caps encoder at max_seq_length=512 (≈2048 chars). The
+        # build-time U1 patch + cap applied in
+        # docs_vector_indexer._load_sentence_transformer keep encode() safe,
+        # but truncating the input string here also avoids wasted tokenisation
+        # work and keeps the indexer's char-budget bookkeeping honest.
+        long_limit=2000,
         lance_dir="vectors.lance.docs.docs-gte-base-ft-run1",
         description="FT'd Alibaba-NLP/gte-base-en-v1.5 on pay-com docs (Run 1).",
     ),

@@ -4,7 +4,9 @@
       "Bash(*)",
       "mcp__pay-knowledge__search",
       "mcp__playwright__browser_evaluate",
-      "mcp__playwright__browser_run_code"
+      "mcp__playwright__browser_run_code",
+      "Bash(mkdir -p ~/.code-rag-mcp/.claude/debug/loop-state)",
+      "Bash(echo \"21:22:09\")"
     ]
   }
 }
