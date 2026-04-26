@@ -158,6 +158,9 @@ def main() -> int:
     p.add_argument("--hf-repo", required=True)
     p.add_argument("--gpu", default="4090")
     p.add_argument("--epochs", type=int, default=1)
+    p.add_argument(
+        "--batch-size", type=int, default=16, help="Lower (e.g. 4) for big rerankers like bge-reranker-v2-m3."
+    )
     p.add_argument("--time-limit-min", type=int, default=120)
     p.add_argument("--spending-cap-usd", type=float, default=2.0)
     p.add_argument("--bench-json", type=Path)
@@ -256,6 +259,7 @@ def main() -> int:
             f"python3 scripts/runpod/train_reranker_ce.py "
             f"--base={args.base_model} --train={train_remote} "
             f"--epochs={args.epochs} --steps=0 "
+            f"--batch-size={args.batch_size} "
             f"--out={train_out}"
         )
         _log(f"train: starting (~10-20 min for {args.candidate_tag})")
