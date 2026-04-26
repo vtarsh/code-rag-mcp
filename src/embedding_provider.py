@@ -26,6 +26,7 @@ from typing import Protocol
 
 log = logging.getLogger(__name__)
 
+
 class EmbeddingProvider(Protocol):
     """Interface for embedding backends."""
 
@@ -39,6 +40,7 @@ class EmbeddingProvider(Protocol):
         """Embed texts. task_type: 'query' or 'document'."""
         ...
 
+
 class RerankerProvider(Protocol):
     """Interface for reranking backends."""
 
@@ -48,6 +50,7 @@ class RerankerProvider(Protocol):
     def rerank(self, query: str, documents: list[str], limit: int = 10) -> list[float]:
         """Score documents against query. Returns relevance scores (higher = better)."""
         ...
+
 
 class LocalEmbeddingProvider:
     """SentenceTransformer embedding — lazy loaded on first use."""
@@ -88,6 +91,7 @@ class LocalEmbeddingProvider:
         assert self._model is not None
         vectors = self._model.encode(texts)
         return [v.tolist() for v in vectors]
+
 
 class LocalRerankerProvider:
     """CrossEncoder reranker — lazy loaded on first use.
@@ -137,6 +141,7 @@ class LocalRerankerProvider:
         scores = self._model.predict(pairs)
         return [float(s) for s in scores]
 
+
 # --- Singletons (per model key) ---
 
 # Per-key cache so coderank and docs towers can coexist. `_embedding_provider`
@@ -146,7 +151,13 @@ class LocalRerankerProvider:
 _embedding_providers: dict[str, EmbeddingProvider] = {}
 _embedding_provider: EmbeddingProvider | None = None
 _reranker_provider: RerankerProvider | None = None
+# Per-intent reranker cache (Run 2 routing: l12 FT for code, default L6 for docs).
+# 2026-04-27: l12 FT confirmed POSITIVE +3.31pp top-10 on jira n=908 vs prod L6.
+# Override via CODE_RAG_CODE_RERANKER env (default: ms-marco-MiniLM-L-12-v2 base; we
+# point at the FT'd HF Hub repo for the proven win).
+_reranker_providers: dict[str, RerankerProvider] = {}
 _provider_lock = threading.Lock()
+
 
 def _default_model_key() -> str:
     """Resolve the configured default embedding model key."""
@@ -155,6 +166,7 @@ def _default_model_key() -> str:
     except ImportError:
         return "coderank"
     return EMBEDDING_MODEL_KEY or "coderank"
+
 
 def get_embedding_provider(model_key: str | None = None) -> tuple[EmbeddingProvider, str | None]:
     """Get the embedding provider for the given model key.
@@ -174,14 +186,35 @@ def get_embedding_provider(model_key: str | None = None) -> tuple[EmbeddingProvi
                 _embedding_provider = _embedding_providers[key]
         return _embedding_providers[key], None
 
-def get_reranker_provider() -> tuple[RerankerProvider, str | None]:
-    """Get the active reranker provider. Returns (provider, None)."""
+
+def get_reranker_provider(intent: str | None = None) -> tuple[RerankerProvider, str | None]:
+    """Get the active reranker provider. Returns (provider, None).
+
+    intent="code" returns the code-tuned reranker (default: l12 FT, override
+    via CODE_RAG_CODE_RERANKER). intent="docs" or None returns the default
+    reranker (L6 baseline).
+
+    Run 2 + Jira-grounded eval (n=908) finding (2026-04-27): l12 FT beats
+    prod L6 by +3.31pp top-10 on code (POSITIVE, bootstrap CI [+0.88, +5.73]).
+    Same model HURTS docs by -9pp top-10 — must NOT use for docs path.
+    """
+    import os
+
     global _reranker_provider
 
+    if intent == "code":
+        code_model = os.environ.get("CODE_RAG_CODE_RERANKER", "Tarshevskiy/pay-com-rerank-l12-ft-run1")
+        with _provider_lock:
+            if code_model not in _reranker_providers:
+                _reranker_providers[code_model] = LocalRerankerProvider(model_name=code_model)
+            return _reranker_providers[code_model], None
+
+    # Default / docs path — existing L6 behaviour.
     with _provider_lock:
         if _reranker_provider is None:
             _reranker_provider = LocalRerankerProvider()
         return _reranker_provider, None
+
 
 def _reset_providers_locked() -> None:
     """Reset cached providers while _provider_lock is already held. Unloads local models to free RAM."""
@@ -206,10 +239,12 @@ def _reset_providers_locked() -> None:
     _embedding_provider = None
     _reranker_provider = None
 
+
 def reset_providers() -> None:
     """Reset cached providers. Unloads local models to free RAM."""
     with _provider_lock:
         _reset_providers_locked()
+
 
 def loaded_provider_names() -> list[str]:
     """Return provider_name for every embedding provider currently holding a model.

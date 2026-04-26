@@ -506,7 +506,11 @@ def rerank(
     if reranker_override is not None:
         reranker, err = reranker_override, None
     else:
-        reranker, err = get_reranker()
+        # Run 2 routing (2026-04-27): use code-tuned l12 FT for code-intent queries,
+        # default L6 for docs. Verified on jira n=908: l12 +3.31pp top-10 vs L6 on
+        # code (POSITIVE bootstrap-confirmed). On docs: l12 -9pp top-10 (NEGATIVE).
+        intent = "docs" if _query_wants_docs(query) else "code"
+        reranker, err = get_reranker(intent=intent)
     if err or reranker is None:
         return results  # Fallback: return original order
 

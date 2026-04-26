@@ -26,6 +26,7 @@ _lance_table: Any = None
 _wal_set: bool = False
 _lock = threading.Lock()
 
+
 def get_db() -> sqlite3.Connection:
     """Get a new database connection. Caller must close it.
 
@@ -49,6 +50,7 @@ def get_db() -> sqlite3.Connection:
         conn.execute(f"ATTACH DATABASE '{DB_TASKS_PATH}' AS tasks")
     return conn
 
+
 @contextlib.contextmanager
 def db_connection() -> Generator[sqlite3.Connection, None, None]:
     """Context manager for safe database connections.
@@ -64,6 +66,7 @@ def db_connection() -> Generator[sqlite3.Connection, None, None]:
         yield conn
     finally:
         conn.close()
+
 
 def check_db_health() -> str | None:
     """Verify knowledge.db exists and has expected tables.
@@ -84,6 +87,7 @@ def check_db_health() -> str | None:
     except sqlite3.Error as e:
         return f"Knowledge base error: {e}. Run: python3 scripts/build_index.py"
     return None
+
 
 def get_vector_search(model_key: str | None = None) -> tuple[Any, Any, str | None]:
     """Get embedding provider and LanceDB table for the given model key.
@@ -132,16 +136,21 @@ def get_vector_search(model_key: str | None = None) -> tuple[Any, Any, str | Non
 
     return provider, _lance_tables[key], warning
 
-def get_reranker() -> tuple[Any, str | None]:
+
+def get_reranker(intent: str | None = None) -> tuple[Any, str | None]:
     """Get reranker provider.
+
+    intent="code" → l12 FT (Tarshevskiy/pay-com-rerank-l12-ft-run1, +3.31pp top-10 vs L6 on jira n=908).
+    intent="docs" or None → default L6 baseline.
 
     Returns (reranker_provider, error_string | None).
     The provider has .rerank(query, documents) method.
     """
     from src.embedding_provider import get_reranker_provider
 
-    provider, warning = get_reranker_provider()
+    provider, warning = get_reranker_provider(intent=intent)
     return provider, warning
+
 
 def require_db[**P, T](func: Callable[P, T]) -> Callable[P, T]:
     """Decorator that checks DB health before running a tool function."""
@@ -155,11 +164,13 @@ def require_db[**P, T](func: Callable[P, T]) -> Callable[P, T]:
 
     return wrapper  # type: ignore[return-value]
 
+
 def is_model_loaded() -> bool:
     """Check if any embedding provider is ready."""
     from src.embedding_provider import _embedding_providers
 
     return bool(_embedding_providers)
+
 
 def is_reranker_loaded() -> bool:
     """Check if reranker provider is ready."""
