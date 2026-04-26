@@ -54,8 +54,12 @@ DEFAULT_IMAGE: Final = "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 GPU_PRESETS: Final[dict[str, dict]] = {
     "rtx4090": {"id": "NVIDIA GeForce RTX 4090", "vram_gb": 24, "approx_usd_per_hr": 0.34},
     "a40": {"id": "NVIDIA A40", "vram_gb": 48, "approx_usd_per_hr": 0.39},
+    "l40s": {"id": "NVIDIA L40S", "vram_gb": 48, "approx_usd_per_hr": 1.19},
     "a100-80g": {"id": "NVIDIA A100 80GB PCIe", "vram_gb": 80, "approx_usd_per_hr": 0.89},
     "a100-sxm": {"id": "NVIDIA A100-SXM4-80GB", "vram_gb": 80, "approx_usd_per_hr": 1.19},
+    "h100-pcie": {"id": "NVIDIA H100 PCIe", "vram_gb": 80, "approx_usd_per_hr": 2.39},
+    "h100-sxm": {"id": "NVIDIA H100 80GB HBM3", "vram_gb": 80, "approx_usd_per_hr": 2.99},
+    "h200-sxm": {"id": "NVIDIA H200", "vram_gb": 141, "approx_usd_per_hr": 3.99},
 }
 
 # Module-level state for atexit/signal teardown.
