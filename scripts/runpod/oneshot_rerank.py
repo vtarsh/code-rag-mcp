@@ -275,16 +275,17 @@ def main() -> int:
         _log(f"train: OK ({time.time() - t0:.0f}s)")
 
         # ---- 5. HF push ------------------------------------------------------
-        # Pass HF_TOKEN explicitly so we don't depend on setup_env.sh's
-        # in-process login persisting to a cache the upload_folder call can
-        # find. HfApi(token=...) is the most robust path across hf-hub versions.
+        # Bug 6L: pod SSH session does NOT inherit env={"HF_TOKEN":...} that
+        # we passed to start_pod. setup_env.sh did call hf-hub login() which
+        # writes the token to ~/.cache/huggingface/token. Read it from there
+        # via HfFolder.get_token() instead of os.environ.
         push_cmd = (
             "set -euxo pipefail && "
             'python3 -c "'
-            "import os, sys, traceback;"
-            " token = os.environ.get('HF_TOKEN');"
-            " assert token, 'HF_TOKEN missing in pod env';"
-            " from huggingface_hub import HfApi;"
+            "import os;"
+            " from huggingface_hub import HfApi, HfFolder;"
+            " token = os.environ.get('HF_TOKEN') or HfFolder.get_token();"
+            " assert token, 'no HF_TOKEN in env or hf-hub cache';"
             " api = HfApi(token=token);"
             f" api.create_repo('{args.hf_repo}', private=True, exist_ok=True);"
             f" api.upload_folder(folder_path='{train_out}',"

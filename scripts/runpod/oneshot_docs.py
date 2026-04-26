@@ -146,6 +146,13 @@ def main() -> int:
     p.add_argument("--hf-repo", required=True)
     p.add_argument("--gpu", default="a40")
     p.add_argument("--epochs", type=int, default=1)
+    p.add_argument("--batch-size", type=int, default=8, help="Lower (e.g. 4) for big bi-encoders like mxbai-large.")
+    p.add_argument(
+        "--max-seq-length",
+        type=int,
+        default=512,
+        help="Cap encoder context. nomic/gte 8192 default OOMs on a40 at bs=16.",
+    )
     p.add_argument("--loss", default="mnrl", choices=["mnrl", "cosent", "marginmse", "tsdae"])
     p.add_argument("--time-limit-min", type=int, default=120)
     p.add_argument("--spending-cap-usd", type=float, default=2.5)
@@ -253,6 +260,8 @@ def main() -> int:
             f"python3 scripts/runpod/train_docs_embedder.py "
             f"--base={args.base_model} --train={train_remote} "
             f"--epochs={args.epochs} --loss={args.loss} --steps=0 "
+            f"--batch-size={args.batch_size} "
+            f"--max-seq-length={args.max_seq_length} "
             f"--out={train_out}"
         )
         _log("train: starting (~10-30 min)")
@@ -272,9 +281,9 @@ def main() -> int:
             "set -euxo pipefail && "
             'python3 -c "'
             "import os;"
-            " token = os.environ.get('HF_TOKEN');"
-            " assert token, 'HF_TOKEN missing in pod env';"
-            " from huggingface_hub import HfApi;"
+            " from huggingface_hub import HfApi, HfFolder;"
+            " token = os.environ.get('HF_TOKEN') or HfFolder.get_token();"
+            " assert token, 'no HF_TOKEN in env or hf-hub cache';"
             " api = HfApi(token=token);"
             f" api.create_repo('{args.hf_repo}', private=True, exist_ok=True);"
             f" api.upload_folder(folder_path='{train_out}',"
