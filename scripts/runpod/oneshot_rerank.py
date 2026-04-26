@@ -275,17 +275,20 @@ def main() -> int:
         _log(f"train: OK ({time.time() - t0:.0f}s)")
 
         # ---- 5. HF push ------------------------------------------------------
-        # Bug 6L: pod SSH session does NOT inherit env={"HF_TOKEN":...} that
-        # we passed to start_pod. setup_env.sh did call hf-hub login() which
-        # writes the token to ~/.cache/huggingface/token. Read it from there
-        # via HfFolder.get_token() instead of os.environ.
+        # Bug 6L+6n: pod SSH session does NOT inherit env={"HF_TOKEN":...} from
+        # start_pod. setup_env.sh calls hf-hub login() which writes the token
+        # to /root/.cache/huggingface/token. Read it from that file (HfFolder
+        # was deprecated in hf-hub >= 0.20).
         push_cmd = (
             "set -euxo pipefail && "
             'python3 -c "'
             "import os;"
-            " from huggingface_hub import HfApi, HfFolder;"
-            " token = os.environ.get('HF_TOKEN') or HfFolder.get_token();"
-            " assert token, 'no HF_TOKEN in env or hf-hub cache';"
+            " from pathlib import Path;"
+            " from huggingface_hub import HfApi;"
+            " token = os.environ.get('HF_TOKEN');"
+            " p = Path('/root/.cache/huggingface/token');"
+            " token = token or (p.read_text().strip() if p.exists() else None);"
+            " assert token, 'no HF_TOKEN in env or /root/.cache/huggingface/token';"
             " api = HfApi(token=token);"
             f" api.create_repo('{args.hf_repo}', private=True, exist_ok=True);"
             f" api.upload_folder(folder_path='{train_out}',"
