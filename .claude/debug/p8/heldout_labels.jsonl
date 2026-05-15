@@ -1,0 +1,30 @@
+{"query": "provider API error debugging root cause", "score": 2, "rationale": "concept = doc"}
+{"query": "express-api-authentication", "score": 2, "rationale": "repo overview"}
+{"query": "Okto Cash APM integrations", "score": 2, "rationale": "provider + integration = doc"}
+{"query": "APM integration - Neosurf", "score": 2, "rationale": "provider + integration = doc"}
+{"query": "Interac e-Transfer provider integration APM", "score": 2, "rationale": "provider + integration = doc"}
+{"query": "new APM provider setup boilerplate grpc", "score": 2, "rationale": "how-to = doc"}
+{"query": "webhook IP whitelist HMAC signature verification provider security", "score": 2, "rationale": "concept = doc"}
+{"query": "doNotExpire APM session workflow", "score": 1, "rationale": "code-flag + concept, mixed"}
+{"query": "ACTIVATE_EXPIRE_SESSION_WORKFLOW feature flag APM", "score": 1, "rationale": "feature flag = code, mixed"}
+{"query": "doNotExpire internalMetadata transaction creation APM", "score": 0, "rationale": "code symbols dominate"}
+{"query": "expire session workflow start trigger checkout APM payment method type", "score": 1, "rationale": "concept-y workflow trigger, mixed"}
+{"query": "express-api-v1 expire session workflow start signalWithStart checkout", "score": 0, "rationale": "code-flow"}
+{"query": "doNotExpire true processor provider APM initialize", "score": 0, "rationale": "code-flag focus"}
+{"query": "call-providers-initialize doNotExpire express-api-v1", "score": 0, "rationale": "code-flow"}
+{"query": "express-api-v1 temporal expire session signalWithStart activate", "score": 0, "rationale": "code-flow"}
+{"query": "express-api-internal process-initialize-data doNotExpire okto nuvei", "score": 0, "rationale": "code-flow"}
+{"query": "express-api-v1 call-providers-initialize doNotExpire set internalMetadata", "score": 0, "rationale": "code-flow"}
+{"query": "workflow-expire-session doNotExpire check skip expiration", "score": 0, "rationale": "code-flow"}
+{"query": "express-api-v1 activateWorkflow expire-session checkout session payment_method_type", "score": 0, "rationale": "code-flow"}
+{"query": "workflow-expire-session doNotExpire internalMetadata activity check transaction", "score": 0, "rationale": "code-flow"}
+{"query": "trustly webhook parse-payload handle-activities tx_action sale refund", "score": 0, "rationale": "code-flow"}
+{"query": "nuvei payout notificationType WITHDRAW_REQUEST WITHDRAW_ORDER DMN fields", "score": 0, "rationale": "code-symbols"}
+{"query": "aircash voucher initialize prepaid redirect_url", "score": 1, "rationale": "concept + redirect_url, mixed"}
+{"query": "SOAP XML envelope provider voucher", "score": 2, "rationale": "concept = doc"}
+{"query": "workflow-payment-completion APM async pending status update", "score": 1, "rationale": "mixed"}
+{"query": "payout reusablePayouts approved pending email phone validation express-api-v1", "score": 0, "rationale": "code-flow"}
+{"query": "express-api-internal apm-create routes neosurf paymentMethodType", "score": 0, "rationale": "code routes"}
+{"query": "seeds.cql payment_method_type interac features provider flags", "score": 0, "rationale": "code data"}
+{"query": "grpc-apm-skrill repository", "score": 2, "rationale": "repo overview"}
+{"query": "helm deploy values yaml ASYNC_FLOW_PROCESSORS env var production override", "score": 1, "rationale": "infra config, mixed"}

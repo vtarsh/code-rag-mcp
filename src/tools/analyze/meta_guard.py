@@ -43,9 +43,29 @@ SIMILARITY_THRESHOLD = 0.7
 
 _STOP_WORDS = frozenset(
     {
-        "should", "which", "where", "their", "about", "these", "those",
-        "would", "could", "check", "start", "needs", "with", "that", "this",
-        "from", "into", "when", "have", "been", "also", "will", "need",
+        "should",
+        "which",
+        "where",
+        "their",
+        "about",
+        "these",
+        "those",
+        "would",
+        "could",
+        "check",
+        "start",
+        "needs",
+        "with",
+        "that",
+        "this",
+        "from",
+        "into",
+        "when",
+        "have",
+        "been",
+        "also",
+        "will",
+        "need",
     }
 )
 
@@ -74,9 +94,7 @@ def section_meta_guard(ctx: AnalysisContext) -> str:
     """
     # Fetch all tasks (id + normalized searchable text)
     try:
-        rows = ctx.conn.execute(
-            "SELECT ticket_id, summary, description FROM task_history"
-        ).fetchall()
+        rows = ctx.conn.execute("SELECT ticket_id, summary, description FROM task_history").fetchall()
     except Exception:
         return ""
 
@@ -89,8 +107,7 @@ def section_meta_guard(ctx: AnalysisContext) -> str:
     # in task_history, this is a direct lookup — warn immediately regardless
     # of rare-token analysis. Handles "PI-60" / "Related to CORE-2408" cases.
     known_ids = {row[0].upper() for row in rows}
-    query_ids = [tid for tid in _extract_jira_ids(ctx.description)
-                 if tid in known_ids and tid != exclude_id]
+    query_ids = [tid for tid in _extract_jira_ids(ctx.description) if tid in known_ids and tid != exclude_id]
     if query_ids:
         ids_list = ", ".join(f"`{t}`" for t in query_ids)
         return (

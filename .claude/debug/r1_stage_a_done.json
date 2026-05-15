@@ -1,0 +1,25 @@
+{
+  "pod_id": "yefx5edx6b8epc",
+  "ssh_host": "103.196.86.187",
+  "ssh_port": 51671,
+  "ssh_user": "root",
+  "cost_per_hr": 0.69,
+  "gpu": "rtx4090",
+  "pod_started_at_unix": 1777133835,
+  "train_pairs_path": "/workspace/train/r1_train_pairs.jsonl",
+  "train_pairs_count": 1130,
+  "eval_path_n150": "/workspace/eval/doc_intent_eval_v3_n150.jsonl",
+  "eval_path_n150_count": 143,
+  "eval_path_n90": "/workspace/eval/doc_intent_eval_v3.jsonl",
+  "eval_path_n90_count": 100,
+  "stage_a_done_at": 1777134747.658716,
+  "stage_a_pod_elapsed_hours": 0.254,
+  "stage_a_approx_pod_spend_usd": 0.175,
+  "ready_for_stage_b": true,
+  "caveats": [
+    "mined 1130 pairs (not 12000 \u2014 only 1241 unique doc-intent prod queries available after eval-disjoint)",
+    "4/1130 rows have 0 hard_negs; 1126/1130 have >=1 hard_neg",
+    "pod costPerHr=$0.69 (Secure Cloud RTX 4090; preset estimated $0.34)",
+    "pod ssh details: 103.196.86.187:51671 root@"
+  ]
+}

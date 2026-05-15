@@ -33,12 +33,13 @@ import psutil  # noqa: E402
 from scripts.build_vectors import embed_simple  # noqa: E402
 from src.models import get_model_config  # noqa: E402
 
-_GIB = 1024 ** 3
+_GIB = 1024**3
 RSS_SOFT_LIMIT_BYTES = int(float(os.getenv("CODE_RAG_EMBED_RSS_SOFT_GB", "8")) * _GIB)
 RSS_HARD_LIMIT_BYTES = int(float(os.getenv("CODE_RAG_EMBED_RSS_HARD_GB", "10")) * _GIB)
 SYS_AVAIL_SOFT_BYTES = int(float(os.getenv("CODE_RAG_EMBED_SYS_AVAIL_SOFT_GB", "2")) * _GIB)
 SYS_AVAIL_HARD_BYTES = int(float(os.getenv("CODE_RAG_EMBED_SYS_AVAIL_HARD_GB", "0.8")) * _GIB)
 DAEMON_PORT = int(os.getenv("CODE_RAG_DAEMON_PORT", "8742"))
+
 
 def pause_daemon(port: int = DAEMON_PORT, timeout: float = 5.0) -> bool:
     """Force-restart the daemon so its ~1 GB resident models are truly freed.
@@ -73,6 +74,7 @@ def pause_daemon(port: int = DAEMON_PORT, timeout: float = 5.0) -> bool:
         print(f"  [daemon shutdown error: {e}; continuing without pause]", flush=True)
         return False
 
+
 def parse_args() -> tuple[str, bool]:
     model_key = "coderank"
     pause_daemon_flag = True  # default: serialize with daemon to avoid RAM doubling
@@ -82,6 +84,7 @@ def parse_args() -> tuple[str, bool]:
         elif arg == "--no-pause-daemon":
             pause_daemon_flag = False
     return model_key, pause_daemon_flag
+
 
 def load_model(model_key: str):
     mcfg = get_model_config(model_key)
@@ -99,6 +102,7 @@ def load_model(model_key: str):
 
     model = SentenceTransformer(mcfg.name, trust_remote_code=mcfg.trust_remote_code, device=device)
     return model, mcfg
+
 
 def main() -> None:
     model_key, pause_daemon_flag = parse_args()
@@ -185,10 +189,7 @@ def main() -> None:
             available = psutil.virtual_memory().available
             mem_pressure = rss >= RSS_SOFT_LIMIT_BYTES or available <= SYS_AVAIL_SOFT_BYTES
             if batches_since_compact >= COMPACT_EVERY or mem_pressure:
-                reason = (
-                    f"rss={rss / _GIB:.1f}G avail={available / _GIB:.1f}G"
-                    if mem_pressure else "scheduled"
-                )
+                reason = f"rss={rss / _GIB:.1f}G avail={available / _GIB:.1f}G" if mem_pressure else "scheduled"
                 compact_start = time.time()
                 try:
                     table.optimize()
@@ -258,6 +259,7 @@ def main() -> None:
         f"\nDone. Added {len(missing_rowids)}, removed {len(orphan_rowids)} "
         f"for {model_key}. Final: {new_total} vectors."
     )
+
 
 if __name__ == "__main__":
     main()

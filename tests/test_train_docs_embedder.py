@@ -306,7 +306,7 @@ def test_build_loss_cosent_emits_pos_and_neg_pairs():
     pairwise margin between positive-labeled and negative-labeled pairs, so
     half-feeding it (only positives) silently degenerates to a useless loss."""
     rows = [{"query": "q1", "positive": "p1", "negative": "n1"}]
-    loss, examples = ted._build_loss_and_data("cosent", rows, _FakeModel())
+    _loss, examples = ted._build_loss_and_data("cosent", rows, _FakeModel())
     assert len(examples) == 2
     labels = sorted(ex.label for ex in examples)
     assert labels == [0.0, 1.0]
@@ -323,7 +323,7 @@ def test_build_loss_marginmse_carries_teacher_margin():
         {"query": "q1", "positive": "p1", "negative": "n1", "margin": 0.42},
         {"query": "q2", "positive": "p2", "negative": "n2", "margin": -0.11},
     ]
-    loss, examples = ted._build_loss_and_data("marginmse", rows, _FakeModel())
+    _loss, examples = ted._build_loss_and_data("marginmse", rows, _FakeModel())
     assert len(examples) == 2
     assert examples[0].texts == ["q1", "p1", "n1"]
     assert examples[0].label == pytest.approx(0.42)
@@ -339,14 +339,14 @@ def test_data_shape_validation_cosent_missing_neg():
     Catches the "I reused the MNRL training file" footgun that would otherwise
     burn pod minutes before silently flopping (CoSENT degenerates without negs)."""
     rows = [{"query": "q", "positive": "p"}]  # no negative
-    with pytest.raises(ValueError, match="cosent.*negative"):
+    with pytest.raises(ValueError, match=r"cosent.*negative"):
         ted._validate_rows_for_loss("cosent", rows)
 
 
 def test_data_shape_validation_marginmse_missing_margin():
     """MarginMSE requires teacher margin scores — fail loudly if absent."""
     rows = [{"query": "q", "positive": "p", "negative": "n"}]  # no margin
-    with pytest.raises(ValueError, match="marginmse.*margin"):
+    with pytest.raises(ValueError, match=r"marginmse.*margin"):
         ted._validate_rows_for_loss("marginmse", rows)
 
 
@@ -393,7 +393,7 @@ def test_dry_run_marginmse_missing_margin_raises_before_pod_spend(tmp_path: Path
             + "\n"
         )
 
-    with pytest.raises(ValueError, match="marginmse.*margin"):
+    with pytest.raises(ValueError, match=r"marginmse.*margin"):
         ted.main(
             [
                 "--train",

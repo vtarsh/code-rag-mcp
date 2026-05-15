@@ -22,8 +22,11 @@ from pathlib import Path
 
 import yaml
 
-BASE_DIR = Path(os.getenv("CODE_RAG_HOME", Path(__file__).resolve().parent.parent))
-PROFILE = os.getenv("ACTIVE_PROFILE", "pay-com")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from scripts._common import setup_paths
+
+BASE_DIR = setup_paths()
+PROFILE = os.environ["ACTIVE_PROFILE"]
 PROFILE_DIR = BASE_DIR / "profiles" / PROFILE
 GROUND_TRUTH_PATH = PROFILE_DIR / "test_ground_truth.yaml"
 DAEMON_URL = "http://localhost:8742"
@@ -70,7 +73,9 @@ def extract_repos_from_output(output: str) -> set[str]:
             repos.add(name)
 
     # Also catch repo names in bullet points like "- grpc-apm-payper"
-    for m in re.finditer(r"[-•]\s*(grpc-[a-z0-9-]+|workflow-[a-z0-9-]+|express-[a-z0-9-]+|providers-[a-z0-9-]+)", output):
+    for m in re.finditer(
+        r"[-•]\s*(grpc-[a-z0-9-]+|workflow-[a-z0-9-]+|express-[a-z0-9-]+|providers-[a-z0-9-]+)", output
+    ):
         repos.add(m.group(1))
 
     return repos
@@ -122,15 +127,17 @@ def main():
         if extra and VERBOSE:
             print(f"  Extra: {', '.join(sorted(extra))}")
 
-        results.append({
-            "prompt": name,
-            "task_id": task_id,
-            "score": score,
-            "found": len(matched),
-            "expected": len(expected),
-            "missed": sorted(missed),
-            "extra": sorted(extra),
-        })
+        results.append(
+            {
+                "prompt": name,
+                "task_id": task_id,
+                "score": score,
+                "found": len(matched),
+                "expected": len(expected),
+                "missed": sorted(missed),
+                "extra": sorted(extra),
+            }
+        )
 
         if VERBOSE:
             # Save raw output
@@ -147,7 +154,7 @@ def main():
     print(f"\n{'Prompt':<12} {'Task':<8} {'Score':<8} {'Found':<8} {'Expected':<10}")
     print("-" * 46)
     for r in results:
-        print(f"{r['prompt']:<12} {r.get('task_id','?'):<8} {r['score']:<8.0%} {r['found']:<8} {r['expected']:<10}")
+        print(f"{r['prompt']:<12} {r.get('task_id', '?'):<8} {r['score']:<8.0%} {r['found']:<8} {r['expected']:<10}")
 
     # Save results
     results_path = PROFILE_DIR / "investigation_results.json"

@@ -1,7 +1,5 @@
 """Tests for shadow type layer — JS field extraction and MCP tool."""
 
-import pytest
-
 from src.js_field_extractor import extract_fields_from_file
 from src.tools.shadow_types import provider_type_map_tool
 from src.types import (
@@ -9,9 +7,6 @@ from src.types import (
     FieldUsage,
     MethodTypeMap,
     ProtoEnum,
-    ProtoField,
-    ProtoMessage,
-    ProtoSchema,
     ProviderTypeMap,
 )
 
@@ -132,6 +127,7 @@ module.exports = ({ response = {}, processorTransactionId, paymentMethod, isFail
 }
 """
 
+
 class TestJsFieldExtractor:
     def test_destructuring_nested(self):
         usages = extract_fields_from_file("test.js", SAMPLE_INITIALIZE_JS)
@@ -192,6 +188,7 @@ class TestJsFieldExtractor:
         assert "failureMessage" in field_names
         assert "failureCode" in field_names
 
+
 class TestShadowTypeModels:
     def test_field_usage_model(self):
         fu = FieldUsage(
@@ -250,6 +247,7 @@ class TestShadowTypeModels:
         pe = ProtoEnum(name="StatusEnum", values=["APPROVED", "DECLINED"])
         assert pe.name == "StatusEnum"
         assert len(pe.values) == 2
+
 
 class TestProviderTypeMapTool:
     def test_missing_provider(self):

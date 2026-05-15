@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import analyze_churn as ac  # type: ignore[import-not-found]
+import analyze_churn as ac  # type: ignore[import-not-found]  # noqa: E402
 
 
 def _fake_result(repo: str, file_path: str) -> dict:
@@ -108,7 +108,9 @@ def test_aggregate_slices_contains_overall_and_length() -> None:
 
 
 def test_fmt_slice_table_includes_n_column() -> None:
-    slices = [{"label": "overall", "n": 5, "mean_overlap_at_10": 0.4, "median_overlap_at_10": 0.5, "pct_top1_changed": 80.0}]
+    slices = [
+        {"label": "overall", "n": 5, "mean_overlap_at_10": 0.4, "median_overlap_at_10": 0.5, "pct_top1_changed": 80.0}
+    ]
     table = ac._fmt_slice_table(slices, 10)
     assert "mean_overlap@10" in table
     assert "overall" in table
@@ -133,9 +135,12 @@ def test_main_end_to_end(tmp_path: Path) -> None:
     old_argv = sys.argv
     sys.argv = [
         "analyze_churn",
-        "--input", str(input_path),
-        "--diff-pairs", str(diff_path),
-        "--report", str(report_path),
+        "--input",
+        str(input_path),
+        "--diff-pairs",
+        str(diff_path),
+        "--report",
+        str(report_path),
     ]
     try:
         rc = ac.main()

@@ -127,14 +127,16 @@ def main():
     if last_n:
         sessions = sessions[-last_n:]
 
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
     print(f"Session Quality Analysis — {len(sessions)} sessions")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     for i, session in enumerate(sessions, 1):
         stats = analyze_session(session)
         print(f"\n--- Session {i}: {stats['time_range']} ---")
-        print(f"  Calls: {stats['total_calls']}  |  Unique queries: {stats['unique_queries']}  |  Avg duration: {stats['avg_duration_ms']}ms")
+        print(
+            f"  Calls: {stats['total_calls']}  |  Unique queries: {stats['unique_queries']}  |  Avg duration: {stats['avg_duration_ms']}ms"
+        )
         print(f"  Thrashing index: {stats['thrashing_index']}  |  Fallback chains: {stats['fallback_chains']}")
 
         tools = stats["tool_distribution"]
@@ -142,17 +144,19 @@ def main():
         print(f"  Tools: {tool_str}")
 
         if stats["repeat_queries_3plus"]:
-            print(f"  Repeat queries (3+):")
+            print("  Repeat queries (3+):")
             for q, cnt in stats["repeat_queries_3plus"].items():
                 print(f"    [{cnt}x] {q[:80]}")
 
     # Summary table
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"{'Session':<10} {'Calls':<8} {'Unique Q':<10} {'Thrash':<10} {'Fallback':<10}")
-    print(f"{'-'*48}")
+    print(f"{'-' * 48}")
     for i, session in enumerate(sessions, 1):
         stats = analyze_session(session)
-        print(f"{'S'+str(i):<10} {stats['total_calls']:<8} {stats['unique_queries']:<10} {stats['thrashing_index']:<10} {stats['fallback_chains']:<10}")
+        print(
+            f"{'S' + str(i):<10} {stats['total_calls']:<8} {stats['unique_queries']:<10} {stats['thrashing_index']:<10} {stats['fallback_chains']:<10}"
+        )
 
 
 if __name__ == "__main__":

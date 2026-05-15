@@ -1,0 +1,9 @@
+Baseline: jira_clean_baseline_rescored.json  (n_eval_rows=619)
+Bootstrap: 10000 resamples, paired by query
+
+=== jira_clean_fts5fix_session2.json  (paired n=619) ===
+  recall_at_10       Δ = ++0.0394  95% CI [+0.0293, +0.0503]  → POSITIVE
+  hit_at_5           Δ = ++0.1064  95% CI [+0.0808, +0.1341]  → POSITIVE
+  hit_at_10          Δ = ++0.1242  95% CI [+0.0953, +0.1535]  → POSITIVE
+  ndcg_at_10         Δ = ++0.0556  95% CI [+0.0421, +0.0699]  → POSITIVE
+

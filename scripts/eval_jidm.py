@@ -55,10 +55,10 @@ from src.search.hybrid import _CI_PATH_RE, _DOC_QUERY_RE  # noqa: E402
 # calls, file extensions. Spec is from V-C agent (2026-04-22), kept verbatim.
 _CODE_QUERY_RE = re.compile(
     r"(?:"
-    r"\b[a-z][a-zA-Z0-9]*\([^)]*\)"           # fn_call(...)
-    r"|\b[A-Z][A-Z0-9_]{2,}\b"                 # SCREAMING_CASE
-    r"|[a-z]+_[a-z_]+"                         # snake_case
-    r"|\.(?:js|ts|py|go|proto)\b"              # file ext
+    r"\b[a-z][a-zA-Z0-9]*\([^)]*\)"  # fn_call(...)
+    r"|\b[A-Z][A-Z0-9_]{2,}\b"  # SCREAMING_CASE
+    r"|[a-z]+_[a-z_]+"  # snake_case
+    r"|\.(?:js|ts|py|go|proto)\b"  # file ext
     r")"
 )
 
@@ -90,8 +90,8 @@ def query_intent(q: str) -> str:
 # CI yaml files are noise on service-code queries) but 0.2 on mixed queries
 # because ambiguous natural-language queries sometimes do want deploy context.
 REL: dict[str, dict[str, float]] = {
-    "doc":   {"doc": 1.0, "code": 0.3, "config": 0.5, "proto": 0.5, "ci": 0.0, "test": 0.3},
-    "code":  {"doc": 0.3, "code": 1.0, "config": 0.7, "proto": 0.8, "ci": 0.0, "test": 0.3},
+    "doc": {"doc": 1.0, "code": 0.3, "config": 0.5, "proto": 0.5, "ci": 0.0, "test": 0.3},
+    "code": {"doc": 0.3, "code": 1.0, "config": 0.7, "proto": 0.8, "ci": 0.0, "test": 0.3},
     "mixed": {"doc": 0.7, "code": 1.0, "config": 0.7, "proto": 0.8, "ci": 0.2, "test": 0.3},
 }
 
@@ -233,12 +233,7 @@ def _eval_snapshot(snapshot: dict, k: int) -> dict:
         # Some snapshots might have other keys; look for any list-of-dict
         # with file_path on the first element.
         for k2, v2 in sample.items():
-            if (
-                isinstance(v2, list)
-                and v2
-                and isinstance(v2[0], dict)
-                and "file_path" in v2[0]
-            ):
+            if isinstance(v2, list) and v2 and isinstance(v2[0], dict) and "file_path" in v2[0]:
                 series.append(k2)
 
     out["format"] = "churn_replay" if {"base_top10", "v8_top10"}.issubset(sample) else "generic"

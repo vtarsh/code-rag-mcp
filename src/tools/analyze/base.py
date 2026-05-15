@@ -74,11 +74,6 @@ class AnalysisContext:
         return {f.repo for f in self.findings}
 
 
-def useful_keywords(words: set[str]) -> list[str]:
-    """Filter words to those useful for FTS queries."""
-    return [w for w in words if len(w) > 4 and w not in _KEYWORD_STOP_WORDS]
-
-
 def fts_queries(provider: str, words: set[str]) -> list[str]:
     """Build FTS query strings from provider + words."""
     queries = []

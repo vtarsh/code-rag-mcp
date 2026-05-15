@@ -96,3 +96,26 @@
 4. **SSH command timeout = 7200s default у oneshot scripts** — не вистачає для LanceDB optimize >2h. Раз провалить — pod auto-stops по time_limit, model на HF Hub лишається, вектори губляться.
 5. **mxbai-rerank як reranker = pass-through на коді** — не зберігає ranking. Не плутати з mxbai-embed-large (інша модель, інший Bug 6o).
 6. **Memory baseline числа застарівають** — завжди свіжо бенч прод перед comparison ("0.25 docs" виявилось 0.2365 на свіжому evali).
+
+## Late-night addendum (2026-04-27 02:00)
+
+### Routing implementation LANDED
+- Commit `9c0a263` (local) + MCP push `86669a06`
+- `src/embedding_provider.py`: `get_reranker_provider(intent)` per-intent cache
+- `src/container.py`: `get_reranker(intent)` pass-through
+- `src/search/hybrid.py`: rerank() picks intent via `_query_wants_docs(query)`
+- Code-intent → l12 FT (Tarshevskiy/pay-com-rerank-l12-ft-run1)
+- Docs-intent → L6 default (or skip via P10 A2 stratum-gate, unchanged)
+- Override env: `CODE_RAG_CODE_RERANKER`
+
+### Tuning sweep finding (n=908 jira)
+- `DOC_PENALTY=0.05` vs default `0.15` → **identical numbers** (24.12% top-5 / 33.81% top-10)
+- Reason: penalty applies to doc chunks during code queries; jira eval is code-heavy → no doc chunks in top-50 → penalty has nothing to reduce
+- TEST/GUIDE penalties expected to behave the same on this eval — not testing further
+
+### Overnight autonomous research launched (02:00 EEST)
+- `/loop` self-pacing dynamic mode, ScheduleWakeup ~1500s
+- caffeinate -i ON (PID 79974)
+- Plan: routing classifier accuracy → local docs-nomic build (background 3-4h, RAM-safe bs=4) → reranker matrix on n=192 → debate-architecture every 3 ticks → bootstrap CI verdicts
+- All bench JSON in `bench_runs/`, log append-only in `.claude/debug/overnight_log.md`
+- Stop at 07:30 EEST OR disk <10GB OR 3 crashes

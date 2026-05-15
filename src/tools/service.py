@@ -12,6 +12,7 @@ from src.cache import get_runtime_stats
 from src.config import DB_PATH, LANCE_PATH, NPM_SCOPE, REPO_NAME_PREFIXES
 from src.container import db_connection, is_model_loaded, is_reranker_loaded, require_db
 
+
 @require_db
 def repo_overview_tool(repo_name: str) -> str:
     """Get detailed overview of a specific repo.
@@ -81,6 +82,7 @@ def repo_overview_tool(repo_name: str) -> str:
 
         return output
 
+
 @require_db
 def list_repos_tool(type: str = "", has_dep: str = "", limit: int = 30, include_deps: bool = False) -> str:
     """List repos filtered by type or dependency.
@@ -132,6 +134,7 @@ def list_repos_tool(type: str = "", has_dep: str = "", limit: int = 30, include_
 
         return output
 
+
 def health_check_tool() -> str:
     """Return a diagnostic report on the knowledge base: database, vector store,
     models, graph, and consistency status. Takes no arguments."""
@@ -167,6 +170,7 @@ def health_check_tool() -> str:
 
     lines.append("=" * 36)
     return "\n".join(lines)
+
 
 def _check_database(lines: list[str]) -> tuple[int, str | None] | None:
     """Check database health. Returns (chunk_count, last_build) or None."""
@@ -207,6 +211,7 @@ def _check_database(lines: list[str]) -> tuple[int, str | None] | None:
         lines.append(f"  Error reading DB: {e}")
         return None
 
+
 def _check_vector_store(lines: list[str]) -> int:
     """Check vector store health. Returns vector count."""
     if not LANCE_PATH.exists():
@@ -228,6 +233,7 @@ def _check_vector_store(lines: list[str]) -> int:
         lines.append(f"  Error reading vectors: {e}")
         return 0
 
+
 def _check_consistency(lines: list[str], chunk_count: int, vector_count: int) -> None:
     """Append consistency check results."""
     if chunk_count and vector_count:
@@ -239,6 +245,7 @@ def _check_consistency(lines: list[str], chunk_count: int, vector_count: int) ->
         lines.append(f"Consistency:   PARTIAL (chunks={chunk_count:,}, vectors={vector_count:,})")
     else:
         lines.append("Consistency:   N/A (no data)")
+
 
 def _check_graph(lines: list[str]) -> None:
     """Check graph tables health."""
@@ -261,6 +268,7 @@ def _check_graph(lines: list[str]) -> None:
     except Exception as e:
         lines.append(f"Graph:         ERROR ({e})")
 
+
 def _append_runtime_stats(lines: list[str]) -> None:
     """Append runtime and cache statistics."""
     stats = get_runtime_stats()
@@ -277,6 +285,7 @@ def _append_runtime_stats(lines: list[str]) -> None:
     else:
         lines.append("Cache:         no queries yet")
 
+
 def _append_index_freshness(lines: list[str], last_build: str) -> None:
     """Append index age information."""
     try:
@@ -288,6 +297,7 @@ def _append_index_freshness(lines: list[str], last_build: str) -> None:
         lines.append(f"Index age:     {age_hours:.0f}h ({freshness})")
     except (ValueError, TypeError):
         pass
+
 
 @require_db
 def trace_internal_tool(repo_name: str, method: str = "") -> str:
@@ -308,10 +318,7 @@ def trace_internal_tool(repo_name: str, method: str = "") -> str:
             "SELECT name FROM sqlite_master WHERE type='table' AND name='internal_traces'"
         ).fetchone()
         if not table_check:
-            return (
-                "Error: internal_traces table not found. "
-                "Run: python3 scripts/build_internal_traces.py"
-            )
+            return "Error: internal_traces table not found. Run: python3 scripts/build_internal_traces.py"
 
         if method:
             rows = conn.execute(
@@ -339,6 +346,7 @@ def trace_internal_tool(repo_name: str, method: str = "") -> str:
             lines.append("```\n")
 
         return "\n".join(lines)
+
 
 def _format_trace_tree(node: dict, depth: int = 0) -> list[str]:
     """Format a trace tree node into indented lines."""

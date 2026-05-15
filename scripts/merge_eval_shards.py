@@ -13,20 +13,21 @@ Usage:
     --manifest profiles/pay-com/finetune_data_v8/manifest.json \
     --out profiles/pay-com/finetune_history/gte_v8.json
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from scripts.eval_verdict import verdict_from_snapshot  # noqa: E402
+from scripts.eval_verdict import verdict_from_snapshot
 
 
 def percentile(values: list, p: float) -> float:
-    clean = [v for v in values if isinstance(v, (int, float))]
+    clean = [v for v in values if isinstance(v, int | float)]
     if not clean:
         return 0.0
     s = sorted(clean)
@@ -117,7 +118,8 @@ def build_delta(base: dict, ft: dict) -> dict:
     """
     deltas: dict[str, dict] = {}
     for tid in set(base) & set(ft):
-        b = base[tid]; f = ft[tid]
+        b = base[tid]
+        f = ft[tid]
         b_rank = b.get("rank_of_first_gt")
         f_rank = f.get("rank_of_first_gt")
         rank_delta: int | None
@@ -144,16 +146,8 @@ def build_delta(base: dict, ft: dict) -> dict:
 
 
 def find_regressions(deltas: dict, threshold: float = 0.05) -> dict:
-    regressed = [
-        {"ticket_id": tid, **d}
-        for tid, d in deltas.items()
-        if d["recall_at_10"] <= -threshold
-    ]
-    improved = [
-        {"ticket_id": tid, **d}
-        for tid, d in deltas.items()
-        if d["recall_at_10"] >= threshold
-    ]
+    regressed = [{"ticket_id": tid, **d} for tid, d in deltas.items() if d["recall_at_10"] <= -threshold]
+    improved = [{"ticket_id": tid, **d} for tid, d in deltas.items() if d["recall_at_10"] >= threshold]
     return {
         "tickets_regressed_ge5pp": regressed,
         "tickets_improved_ge5pp": improved,
@@ -268,7 +262,7 @@ def main() -> int:
         "run_id": args.out.stem,
         "base_model": base_model,
         "ft_model_path": ft_model_path,
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "merged_from_shards": [str(s) for s in args.shards],
         "hyperparams": hyperparams,
         "eval_config": eval_config,

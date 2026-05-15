@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import re
 import sqlite3
 import time
@@ -271,21 +272,28 @@ def _embed_and_write_streaming(
             batches_since_compact = 0
         _memguard.check_and_maybe_exit(limits=limits, done=done, total=total, compact_cb=optimize_cb)
 
-    # Long chunks — one by one; still respect watchdog / checkpoint cadence.
+    # Long chunks — batched (LONG_BATCH default=4) to amortize tokenize + MPS
+    # transfer overhead. c1a59928 originally landed this for 5-8x speedup on
+    # MPS; regressed in later commits, restored 2026-05-04. Override via
+    # CODE_RAG_DOCS_LONG_BATCH (CUDA pods can use 8+ safely).
     if mcfg.long_limit > mcfg.short_limit:
-        for row in long_rows:
-            text = _prepare_text(row[1], row[2], row[4], row[5], mcfg.long_limit, mcfg.document_prefix)
-            vectors = _encode(model, [text], mcfg.batch_size)
-            batch_data = [_make_record(row, vectors[0])]
+        long_batch = max(1, int(os.getenv("CODE_RAG_DOCS_LONG_BATCH", "4")))
+        for i in range(0, len(long_rows), long_batch):
+            batch_rows = long_rows[i : i + long_batch]
+            texts = [_prepare_text(r[1], r[2], r[4], r[5], mcfg.long_limit, mcfg.document_prefix) for r in batch_rows]
+            vectors = _encode(model, texts, long_batch)
+            batch_data = [_make_record(r, vectors[j]) for j, r in enumerate(batch_rows)]
             writer_fn(batch_data)
-            done_rowids.add(row[0])
-            done += 1
-            embedded_this_run += 1
-            since_checkpoint += 1
-            since_log += 1
+            n = len(batch_rows)
+            for r in batch_rows:
+                done_rowids.add(r[0])
+            done += n
+            embedded_this_run += n
+            since_checkpoint += n
+            since_log += n
             batches_since_compact += 1
 
-            del text, vectors, batch_data
+            del texts, vectors, batch_data
             _memguard.free_memory()
 
             _flush_checkpoint_and_log()

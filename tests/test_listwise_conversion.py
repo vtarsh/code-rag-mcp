@@ -19,8 +19,7 @@ class TestDetectListwiseFormat:
     def test_pointwise_data(self, tmp_path: Path):
         p = tmp_path / "pointwise.jsonl"
         p.write_text(
-            '{"query": "q1", "document": "d1", "label": 1.0}\n'
-            '{"query": "q2", "document": "d2", "label": 0.0}\n',
+            '{"query": "q1", "document": "d1", "label": 1.0}\n{"query": "q2", "document": "d2", "label": 0.0}\n',
             encoding="utf-8",
         )
         assert detect_listwise_format(p) is False
@@ -43,9 +42,9 @@ class TestDetectListwiseFormat:
         """First usable line wins — blanks and JSON errors skip to next."""
         p = tmp_path / "noisy.jsonl"
         p.write_text(
-            "\n"                                  # blank
-            "{broken json\n"                      # malformed
-            '{"irrelevant": "keys"}\n'            # missing both schemas — skip
+            "\n"  # blank
+            "{broken json\n"  # malformed
+            '{"irrelevant": "keys"}\n'  # missing both schemas — skip
             '{"query": "q", "docs": ["d"], "labels": [1.0]}\n',
             encoding="utf-8",
         )
@@ -81,10 +80,23 @@ class TestConvertToListwiseScript:
         self._make_pointwise(in_path)
 
         result = subprocess.run(
-            [sys.executable, str(self._SCRIPT),
-             "--in", str(in_path), "--out", str(out_path),
-             "--max-negs", "10", "--max-docs-per-group", "32", "--seed", "42"],
-            capture_output=True, text=True, timeout=30,
+            [
+                sys.executable,
+                str(self._SCRIPT),
+                "--in",
+                str(in_path),
+                "--out",
+                str(out_path),
+                "--max-negs",
+                "10",
+                "--max-docs-per-group",
+                "32",
+                "--seed",
+                "42",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         assert result.returncode == 0, f"stderr: {result.stderr}"
 
@@ -114,10 +126,23 @@ class TestConvertToListwiseScript:
         in_path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
 
         result = subprocess.run(
-            [sys.executable, str(self._SCRIPT),
-             "--in", str(in_path), "--out", str(out_path),
-             "--max-negs", "31", "--max-docs-per-group", "32", "--seed", "42"],
-            capture_output=True, text=True, timeout=30,
+            [
+                sys.executable,
+                str(self._SCRIPT),
+                "--in",
+                str(in_path),
+                "--out",
+                str(out_path),
+                "--max-negs",
+                "31",
+                "--max-docs-per-group",
+                "32",
+                "--seed",
+                "42",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         assert result.returncode == 0
 

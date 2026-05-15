@@ -1,0 +1,20 @@
+loaded 619 eval rows from profiles/pay-com/jira_eval_clean.jsonl
+<All keys matched successfully>
+Loading weights:   0%|          | 0/138 [00:00<?, ?it/s]Loading weights: 100%|██████████| 138/138 [00:00<00:00, 5396.92it/s]
+<All keys matched successfully>
+Loading weights:   0%|          | 0/201 [00:00<?, ?it/s]Loading weights: 100%|██████████| 201/201 [00:00<00:00, 7109.23it/s]
+  50/619 (212s) h@10=0.6000
+  100/619 (421s) h@10=0.5700
+  150/619 (649s) h@10=0.6333
+  200/619 (878s) h@10=0.6600
+  250/619 (1095s) h@10=0.6760
+  300/619 (1336s) h@10=0.6867
+  350/619 (1551s) h@10=0.6971
+  400/619 (1796s) h@10=0.6825
+  450/619 (2009s) h@10=0.6733
+  500/619 (2229s) h@10=0.6680
+  550/619 (2472s) h@10=0.6600
+  600/619 (2653s) h@10=0.6433
+
+DONE n=619  hit@5=0.5541  hit@10=0.6397  R@10=0.1549  nDCG@10=0.2382  p95=5563ms
+wrote bench_runs/jira_clean_fts5fix_session2.json

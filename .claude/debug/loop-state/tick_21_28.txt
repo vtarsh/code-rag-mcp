@@ -1,0 +1,6 @@
+tick at 21:28
+rtx4090 bge bs=2 (b010j13ih): train 25.7m, GPU 96%, wchar 2293940313, cpu_ticks 157088
+h100 bge bs=8 (bbx8i76z1): train 1.85m, GPU 100%, wchar 2293641097, cpu_ticks 14994
+h100 bge bs=2 (bsgxogw3s): provision (scp knowledge.db), no PID
+docs-mxbai (bacrrjtoz): build vectors 21.2m
+docs-gte (b8qksnoga): build vectors 21.2m

@@ -354,9 +354,7 @@ def analyze_task_tool(
             content preserved. Default False preserves current verbose output.
     """
     with db_connection() as conn:
-        return _analyze_task_impl(
-            conn, description, provider, exclude_task_id=exclude_task_id, brief=brief
-        )
+        return _analyze_task_impl(conn, description, provider, exclude_task_id=exclude_task_id, brief=brief)
 
 
 def _analyze_task_impl(

@@ -55,6 +55,7 @@ TASKS_DB = _BASE / "db" / "tasks.db"
 KNOWLEDGE_DB = _BASE / "db" / "knowledge.db"
 DAEMON_PORT = int(os.getenv("CODE_RAG_DAEMON_PORT", "8742"))
 
+
 def pause_daemon(port: int = DAEMON_PORT, timeout: float = 5.0) -> bool:
     """POST /admin/shutdown so daemon frees its ML models before eval.
 
@@ -79,6 +80,7 @@ def pause_daemon(port: int = DAEMON_PORT, timeout: float = 5.0) -> bool:
     except Exception as e:
         log.info("daemon shutdown error: %s; continuing", e)
         return False
+
 
 def load_all_gt_tasks(db_path: Path, projects: list[str] | None = None) -> list[dict]:
     """Load every ticket with non-empty repos_changed (no sampling).
@@ -119,7 +121,8 @@ def load_all_gt_tasks(db_path: Path, projects: list[str] | None = None) -> list[
         # malformed rows default to [] so callers never see KeyError and the
         # file-recall helpers can fold to 0.0 via `if not expected_files`.
         expected_files: list[str] = []
-        raw_files = r["files_changed"] if "files_changed" in r.keys() else None
+        # `r` is a sqlite3.Row — `in r` tests values, not columns; `.keys()` is required.
+        raw_files = r["files_changed"] if "files_changed" in r.keys() else None  # noqa: SIM118
         if raw_files:
             try:
                 parsed = json.loads(raw_files) or []
@@ -138,6 +141,7 @@ def load_all_gt_tasks(db_path: Path, projects: list[str] | None = None) -> list[
         )
     return tasks
 
+
 def _resolve_eval_query(task: dict, mode: str) -> str:
     """Pick query string for eval based on mode.
 
@@ -149,6 +153,7 @@ def _resolve_eval_query(task: dict, mode: str) -> str:
         return build_query_text(task, use_description=True) or task["summary"]
     return task["summary"]
 
+
 def rerank_with_latency(model, query: str, chunks: list[dict], *, batch_size: int = 4) -> tuple[list[dict], float]:
     pairs = [(query, c["content"][:1000]) for c in chunks]
     t0 = time.perf_counter()
@@ -157,11 +162,13 @@ def rerank_with_latency(model, query: str, chunks: list[dict], *, batch_size: in
     order = sorted(range(len(chunks)), key=lambda i: float(scores[i]), reverse=True)
     return [chunks[i] for i in order], lat
 
+
 def rank_of_first_gt(ranked_repos: list[str], expected: set[str]) -> int | None:
     for i, r in enumerate(ranked_repos, start=1):
         if r in expected:
             return i
     return None
+
 
 # --- File-level GT upgrade (docs/eval_file_level_gt_proposal.md §2, §6) ---
 #
@@ -258,6 +265,7 @@ def _lpt_schedule(
 
     return shard_tasks[shard_index]
 
+
 class _CrossEncoderAdapter:
     """Adapt a sentence_transformers.CrossEncoder to RerankerProvider.rerank(...).
 
@@ -280,6 +288,7 @@ class _CrossEncoderAdapter:
         pairs = [(query, doc) for doc in documents]
         scores = self._model.predict(pairs, batch_size=self._batch_size)
         return [float(s) for s in scores]
+
 
 def eval_one_model_hybrid(
     model_name_or_path: str,
@@ -425,6 +434,7 @@ def eval_one_model_hybrid(
         pass
 
     return per_task, latencies
+
 
 def eval_one_model(
     model_name_or_path: str,
@@ -576,13 +586,16 @@ def eval_one_model(
 
     return per_task, latencies
 
+
 def mean(xs: list[float]) -> float:
     return sum(xs) / len(xs) if xs else 0.0
+
 
 def aggregate(per_task: dict[str, dict], tickets: list[str]) -> dict:
     r10 = [per_task[t]["recall_at_10"] for t in tickets if t in per_task]
     r25 = [per_task[t]["recall_at_25"] for t in tickets if t in per_task]
     return {"r10_mean": mean(r10), "r25_mean": mean(r25), "n": len(r10)}
+
 
 def build_delta(base: dict[str, dict], ft: dict[str, dict]) -> dict[str, dict]:
     """Per-ticket deltas. Format aligned with merge_eval_shards.build_delta
@@ -620,6 +633,7 @@ def build_delta(base: dict[str, dict], ft: dict[str, dict]) -> dict[str, dict]:
         }
     return out
 
+
 def find_regressions(delta: dict[str, dict], *, r10_drop_5pp: float = -0.05, r10_drop_10pp: float = -0.10) -> dict:
     drops_5 = [t for t, d in delta.items() if d["recall_at_10"] <= r10_drop_5pp]
     drops_10 = [t for t, d in delta.items() if d["recall_at_10"] <= r10_drop_10pp]
@@ -630,9 +644,11 @@ def find_regressions(delta: dict[str, dict], *, r10_drop_5pp: float = -0.05, r10
         "tickets_regressed": [{"ticket": t, "r10_delta": round(delta[t]["recall_at_10"], 4)} for t in drops_5],
     }
 
+
 # `decide_verdict` lives in scripts/eval_verdict.py — single source of truth.
 # The old test-only gate (delta_test r@10, n=5 tickets) was replaced 2026-04-20
 # with a full-eval gate (Δr@10 + ΔHit@5 + net_improved). See eval_verdict module.
+
 
 def print_console_report(
     *,
@@ -683,6 +699,7 @@ def print_console_report(
     print()
     print(f"Verdict: {verdict}")
     print(f"  {verdict_reason}")
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="P5 eval: baseline vs FT reranker")
@@ -769,6 +786,7 @@ def parse_args() -> argparse.Namespace:
         "measures what production actually does.",
     )
     return p.parse_args()
+
 
 def main() -> int:
     args = parse_args()
@@ -1135,6 +1153,7 @@ def main() -> int:
         verdict_reason=reason,
     )
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

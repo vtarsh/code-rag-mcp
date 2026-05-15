@@ -16,6 +16,11 @@ daemon.pid
 benchmark_*.json
 blind_spots_results.json
 ab_test_baseline.json
+# Ephemeral bench artifacts regenerated on every pytest run (incl. pre-commit)
+bench_runs/*T*.json
+
+# Trained model artifacts (weights live on HuggingFace, not git — too large)
+models/
 
 # Generated HTML visualizations
 graph.html
@@ -27,7 +32,9 @@ graph-*.html
 # Claude Code agent worktrees (ephemeral, per-session)
 .claude/worktrees/
 
-# Org-specific profiles (only example/ is tracked)
+# Org-specific profiles — local-only, never published.
+# Only the generic example/ profile is tracked; real profiles (e.g. pay-com)
+# contain internal/sensitive org data and stay out of this public repo.
 profiles/*/
 !profiles/example/
 

@@ -9,8 +9,6 @@ Recipes are loaded from profiles/{profile}/recipes.yaml via config.RECIPES.
 
 from __future__ import annotations
 
-import sys
-
 from .base import AnalysisContext, Finding
 
 
@@ -129,14 +127,13 @@ def _evaluate_condition(ctx: AnalysisContext, condition: str, provider: str, con
         repo_name = f"grpc-apm-{provider}"
         row = conn.execute("SELECT 1 FROM repos WHERE name = ?", (repo_name,)).fetchone()
         if not row:
-            row = conn.execute(
-                "SELECT 1 FROM repos WHERE name = ?", (f"grpc-providers-{provider}",)
-            ).fetchone()
+            row = conn.execute("SELECT 1 FROM repos WHERE name = ?", (f"grpc-providers-{provider}",)).fetchone()
         repo_exists = bool(row)
 
     # Parse AND-joined predicates (supports NOT prefix)
     # Split on " AND " (case-insensitive)
     import re
+
     predicates = [p.strip() for p in re.split(r"\s+AND\s+", condition, flags=re.IGNORECASE)]
 
     for pred in predicates:
@@ -189,9 +186,7 @@ def _inject_recipe_repos(ctx: AnalysisContext, recipe: dict) -> str:
 
             # Verify repo exists in DB (or is the new provider repo)
             is_new_provider = repo.startswith("grpc-apm-") and repo not in existing_repos
-            repo_exists = ctx.conn.execute(
-                "SELECT 1 FROM repos WHERE name = ?", (repo,)
-            ).fetchone()
+            repo_exists = ctx.conn.execute("SELECT 1 FROM repos WHERE name = ?", (repo,)).fetchone()
 
             if not repo_exists and not is_new_provider:
                 continue

@@ -5,6 +5,7 @@ import time
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
+
 def _make_handler(method, path, body=None, tools=None):
     """Create a DaemonHandler instance with mocked socket I/O.
 
@@ -73,6 +74,7 @@ def _make_handler(method, path, body=None, tools=None):
 
     return responses, response_data
 
+
 class TestHealthEndpoint:
     """GET /health should return status ok."""
 
@@ -87,6 +89,7 @@ class TestHealthEndpoint:
         responses, data = _make_handler("GET", "/unknown")
         assert responses[0]["status"] == 404
         assert "error" in data
+
 
 class TestToolEndpoint:
     """POST /tool/<name> tests."""
@@ -165,7 +168,7 @@ class TestToolEndpoint:
         assert "something broke" in data["error"]
 
     def test_non_tool_post_returns_404(self):
-        responses, data = _make_handler("POST", "/other/path", body={})
+        responses, _data = _make_handler("POST", "/other/path", body={})
         assert responses[0]["status"] == 404
 
     def test_empty_body_defaults_to_empty_dict(self):
@@ -217,13 +220,14 @@ class TestToolEndpoint:
         assert responses[0]["status"] == 500
         assert "error" in data
 
+
 class TestToolNameExtraction:
     """Verify tool name is correctly extracted from URL path."""
 
     def test_nested_path_not_matched(self):
         """Only /tool/<name> is valid, not /tool/a/b."""
         mock_tools = {"a/b": lambda args: "ok", "a": lambda args: "wrong"}
-        responses, data = _make_handler(
+        responses, _data = _make_handler(
             "POST",
             "/tool/a/b",
             body={},
@@ -231,6 +235,7 @@ class TestToolNameExtraction:
         )
         # "a/b" is a valid key if present in TOOLS dict — daemon extracts everything after /tool/
         assert responses[0]["status"] == 200 or responses[0]["status"] == 404
+
 
 class TestAdminEndpoints:
     """Split /admin/unload (reversible) vs /admin/shutdown (drain + exit)."""
@@ -352,6 +357,7 @@ class TestAdminEndpoints:
 
         daemon._shutting_down.clear()
 
+
 class TestLogConcurrency:
     """Concurrent JSONL writes must not interleave or tear lines."""
 
@@ -381,9 +387,7 @@ class TestLogConcurrency:
             th.join()
 
         lines = log_path.read_text().splitlines()
-        assert len(lines) == num_threads * per_thread, (
-            f"expected {num_threads * per_thread} lines, got {len(lines)}"
-        )
+        assert len(lines) == num_threads * per_thread, f"expected {num_threads * per_thread} lines, got {len(lines)}"
         for line in lines:
             # Every line parses as complete JSON (no tearing).
             obj = json.loads(line)
@@ -406,9 +410,7 @@ class TestLogConcurrency:
         assert backup1.exists(), "at least one rotated backup (.1) must exist"
         assert log_path.stat().st_size > 0
 
-        existing_backups = sum(
-            1 for i in (1, 2, 3, 4) if (tmp_path / f"tool_calls.jsonl.{i}").exists()
-        )
+        existing_backups = sum(1 for i in (1, 2, 3, 4) if (tmp_path / f"tool_calls.jsonl.{i}").exists())
         assert existing_backups <= daemon._JSONL_BACKUPS + 1  # allow fencepost tolerance
 
         all_paths = [log_path, backup1]

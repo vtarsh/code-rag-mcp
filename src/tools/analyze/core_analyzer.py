@@ -480,9 +480,7 @@ def _section_co_occurrence(ctx: AnalysisContext) -> str:
             (f"{task_prefix}-%", exclude),
         ).fetchall()
     else:
-        rows = ctx.conn.execute(
-            "SELECT repos_changed FROM task_history WHERE ticket_id != ?", (exclude,)
-        ).fetchall()
+        rows = ctx.conn.execute("SELECT repos_changed FROM task_history WHERE ticket_id != ?", (exclude,)).fetchall()
     if len(rows) < 5:
         return ""
 
@@ -534,7 +532,11 @@ def _section_co_occurrence(ctx: AnalysisContext) -> str:
             prob_reverse = count / repo_count[other] if repo_count[other] > 0 else 0
             if prob_forward >= COOCCUR_FORWARD_PROB and other not in cooccur_boosted:
                 cooccur_boosted[other] = (f_repo, prob_forward)
-            elif prob_reverse >= COOCCUR_REVERSE_PROB and count >= COOCCUR_REVERSE_MIN_COUNT and other not in cooccur_boosted:
+            elif (
+                prob_reverse >= COOCCUR_REVERSE_PROB
+                and count >= COOCCUR_REVERSE_MIN_COUNT
+                and other not in cooccur_boosted
+            ):
                 cooccur_boosted[other] = (f_repo, prob_reverse)
 
     if cooccur_boosted:

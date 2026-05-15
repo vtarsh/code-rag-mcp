@@ -50,7 +50,13 @@ def classify_file(file_path: str, file_type: str) -> str:
     if _TEST_PATH_RE.search(file_path or ""):
         return "test"
     if (file_path or "").endswith(".md") or file_type in {
-        "doc", "docs", "reference", "dictionary", "gotchas", "task", "provider_doc",
+        "doc",
+        "docs",
+        "reference",
+        "dictionary",
+        "gotchas",
+        "task",
+        "provider_doc",
     }:
         return "doc"
     if (file_path or "").endswith((".yml", ".yaml")):
@@ -104,7 +110,10 @@ def main() -> int:
     queries_raw = [json.loads(line)["query"] for line in args.queries.read_text().splitlines() if line.strip()]
     rng.shuffle(queries_raw)
     selected = select_queries(queries_raw, args.n_doc, args.n_repo, args.n_general)
-    print(f"selected {len(selected)} queries ({args.n_doc} doc + {args.n_repo} repo + {args.n_general} general)", flush=True)
+    print(
+        f"selected {len(selected)} queries ({args.n_doc} doc + {args.n_repo} repo + {args.n_general} general)",
+        flush=True,
+    )
 
     from src.search.hybrid import hybrid_search
 
@@ -132,7 +141,9 @@ def main() -> int:
 
             for rank, r in enumerate(kept, 1):
                 row = {
-                    "query": q, "query_tag": tag, "rank": rank,
+                    "query": q,
+                    "query_tag": tag,
+                    "rank": rank,
                     "repo_name": r.get("repo_name", ""),
                     "file_path": r.get("file_path", ""),
                     "file_type": r.get("file_type", ""),

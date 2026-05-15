@@ -2,7 +2,6 @@
 
 from src.proto_parser import merge_schemas, parse_proto_file
 
-
 SAMPLE_PROTO = """
 syntax = "proto3";
 

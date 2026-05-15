@@ -12,6 +12,7 @@ from src.container import get_vector_search
 
 log = logging.getLogger(__name__)
 
+
 def vector_search(
     query: str,
     repo: str = "",

@@ -10,8 +10,59 @@ repos:
     hooks:
       - id: pytest
         name: pytest
-        entry: /usr/local/bin/python3.12 -m pytest tests/ -q --tb=short
+        # `arch -arm64` pins the hook to arm64: installed wheels (pydantic_core et al.)
+        # are arm64-only, but git may spawn the hook chain under x86_64 (Rosetta),
+        # which made every test collection fail with a mach-o arch mismatch.
+        entry: arch -arm64 /usr/local/bin/python3.12 -m pytest tests/ -q --tb=short
         language: system
         pass_filenames: false
         always_run: true
         stages: [pre-commit]
+
+      - id: docs-file-line-refs
+        name: docs file:line refs validator
+        entry: /usr/local/bin/python3.12 scripts/validate_doc_file_line_refs.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+
+      - id: docs-anchors
+        name: docs markdown anchor validator
+        entry: /usr/local/bin/python3.12 scripts/validate_doc_anchors.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+
+      - id: docs-related-repos
+        name: docs related_repos validator
+        entry: /usr/local/bin/python3.12 scripts/validate_doc_related_repos.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+
+      - id: docs-size-guard
+        name: docs size guard (per-tree limits)
+        entry: /usr/local/bin/python3.12 scripts/validate_doc_size.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+
+      - id: docs-frontmatter
+        name: docs frontmatter required (type:)
+        entry: /usr/local/bin/python3.12 scripts/validate_doc_frontmatter.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+
+      - id: docs-overlay-vs-proto
+        name: overlay-vs-proto C20 provenance check
+        entry: /usr/local/bin/python3.12 scripts/validate_overlay_vs_proto.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]

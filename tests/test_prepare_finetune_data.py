@@ -12,10 +12,9 @@ import re
 import pytest
 
 from scripts.prepare_finetune_data import (
-    verify_no_query_leakage,
     _default_query_tokens,
+    verify_no_query_leakage,
 )
-
 
 # --------------------------------------------------------------------------- #
 #                              trivial pass                                   #

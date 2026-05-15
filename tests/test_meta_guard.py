@@ -13,9 +13,7 @@ def db():
     """In-memory SQLite with a minimal task_history fixture."""
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    conn.execute(
-        "CREATE TABLE task_history (ticket_id TEXT, summary TEXT, description TEXT)"
-    )
+    conn.execute("CREATE TABLE task_history (ticket_id TEXT, summary TEXT, description TEXT)")
     rows = [
         ("PI-60", "Payper - Interac e-Transfer APM integration", "Standard APM flow"),
         ("PI-40", "trustly integration", "trustly portal"),
@@ -32,7 +30,10 @@ def db():
 
 def _ctx(db, description: str, exclude_task_id: str = "") -> AnalysisContext:
     return AnalysisContext(
-        conn=db, description=description, words=set(), provider="",
+        conn=db,
+        description=description,
+        words=set(),
+        provider="",
         exclude_task_id=exclude_task_id,
     )
 
@@ -40,6 +41,7 @@ def _ctx(db, description: str, exclude_task_id: str = "") -> AnalysisContext:
 # ---------------------------------------------------------------------------
 # Jira ID detection
 # ---------------------------------------------------------------------------
+
 
 def test_extract_jira_ids_single():
     assert _extract_jira_ids("PI-60") == ["PI-60"]
@@ -65,6 +67,7 @@ def test_extract_jira_ids_none():
 # ---------------------------------------------------------------------------
 # Jira ID short-circuit behavior
 # ---------------------------------------------------------------------------
+
 
 def test_warns_on_known_jira_id(db):
     out = section_meta_guard(_ctx(db, "PI-60"))
@@ -101,6 +104,7 @@ def test_exclude_task_id_suppresses_jira_warn(db):
 # Rare-token scoring
 # ---------------------------------------------------------------------------
 
+
 def test_warns_on_rare_token_match(db):
     # "payper" + "interac" + "etransfer" all appear only in PI-60.
     out = section_meta_guard(_ctx(db, "Integrate Payper Interac eTransfer"))
@@ -130,6 +134,7 @@ def test_quiet_on_single_rare_token(db):
 # ---------------------------------------------------------------------------
 # Robustness
 # ---------------------------------------------------------------------------
+
 
 def test_empty_description_returns_empty(db):
     assert section_meta_guard(_ctx(db, "")) == ""

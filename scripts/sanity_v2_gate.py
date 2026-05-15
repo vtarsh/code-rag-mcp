@@ -33,7 +33,6 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 from scripts.eval_verdict import verdict_from_snapshot_dual  # noqa: E402
 
-
 _DEFAULT_SNAPSHOTS = (
     ("gte_v8_fallback", _REPO_ROOT / "profiles/pay-com/finetune_history/gte_v8_fallback.json"),
     ("gte_v6_2", _REPO_ROOT / "profiles/pay-com/finetune_history/gte_v6_2.json"),
@@ -50,9 +49,7 @@ def _load_snapshot(path: Path) -> dict:
     baseline = raw.get("per_task_baseline") or {}
     candidate = raw.get("per_task_ft_v1") or raw.get("per_task_ft") or {}
     if not baseline or not candidate:
-        raise ValueError(
-            f"snapshot {path} missing per_task_baseline / per_task_ft_v1"
-        )
+        raise ValueError(f"snapshot {path} missing per_task_baseline / per_task_ft_v1")
     return {"baseline": baseline, "candidate": candidate}
 
 
@@ -125,8 +122,7 @@ def run(snapshot_specs: list[tuple[str, Path]]) -> int:
     print()
     if flips:
         print(
-            f"[FAIL] {len(flips)} snapshot(s) flipped v1=PROMOTE → v2=REJECT: "
-            f"{', '.join(flips)}",
+            f"[FAIL] {len(flips)} snapshot(s) flipped v1=PROMOTE → v2=REJECT: {', '.join(flips)}",
             file=sys.stderr,
         )
         return 1

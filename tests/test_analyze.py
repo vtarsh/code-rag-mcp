@@ -293,14 +293,17 @@ class TestCheckMethodExists:
 
 
 class TestGhApi:
+    @patch("src.tools.analyze.github_helpers._GH_AVAILABLE", True)
     @patch("src.tools.analyze.github_helpers.subprocess.run")
     def test_success(self, mock_run):
-        from src.tools.analyze import _gh_api
+        from src.tools.analyze import _clear_gh_cache, _gh_api
 
+        _clear_gh_cache()  # Ensure no stale cache from earlier tests
         mock_run.return_value = MagicMock(returncode=0, stdout='[{"name": "main"}]')
         result = _gh_api("repos/org/repo/branches")
         assert result == [{"name": "main"}]
 
+    @patch("src.tools.analyze.github_helpers._GH_AVAILABLE", True)
     @patch("src.tools.analyze.github_helpers.subprocess.run", side_effect=Exception("timeout"))
     def test_failure(self, mock_run):
         from src.tools.analyze import _clear_gh_cache, _gh_api

@@ -19,8 +19,18 @@ _DOC_PREFIX_RE = re.compile(r"^\s*\[(?:Repo|[^]]+?Docs):\s*[^\]]+\]\s*")
 
 
 def _body_only(content: str) -> str:
-    """Strip the '[Repo: X]' / '[Provider Docs: X]' prefix from chunk content."""
-    return _DOC_PREFIX_RE.sub("", content)
+    """Strip leading '[Repo: X]' / '[Provider Docs: X]' prefixes from chunk content.
+
+    Provider-doc chunks can carry stacked prefixes (e.g. `[Stripe Docs: auth]
+    [Repo: auth] ## body`) when an indexer wraps a chunk_markdown output in an
+    additional vendor-aware label. Strip all of them so dedup keys reflect the
+    raw body.
+    """
+    while True:
+        new = _DOC_PREFIX_RE.sub("", content, count=1)
+        if new == content:
+            return content
+        content = new
 
 
 def content_hash(content: str) -> str:

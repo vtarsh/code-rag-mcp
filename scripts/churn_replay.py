@@ -52,18 +52,16 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import statistics
 import sys
 import time
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from scripts._common import setup_paths
 
-os.environ.setdefault("ACTIVE_PROFILE", "pay-com")
-os.environ.setdefault("CODE_RAG_HOME", str(REPO_ROOT))
+REPO_ROOT = setup_paths()
 
 
 def _load_queries(path: Path, limit: int | None) -> list[str]:
@@ -191,13 +189,13 @@ def _run_one_reranker(
         ]
         out.append(minimal)
         if (i + 1) % 20 == 0 or i + 1 == len(queries):
-            print(f"[{label}] {i+1}/{len(queries)} lat={lat:.2f}s q={q[:60]!r}", flush=True)
+            print(f"[{label}] {i + 1}/{len(queries)} lat={lat:.2f}s q={q[:60]!r}", flush=True)
     return out
 
 
 def _compute_metrics(base_results: list[list[dict]], v8_results: list[list[dict]], top_k: int) -> list[dict]:
     per_query: list[dict] = []
-    for a_raw, b_raw in zip(base_results, v8_results):
+    for a_raw, b_raw in zip(base_results, v8_results, strict=False):
         a = _top_keys(a_raw, top_k)
         b = _top_keys(b_raw, top_k)
         metrics: dict[str, Any] = {
@@ -220,7 +218,9 @@ def _aggregate(per_query: list[dict], top_k: int) -> dict:
         return [m[section][k] for m in per_query if m[section].get(k) is not None]
 
     mean_overlap = {k: round(statistics.fmean(_collect(("overlap_at_k", k))), 4) for k in (1, 3, 5, 10) if k <= top_k}
-    median_overlap = {k: round(statistics.median(_collect(("overlap_at_k", k))), 4) for k in (1, 3, 5, 10) if k <= top_k}
+    median_overlap = {
+        k: round(statistics.median(_collect(("overlap_at_k", k))), 4) for k in (1, 3, 5, 10) if k <= top_k
+    }
     mean_jaccard = {k: round(statistics.fmean(_collect(("jaccard_at_k", k))), 4) for k in (3, 5, 10) if k <= top_k}
 
     pct_top1 = round(100.0 * sum(1 for m in per_query if m["top1_changed"]) / n, 2) if n else 0.0
@@ -266,16 +266,22 @@ def main() -> int:
     t_start = time.perf_counter()
 
     base_results = _run_one_reranker(
-        queries, args.base_model,
-        batch_size=args.batch_size, max_length=args.max_length,
-        top_k=args.top_k, label="base",
+        queries,
+        args.base_model,
+        batch_size=args.batch_size,
+        max_length=args.max_length,
+        top_k=args.top_k,
+        label="base",
     )
     t_base = time.perf_counter() - t_start
 
     v8_results = _run_one_reranker(
-        queries, args.v8_model,
-        batch_size=args.batch_size, max_length=args.max_length,
-        top_k=args.top_k, label="v8",
+        queries,
+        args.v8_model,
+        batch_size=args.batch_size,
+        max_length=args.max_length,
+        top_k=args.top_k,
+        label="v8",
     )
     t_v8 = time.perf_counter() - t_start - t_base
 
@@ -296,7 +302,7 @@ def main() -> int:
         },
         "per_query": [
             {"query": q, **m, "base_top10": base_results[i], "v8_top10": v8_results[i]}
-            for i, (q, m) in enumerate(zip(queries, per_query_metrics))
+            for i, (q, m) in enumerate(zip(queries, per_query_metrics, strict=False))
         ],
         "summary": summary,
     }

@@ -34,7 +34,6 @@ import sqlite3
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Intent classifier (rule-based, proposal §2)
@@ -100,7 +99,7 @@ TOP_PROVIDERS = (
 )
 
 
-def detect_provider(query: str) -> Optional[str]:
+def detect_provider(query: str) -> str | None:
     """Return first matching top-10 provider or None."""
     q = query.lower()
     for p in TOP_PROVIDERS:
@@ -290,9 +289,7 @@ def stratified_sample(
         "length": {k: current[f"length:{k}"] for k in TARGET_LENGTH},
         "provider_tagged": sampled_tagged,
         "provider_free": sampled_free,
-        "provider_breakdown": Counter(
-            c["provider"] for c in selected if c["provider"]
-        ),
+        "provider_breakdown": Counter(c["provider"] for c in selected if c["provider"]),
         "target_intent": t_intent,
         "target_length": t_length,
         "target_provider_tagged": t_tagged,
@@ -366,7 +363,9 @@ def write_yaml(path: Path, sampled: list[dict], source: Path) -> None:
 
 def _print_stats(stats: dict) -> None:
     print("=" * 60)
-    print(f"sample_bench_v2 — requested={stats['requested']}, selected={stats['selected']}, pool={stats['source_pool']}")
+    print(
+        f"sample_bench_v2 — requested={stats['requested']}, selected={stats['selected']}, pool={stats['source_pool']}"
+    )
     print("=" * 60)
     print("\nIntent (target / selected):")
     for k in TARGET_INTENT:
@@ -384,7 +383,7 @@ def _print_stats(stats: dict) -> None:
     print("=" * 60)
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     p.add_argument(
         "--input",

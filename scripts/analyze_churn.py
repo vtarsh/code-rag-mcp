@@ -31,8 +31,8 @@ import argparse
 import json
 import re
 import statistics
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 _UPPER_TOK_RE = re.compile(r"\b[A-Z][A-Z0-9_]{2,}\b")
 _JIRA_PREFIX_RE = re.compile(r"\b(BO|PI|CORE|HS)-\d+\b")
@@ -86,7 +86,9 @@ def _aggregate_slices(per_query: list[dict], top_k: int) -> list[dict]:
 
     # By length bucket
     for bucket in ("short", "medium", "long"):
-        slices.append(_slice_stats(enriched, lambda e, b=bucket: e["_class"]["length_bucket"] == b, f"length={bucket}", top_k))
+        slices.append(
+            _slice_stats(enriched, lambda e, b=bucket: e["_class"]["length_bucket"] == b, f"length={bucket}", top_k)
+        )
 
     # Boolean flags
     for flag, label in [
@@ -108,15 +110,17 @@ def _top_diff_pairs(per_query: list[dict], top_k: int, limit: int) -> list[dict]
     ranked = sorted(per_query, key=churn_magnitude, reverse=True)
     out = []
     for e in ranked[:limit]:
-        out.append({
-            "query": e["query"],
-            "overlap_at_10": _overlap_at(e, top_k),
-            "top1_changed": e.get("top1_changed"),
-            "base_top10": e.get("base_top10", []),
-            "v8_top10": e.get("v8_top10", []),
-            "base_top10_keys": e.get("base_top10_keys", []),
-            "v8_top10_keys": e.get("v8_top10_keys", []),
-        })
+        out.append(
+            {
+                "query": e["query"],
+                "overlap_at_10": _overlap_at(e, top_k),
+                "top1_changed": e.get("top1_changed"),
+                "base_top10": e.get("base_top10", []),
+                "v8_top10": e.get("v8_top10", []),
+                "base_top10_keys": e.get("base_top10_keys", []),
+                "v8_top10_keys": e.get("v8_top10_keys", []),
+            }
+        )
     return out
 
 
@@ -182,7 +186,7 @@ def main() -> int:
 
     # Report
     report_parts: list[str] = []
-    report_parts.append(f"# Churn Replay Analysis\n")
+    report_parts.append("# Churn Replay Analysis\n")
     report_parts.append(f"**Source:** `{args.input}`")
     report_parts.append(f"**n_queries:** {config.get('n_queries', len(per_query))}")
     report_parts.append(f"**base:** `{config.get('base_model', '?')}`")
@@ -200,7 +204,7 @@ def main() -> int:
     report_parts.append(f"## Top {args.report_preview} Diff Pairs (highest churn)\n")
     report_parts.append(_fmt_diff_pairs_md(pairs, args.report_preview))
 
-    report_parts.append(f"\n## Outputs\n")
+    report_parts.append("\n## Outputs\n")
     report_parts.append(f"- Diff pairs JSONL: `{args.diff_pairs}` ({len(pairs)} entries)")
 
     report = "\n".join(report_parts) + "\n"

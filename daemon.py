@@ -125,6 +125,7 @@ TOOLS: dict[str, Callable[[dict[str, Any]], str]] = {
     ),
 }
 
+
 class DaemonHandler(BaseHTTPRequestHandler):
     """Handle /tool/<name> and /health requests."""
 
@@ -257,6 +258,7 @@ class DaemonHandler(BaseHTTPRequestHandler):
             self._json_response(500, {"error": str(e)})
         finally:
             _inflight_requests.dec()
+            _touch_activity()
 
     def _json_response(self, status: int, data: dict) -> None:
         body = json.dumps(data).encode()
@@ -270,6 +272,7 @@ class DaemonHandler(BaseHTTPRequestHandler):
         """Suppress default stderr logging — we use our own logger."""
         pass
 
+
 _start_time = time.time()
 _CALLS_LOG = _LOG_DIR / "tool_calls.jsonl"
 _FULL_CALLS_LOG = _LOG_DIR / "tool_calls_full.jsonl"
@@ -279,6 +282,7 @@ _JSONL_MAX_BYTES = int(os.environ.get("CODE_RAG_JSONL_MAX_BYTES", str(50 * 1024 
 _JSONL_BACKUPS = 3  # keep .1/.2/.3 like RotatingFileHandler
 
 _shutting_down = threading.Event()
+
 
 class _InflightCounter:
     """Thread-safe counter for in-flight /tool/ requests (drain gate)."""
@@ -299,11 +303,57 @@ class _InflightCounter:
         with self._lock:
             return self._n
 
+
 _inflight_requests = _InflightCounter()
+
+# Idle auto-unload: drop resident ML models after N seconds of no /tool/ traffic.
+# Reload is lazy (next /tool/ call triggers _ensure_model in embedding_provider).
+# CODE_RAG_IDLE_UNLOAD_SEC=0 disables the watchdog entirely.
+_IDLE_UNLOAD_SEC = int(os.environ.get("CODE_RAG_IDLE_UNLOAD_SEC", "1800"))
+_last_activity_ts = time.time()
+_activity_lock = threading.Lock()
+
+
+def _touch_activity() -> None:
+    global _last_activity_ts
+    with _activity_lock:
+        _last_activity_ts = time.time()
+
+
+def _idle_watchdog() -> None:
+    if _IDLE_UNLOAD_SEC <= 0:
+        return
+    check_every = max(30, _IDLE_UNLOAD_SEC // 4)
+    while not _shutting_down.is_set():
+        time.sleep(check_every)
+        if _shutting_down.is_set():
+            return
+        with _activity_lock:
+            idle = time.time() - _last_activity_ts
+        if idle < _IDLE_UNLOAD_SEC:
+            continue
+        if _inflight_requests.get() > 0:
+            continue
+        if not (is_model_loaded() or is_reranker_loaded()):
+            continue
+        try:
+            from src.embedding_provider import reset_providers
+
+            reset_providers()
+            with contextlib.suppress(Exception):
+                import torch
+
+                if torch.backends.mps.is_available():
+                    torch.mps.empty_cache()
+            log.info(f"Idle watchdog: unloaded resident models after {idle:.0f}s of inactivity")
+        except Exception as e:
+            log.warning(f"Idle watchdog: unload failed: {e}")
+
 
 # Serialise local writes so multiple threads in the same process can't
 # interleave on the same buffer. fcntl.LOCK_EX handles cross-process.
 _log_write_lock = threading.Lock()
+
 
 def _append_jsonl_locked(path: Path, record: dict) -> None:
     """Append a single JSON record as one line, atomically.
@@ -334,6 +384,7 @@ def _append_jsonl_locked(path: Path, record: dict) -> None:
             finally:
                 with contextlib.suppress(Exception):
                     fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
 
 def _rotate_if_needed(path: Path) -> None:
     """Rotate path → path.1 → path.2 → path.3, dropping the oldest.
@@ -367,6 +418,7 @@ def _rotate_if_needed(path: Path) -> None:
             path.replace(backups[0])
     except Exception:
         pass
+
 
 def _log_call(
     tool_name: str,
@@ -410,19 +462,26 @@ def _log_call(
     except Exception:
         pass
 
+
 def write_pid() -> None:
     """Write PID file for management scripts."""
     PID_FILE.write_text(str(os.getpid()))
+
 
 def cleanup_pid() -> None:
     """Remove PID file on shutdown."""
     with contextlib.suppress(OSError):
         PID_FILE.unlink(missing_ok=True)
 
+
 def main() -> None:
     log.info(f"Starting daemon on port {PORT} (pid={os.getpid()})")
 
     write_pid()
+
+    if _IDLE_UNLOAD_SEC > 0:
+        threading.Thread(target=_idle_watchdog, daemon=True, name="idle-watchdog").start()
+        log.info(f"Idle watchdog started: unload after {_IDLE_UNLOAD_SEC}s of inactivity")
 
     server = ThreadingHTTPServer(("127.0.0.1", PORT), DaemonHandler)
     try:
@@ -433,6 +492,7 @@ def main() -> None:
     finally:
         server.server_close()
         cleanup_pid()
+
 
 if __name__ == "__main__":
     main()

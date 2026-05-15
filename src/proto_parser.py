@@ -62,9 +62,7 @@ _FIELD_RE = re.compile(
     re.MULTILINE,
 )
 
-_RPC_RE = re.compile(
-    r"rpc\s+(\w+)\s*\(\s*([\w.]+)\s*\)\s*returns\s*\(\s*([\w.]+)\s*\)"
-)
+_RPC_RE = re.compile(r"rpc\s+(\w+)\s*\(\s*([\w.]+)\s*\)\s*returns\s*\(\s*([\w.]+)\s*\)")
 
 _ENUM_VALUE_RE = re.compile(r"^\s*(\w+)\s*=\s*\d+", re.MULTILINE)
 
@@ -83,9 +81,7 @@ def _extract_block(content: str, start_pos: int) -> str:
     return content[brace_idx + 1 :]
 
 
-def _extract_messages(
-    content: str, source_file: str, source_repo: str
-) -> dict[str, ProtoMessage]:
+def _extract_messages(content: str, source_file: str, source_repo: str) -> dict[str, ProtoMessage]:
     messages: dict[str, ProtoMessage] = {}
     for m in _MESSAGE_START_RE.finditer(content):
         name = m.group(1)

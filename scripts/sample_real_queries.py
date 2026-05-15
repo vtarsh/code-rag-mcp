@@ -164,7 +164,9 @@ def main() -> int:
         default=Path("profiles/pay-com/real_queries/sampled.jsonl"),
         help="Output sampled queries (default: profiles/pay-com/real_queries/sampled.jsonl)",
     )
-    p.add_argument("-n", "--count", type=int, default=DEFAULT_SAMPLE_SIZE, help=f"Sample size (default {DEFAULT_SAMPLE_SIZE})")
+    p.add_argument(
+        "-n", "--count", type=int, default=DEFAULT_SAMPLE_SIZE, help=f"Sample size (default {DEFAULT_SAMPLE_SIZE})"
+    )
     p.add_argument(
         "--per-session-cap",
         type=int,

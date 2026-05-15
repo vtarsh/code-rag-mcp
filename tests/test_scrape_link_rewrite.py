@@ -16,22 +16,13 @@ from pathlib import Path
 
 import pytest
 
-
 # Load the crawler module by path (it lives under profiles/pay-com/scripts/
 # and has a hyphenated filename, so a normal import is awkward).
-_CRAWLER_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "profiles"
-    / "pay-com"
-    / "scripts"
-    / "tavily-docs-crawler.py"
-)
+_CRAWLER_PATH = Path(__file__).resolve().parent.parent / "profiles" / "pay-com" / "scripts" / "tavily-docs-crawler.py"
 
 
 def _load_crawler():
-    spec = importlib.util.spec_from_file_location(
-        "tavily_docs_crawler", _CRAWLER_PATH
-    )
+    spec = importlib.util.spec_from_file_location("tavily_docs_crawler", _CRAWLER_PATH)
     module = importlib.util.module_from_spec(spec)
     # Avoid importing the real tavily SDK during tests — stub it.
     if "tavily" not in sys.modules:
@@ -59,16 +50,10 @@ BASE = "https://example.com/docs/"
 
 class TestRewriteHref:
     def test_absolute_site_path_is_resolved(self):
-        assert (
-            rewrite_href("/foo/bar", "https://example.com/docs/")
-            == "https://example.com/foo/bar"
-        )
+        assert rewrite_href("/foo/bar", "https://example.com/docs/") == "https://example.com/foo/bar"
 
     def test_external_https_unchanged(self):
-        assert (
-            rewrite_href("https://external.com/a", BASE)
-            == "https://external.com/a"
-        )
+        assert rewrite_href("https://external.com/a", BASE) == "https://external.com/a"
 
     def test_external_http_unchanged(self):
         assert rewrite_href("http://plain.example/x", BASE) == "http://plain.example/x"

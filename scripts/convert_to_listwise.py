@@ -11,8 +11,8 @@ so the output is reproducible.
 
 Usage:
     python3.12 scripts/convert_to_listwise.py \
-      --in profiles/pay-com/finetune_data_v8/train.jsonl \
-      --out profiles/pay-com/finetune_data_v12a/train.jsonl \
+      --in <pointwise-train.jsonl> \
+      --out <listwise-train.jsonl> \
       --max-negs 31 --seed 42
 """
 
@@ -27,16 +27,17 @@ from pathlib import Path
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
-    p.add_argument("--in", dest="inp", type=Path, required=True,
-                   help="Pointwise JSONL with {query, document, label}")
-    p.add_argument("--out", type=Path, required=True,
-                   help="Listwise JSONL with {query, docs, labels}")
-    p.add_argument("--max-negs", type=int, default=31,
-                   help="Max negatives to keep per query (positives always kept)")
-    p.add_argument("--max-docs-per-group", type=int, default=32,
-                   help="Hard cap on total docs (pos+neg) per group. "
-                        "Prevents OOM on listwise forward pass (each group = one step). "
-                        "If group exceeds cap, oversampled positives are downsampled too.")
+    p.add_argument("--in", dest="inp", type=Path, required=True, help="Pointwise JSONL with {query, document, label}")
+    p.add_argument("--out", type=Path, required=True, help="Listwise JSONL with {query, docs, labels}")
+    p.add_argument("--max-negs", type=int, default=31, help="Max negatives to keep per query (positives always kept)")
+    p.add_argument(
+        "--max-docs-per-group",
+        type=int,
+        default=32,
+        help="Hard cap on total docs (pos+neg) per group. "
+        "Prevents OOM on listwise forward pass (each group = one step). "
+        "If group exceeds cap, oversampled positives are downsampled too.",
+    )
     p.add_argument("--seed", type=int, default=42)
     return p.parse_args()
 
@@ -113,10 +114,13 @@ def main() -> int:
 
             docs = pos + neg
             labels = [1.0] * len(pos) + [0.0] * len(neg)
-            f.write(json.dumps(
-                {"query": query, "docs": docs, "labels": labels},
-                ensure_ascii=False,
-            ) + "\n")
+            f.write(
+                json.dumps(
+                    {"query": query, "docs": docs, "labels": labels},
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
             n_groups += 1
             n_emitted_rows += len(docs)
             pos_sizes.append(len(pos))
@@ -127,10 +131,12 @@ def main() -> int:
         if not xs:
             return "n=0"
         xs_sorted = sorted(xs)
-        return (f"n={len(xs)} min={xs_sorted[0]} "
-                f"median={xs_sorted[len(xs)//2]} "
-                f"p90={xs_sorted[int(len(xs)*0.9)]} "
-                f"max={xs_sorted[-1]}")
+        return (
+            f"n={len(xs)} min={xs_sorted[0]} "
+            f"median={xs_sorted[len(xs) // 2]} "
+            f"p90={xs_sorted[int(len(xs) * 0.9)]} "
+            f"max={xs_sorted[-1]}"
+        )
 
     print(f"input rows: {total_in} (skipped malformed: {skipped})")
     print(f"unique queries: {len(groups)}")

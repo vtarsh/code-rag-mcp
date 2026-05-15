@@ -1,0 +1,29 @@
+{
+  "n_existing": 143,
+  "n_new_picked": 68,
+  "n_new_labeled": 59,
+  "n_dropped_no_label": 9,
+  "n_merged": 202,
+  "drop_stats": {
+    "existing_eval_dup": 145,
+    "len_filter": 465,
+    "train_dup": 20,
+    "train_jaccard": 9,
+    "existing_jaccard": 16
+  },
+  "merged_strata_counts": {
+    "payout": 21,
+    "provider": 23,
+    "nuvei": 23,
+    "webhook": 23,
+    "method": 17,
+    "interac": 9,
+    "refund": 13,
+    "trustly": 5,
+    "aircash": 13,
+    "tail": 55
+  },
+  "avg_pool_size_new": 23.6,
+  "out_path": "/Users/vaceslavtarsevskij/.code-rag-mcp/profiles/pay-com/doc_intent_eval_v3_n200.jsonl",
+  "seed": 43
+}

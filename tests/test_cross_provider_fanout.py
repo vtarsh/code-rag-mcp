@@ -189,14 +189,16 @@ class TestSearchToolPlumbing:
         from src.search.service import search_tool
 
         mock_hybrid.return_value = (
-            [{
-                "repo_name": "grpc-apm-nuvei",
-                "file_path": "methods/payout.js",
-                "file_type": "grpc_method",
-                "chunk_type": "function",
-                "snippet": "body",
-                "sources": ["keyword"],
-            }],
+            [
+                {
+                    "repo_name": "grpc-apm-nuvei",
+                    "file_path": "methods/payout.js",
+                    "file_type": "grpc_method",
+                    "chunk_type": "function",
+                    "snippet": "body",
+                    "sources": ["keyword"],
+                }
+            ],
             None,
             1,
         )

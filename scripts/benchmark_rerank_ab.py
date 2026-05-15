@@ -18,12 +18,12 @@ import re
 import sqlite3
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.search.fts import sanitize_fts_query  # noqa: E402
+from src.search.fts import sanitize_fts_query
 
 # FTS5 MATCH treats []{}()":, as syntax; strip so prefixes like
 # "[APM] - Nuvei" or "Bancomat, satispay" don't error out.
@@ -32,6 +32,7 @@ _FTS_PRECLEAN = re.compile(r"[\[\]{}():\"',;]")
 
 def preclean_for_fts(text: str) -> str:
     return _FTS_PRECLEAN.sub(" ", text)
+
 
 DEFAULT_MODELS = [
     "cross-encoder/ms-marco-MiniLM-L-6-v2",
@@ -63,11 +64,13 @@ def load_pi_tasks(db_path: Path, n: int, seed: int, prefix: str = "PI") -> list[
             continue
         if not repos:
             continue
-        tasks.append({
-            "ticket_id": r["ticket_id"],
-            "summary": r["summary"] or "",
-            "expected_repos": list(repos),
-        })
+        tasks.append(
+            {
+                "ticket_id": r["ticket_id"],
+                "summary": r["summary"] or "",
+                "expected_repos": list(repos),
+            }
+        )
 
     rng = random.Random(seed)
     rng.shuffle(tasks)
@@ -80,16 +83,21 @@ def fetch_fts_candidates(conn: sqlite3.Connection, query_text: str, limit: int =
         raise ValueError("empty_query_after_sanitize")
     try:
         rows = conn.execute(
-            "SELECT rowid, content, repo_name, file_path FROM chunks "
-            "WHERE chunks MATCH ? ORDER BY rank LIMIT ?",
+            "SELECT rowid, content, repo_name, file_path FROM chunks WHERE chunks MATCH ? ORDER BY rank LIMIT ?",
             (sanitized, limit),
         ).fetchall()
     except sqlite3.OperationalError:
         # FTS5 syntax error (e.g. bracket chars) -> treat as no candidates
         return []
-    return [{"rowid": r["rowid"], "content": r["content"] or "",
-             "repo_name": r["repo_name"] or "", "file_path": r["file_path"] or ""}
-            for r in rows]
+    return [
+        {
+            "rowid": r["rowid"],
+            "content": r["content"] or "",
+            "repo_name": r["repo_name"] or "",
+            "file_path": r["file_path"] or "",
+        }
+        for r in rows
+    ]
 
 
 def rerank_and_rank(model, query: str, chunks: list[dict]) -> tuple[list[dict], float]:
@@ -197,12 +205,14 @@ def benchmark_model(
             top10 = top25[:10]
             r10 = compute_recall(top10, expected, 10)
             r25 = compute_recall(top25, expected, 25)
-            per.update({
-                "recall_at_10": r10,
-                "recall_at_25": r25,
-                "latency_s": lat,
-                "top_10_repos": top10,
-            })
+            per.update(
+                {
+                    "recall_at_10": r10,
+                    "recall_at_25": r25,
+                    "latency_s": lat,
+                    "top_10_repos": top10,
+                }
+            )
             latencies.append(lat)
             r10s.append(r10)
             r25s.append(r25)
@@ -223,6 +233,7 @@ def benchmark_model(
     gc.collect()
     try:
         import torch
+
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
     except ImportError:
@@ -236,12 +247,11 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=Path("./rerank_ab_results.json"))
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--models", type=str, default=None,
-                    help="CSV of model names; default = all 4")
-    ap.add_argument("--ticket-prefix", type=str, default="PI",
-                    help="task_history.ticket_id prefix to sample (e.g. PI, CORE, BO)")
-    ap.add_argument("--fts-limit", type=int, default=50,
-                    help="FTS5 candidate pool size per task before rerank")
+    ap.add_argument("--models", type=str, default=None, help="CSV of model names; default = all 4")
+    ap.add_argument(
+        "--ticket-prefix", type=str, default="PI", help="task_history.ticket_id prefix to sample (e.g. PI, CORE, BO)"
+    )
+    ap.add_argument("--fts-limit", type=int, default=50, help="FTS5 candidate pool size per task before rerank")
     args = ap.parse_args()
 
     models = [m.strip() for m in args.models.split(",")] if args.models else list(DEFAULT_MODELS)
@@ -249,8 +259,8 @@ def main() -> None:
     rng = random.Random(args.seed)
     shuffled = models[:]
     rng.shuffle(shuffled)
-    labels = [f"model_{c}" for c in "ABCDEFGH"[:len(shuffled)]]
-    label_to_name = dict(zip(labels, shuffled))
+    labels = [f"model_{c}" for c in "ABCDEFGH"[: len(shuffled)]]
+    label_to_name = dict(zip(labels, shuffled, strict=False))
 
     if args.dry_run:
         labels = labels[:1]
@@ -262,12 +272,13 @@ def main() -> None:
     print(f"loaded {len(tasks)} tasks (seed={args.seed})", flush=True)
 
     results: dict = {
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "seed": args.seed,
         "n_tasks": len(tasks),
         "fts_limit": args.fts_limit,
-        "tasks": [{"ticket_id": t["ticket_id"], "summary": t["summary"],
-                   "expected_repos": t["expected_repos"]} for t in tasks],
+        "tasks": [
+            {"ticket_id": t["ticket_id"], "summary": t["summary"], "expected_repos": t["expected_repos"]} for t in tasks
+        ],
         "models": {},
     }
     save_results(args.out, results)

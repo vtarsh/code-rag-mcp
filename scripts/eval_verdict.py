@@ -25,9 +25,8 @@ recall a user sees. We keep MRR as a diagnostic field, never in the gate.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
-
 
 # ---- Gate thresholds (tunable in one place) --------------------------------
 
@@ -48,14 +47,16 @@ REGRESSION_DELTA_PP = 0.05  # 5pp drop
 
 # ---- Data classes ----------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class VerdictResult:
-    verdict: str       # PROMOTE | HOLD | REJECT
-    reason: str        # human-readable
-    metrics: dict      # diagnostic numbers (all_delta_r10, all_delta_hit5, mrr, etc.)
+    verdict: str  # PROMOTE | HOLD | REJECT
+    reason: str  # human-readable
+    metrics: dict  # diagnostic numbers (all_delta_r10, all_delta_hit5, mrr, etc.)
 
 
 # ---- Metric helpers (computed from per_task_* dicts) -----------------------
+
 
 def mean(xs: Iterable[float]) -> float:
     xs = list(xs)
@@ -123,6 +124,7 @@ def count_improvements_regressions(
 
 # ---- The gate itself -------------------------------------------------------
 
+
 def decide_verdict(
     *,
     delta_r10_all: float,
@@ -188,9 +190,7 @@ def decide_verdict(
         )
 
     promote_ok = (
-        delta_r10_all >= delta_r10_threshold
-        and delta_hit5_all >= delta_hit5_threshold
-        and net >= min_net_improved
+        delta_r10_all >= delta_r10_threshold and delta_hit5_all >= delta_hit5_threshold and net >= min_net_improved
     )
     if promote_ok:
         return VerdictResult(
@@ -217,6 +217,7 @@ def decide_verdict(
 
 
 # ---- Convenience: compute everything from snapshot dicts ------------------
+
 
 def verdict_from_snapshot(
     per_task_baseline: dict[str, dict],
@@ -261,8 +262,8 @@ def verdict_from_snapshot(
 # Thresholds below are first-principles guesses from §3; calibration on
 # v6.2 vs v8 is deferred to §7 of the proposal (next run).
 
-DELTA_FILE_R10_THRESHOLD_V2 = 0.01   # +1pp — file-level is strictly harder
-MIN_NET_STRATUM_V2 = 15               # required net in BOTH strata
+DELTA_FILE_R10_THRESHOLD_V2 = 0.01  # +1pp — file-level is strictly harder
+MIN_NET_STRATUM_V2 = 15  # required net in BOTH strata
 
 # Stratum thresholds:
 #   n_gt_repos == 1:    r@10 is binary (0 or 1) — only full flips matter.
@@ -408,9 +409,7 @@ def decide_verdict_v2(
 
     # PROMOTE: all primaries meet threshold AND min stratum net ≥ min_net_stratum.
     primary_ok = (
-        d_r10 >= delta_r10_threshold
-        and d_hit5 >= delta_hit5_threshold
-        and d_file_r10 >= delta_file_r10_threshold
+        d_r10 >= delta_r10_threshold and d_hit5 >= delta_hit5_threshold and d_file_r10 >= delta_file_r10_threshold
     )
     stratum_ok = min(strat["net_n1"], strat["net_n2plus"]) >= min_net_stratum
     if primary_ok and stratum_ok:
@@ -531,20 +530,14 @@ def verdict_from_snapshot_dual(
             else:
                 file_delta = round(float(f_file) - float(b_file), 4)
             pd[tid] = {
-                "recall_at_10": round(
-                    f.get("recall_at_10", 0.0) - b.get("recall_at_10", 0.0), 4
-                ),
-                "recall_at_25": round(
-                    f.get("recall_at_25", 0.0) - b.get("recall_at_25", 0.0), 4
-                ),
+                "recall_at_10": round(f.get("recall_at_10", 0.0) - b.get("recall_at_10", 0.0), 4),
+                "recall_at_25": round(f.get("recall_at_25", 0.0) - b.get("recall_at_25", 0.0), 4),
                 "rank_of_first_gt_delta": rank_delta,
                 "file_recall_at_10": file_delta,
             }
         per_task_delta = pd
 
-    v1_result = verdict_from_snapshot(
-        snapshot_baseline, snapshot_candidate, per_task_delta
-    )
+    v1_result = verdict_from_snapshot(snapshot_baseline, snapshot_candidate, per_task_delta)
     v1_payload = {
         "verdict": v1_result.verdict,
         "reason": v1_result.reason,

@@ -19,7 +19,10 @@ from pathlib import Path
 
 import yaml
 
-ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from scripts._common import setup_paths
+
+ROOT = setup_paths()
 PROFILE = ROOT / "profiles" / "pay-com"
 DB_PATH = ROOT / "db" / "knowledge.db"
 
@@ -56,9 +59,7 @@ def get_task_repos(conn, task_ids):
     """Get repos_changed for given tasks."""
     results = {}
     for tid in task_ids:
-        row = conn.execute(
-            "SELECT repos_changed FROM task_history WHERE ticket_id = ?", (tid,)
-        ).fetchone()
+        row = conn.execute("SELECT repos_changed FROM task_history WHERE ticket_id = ?", (tid,)).fetchone()
         if row and row[0]:
             results[tid] = set(json.loads(row[0]))
         else:
@@ -94,7 +95,11 @@ def detect_provider(task_repos):
         if repo.startswith("grpc-apm-"):
             return repo.replace("grpc-apm-", "")
     for repo in task_repos:
-        if repo.startswith("grpc-providers-") and repo not in ("grpc-providers-credentials", "grpc-providers-features", "grpc-providers-proto"):
+        if repo.startswith("grpc-providers-") and repo not in (
+            "grpc-providers-credentials",
+            "grpc-providers-features",
+            "grpc-providers-proto",
+        ):
             return repo.replace("grpc-providers-", "")
     return None
 
@@ -111,7 +116,6 @@ def validate_task(recipe, task_id, actual_repos, provider):
 
     # Core+common coverage (these are the repos recipe says you'll definitely need)
     core_covered = actual_repos & core_common
-    core_missed = actual_repos - core_common
 
     recall_all = len(covered) / len(actual_repos) * 100 if actual_repos else 0
     recall_core = len(core_covered) / len(actual_repos) * 100 if actual_repos else 0

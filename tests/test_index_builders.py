@@ -83,8 +83,13 @@ class TestFtsOptimize:
                 monkeypatch.setattr(mod, "INDEX_FILE", index_file, raising=False)
 
         for attr in (
-            "index_gotchas", "index_domain_registry", "index_flows",
-            "index_tasks", "index_references", "index_dictionary", "index_providers",
+            "index_gotchas",
+            "index_domain_registry",
+            "index_flows",
+            "index_tasks",
+            "index_references",
+            "index_dictionary",
+            "index_providers",
         ):
             monkeypatch.setattr(orch_mod, attr, lambda *_a, **_kw: (0, 0), raising=True)
         for attr in ("index_seeds", "index_test_scripts"):
@@ -162,9 +167,7 @@ class TestCodeFactsFtsRowidCoherent:
         assert facts_count >= 3, f"expected >=3 facts extracted, got {facts_count}"
 
         (fts_count,) = conn.execute("SELECT count(*) FROM code_facts_fts").fetchone()
-        assert fts_count == facts_count, (
-            f"code_facts_fts row count {fts_count} != code_facts row count {facts_count}"
-        )
+        assert fts_count == facts_count, f"code_facts_fts row count {fts_count} != code_facts row count {facts_count}"
 
         orphan_rows = conn.execute(
             "SELECT fts.rowid FROM code_facts_fts fts LEFT JOIN code_facts cf ON cf.id = fts.rowid WHERE cf.id IS NULL"
@@ -190,7 +193,16 @@ class TestCodeFactsFtsRowidCoherent:
         ]
         captured_ids: list[int] = []
         try:
-            for (repo_name, file_path, function_name, fact_type, condition, message, line_number, raw_snippet) in fact_rows:
+            for (
+                repo_name,
+                file_path,
+                function_name,
+                fact_type,
+                condition,
+                message,
+                line_number,
+                raw_snippet,
+            ) in fact_rows:
                 cur = conn.execute(
                     "INSERT INTO code_facts(repo_name, file_path, function_name, fact_type, "
                     "condition, message, line_number, raw_snippet) "
@@ -235,6 +247,4 @@ def test_fts_optimize_canonical_form_only_touches_command_column(tmp_path):
     assert "INSERT INTO chunks(chunks) VALUES('optimize')" in text, (
         "orchestrator.py must use the canonical 2-column FTS5 optimize form"
     )
-    assert "VALUES('optimize', ''" not in text, (
-        "orchestrator.py still contains the extra-column 'optimize' insert"
-    )
+    assert "VALUES('optimize', ''" not in text, "orchestrator.py still contains the extra-column 'optimize' insert"

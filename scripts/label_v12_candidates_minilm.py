@@ -43,6 +43,7 @@ MAX_CHARS = 4000
 POS_THRESHOLD = 0.45
 NEG_THRESHOLD = 0.15
 
+
 def load_chunk_text(
     repo_name: str,
     file_path: str,
@@ -72,12 +73,14 @@ def load_chunk_text(
             return str(row[0])[:max_chars], "db fallback"
     return "", "file not found"
 
+
 def label_from_score(score: float) -> str:
     if score >= POS_THRESHOLD:
         return "+"
     if score < NEG_THRESHOLD:
         return "-"
     return "?"
+
 
 def main() -> int:
     p = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
@@ -199,6 +202,7 @@ def main() -> int:
     if db_conn is not None:
         db_conn.close()
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

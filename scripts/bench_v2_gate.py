@@ -34,7 +34,6 @@ import datetime as _dt
 import json
 import sys
 from pathlib import Path
-from typing import Optional
 
 REGRESSION_THRESHOLD = -0.02  # Δ file_recall@10 below this is a fail.
 
@@ -44,7 +43,7 @@ def _load_json(path: Path) -> dict:
         return json.load(f)
 
 
-def _get_recall(block: dict) -> Optional[float]:
+def _get_recall(block: dict) -> float | None:
     if not isinstance(block, dict):
         return None
     v = block.get("file_recall@10")
@@ -98,9 +97,7 @@ def compare(current: dict, baseline: dict) -> tuple[list[dict], list[str]]:
     hyg_block = current.get("hygiene") or {}
     unhit = hyg_block.get("unanswerable_hits")
     if isinstance(unhit, int) and unhit > 0:
-        hygiene.append(
-            f"{unhit} row(s) with answerable=no were counted as hits — dataset hygiene violation"
-        )
+        hygiene.append(f"{unhit} row(s) with answerable=no were counted as hits — dataset hygiene violation")
 
     return regressions, hygiene
 
@@ -111,8 +108,7 @@ def _format_regression_report(regressions: list[dict], hygiene: list[str]) -> st
         lines.append("REGRESSION — file_recall@10 dropped on strata:")
         for r in regressions:
             lines.append(
-                f"  {r['stratum']:<24} baseline={r['baseline']:.3f} "
-                f"current={r['current']:.3f} delta={r['delta']:+.3f}"
+                f"  {r['stratum']:<24} baseline={r['baseline']:.3f} current={r['current']:.3f} delta={r['delta']:+.3f}"
             )
     if hygiene:
         lines.append("HYGIENE:")
@@ -121,12 +117,10 @@ def _format_regression_report(regressions: list[dict], hygiene: list[str]) -> st
     return "\n".join(lines)
 
 
-def append_tracker_entry(
-    tracker_path: Path, *, current_path: Path, reason: str, regressions: list[dict]
-) -> None:
+def append_tracker_entry(tracker_path: Path, *, current_path: Path, reason: str, regressions: list[dict]) -> None:
     """Append a ``--accept-regression`` justification to RECALL-TRACKER.md."""
     tracker_path.parent.mkdir(parents=True, exist_ok=True)
-    stamp = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    stamp = _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%d %H:%M UTC")
     lines = [
         "",
         f"## bench_v2 accepted regression — {stamp}",
@@ -136,16 +130,13 @@ def append_tracker_entry(
     if regressions:
         lines.append("- **Regressions accepted:**")
         for r in regressions:
-            lines.append(
-                f"  - `{r['stratum']}`: {r['baseline']:.3f} -> {r['current']:.3f} "
-                f"({r['delta']:+.3f})"
-            )
+            lines.append(f"  - `{r['stratum']}`: {r['baseline']:.3f} -> {r['current']:.3f} ({r['delta']:+.3f})")
     lines.append("")
     with tracker_path.open("a", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     p.add_argument("--current", type=Path, required=True, help="Path to current bench_v2 results JSON")
     p.add_argument(

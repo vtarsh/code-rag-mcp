@@ -12,7 +12,6 @@ Modes:
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 import yaml
 
@@ -23,6 +22,7 @@ log = logging.getLogger(__name__)
 _PROVIDER_TYPES_DIR = PROFILE_DIR / "provider_types"
 
 _META_KEYS = {"proto", "transform", "value", "note", "purpose"}
+
 
 def _resolve_target(fm: dict) -> str:
     """Resolve the provider-side field name from a mapping dict.
@@ -41,6 +41,7 @@ def _resolve_target(fm: dict) -> str:
             return fm[key]
     return "?"
 
+
 def _load_provider_yaml(provider: str) -> dict | None:
     """Load a pre-built provider type map YAML."""
     yaml_path = _PROVIDER_TYPES_DIR / f"{provider}.yaml"
@@ -51,6 +52,7 @@ def _load_provider_yaml(provider: str) -> dict | None:
     except Exception as e:
         log.warning("Failed to load %s: %s", yaml_path, e)
         return None
+
 
 def _format_overview(data: dict) -> str:
     """Format overview mode output."""
@@ -86,6 +88,7 @@ def _format_overview(data: dict) -> str:
         lines.append("")
 
     return "\n".join(lines)
+
 
 def _collect_flow_mappings(md: dict, direction: str) -> list[dict]:
     """Collect field mappings from top-level or nested flows/steps.
@@ -127,6 +130,7 @@ def _collect_flow_mappings(md: dict, direction: str) -> list[dict]:
                 all_mappings.append({"_section": k, "_mappings": step_maps})
 
     return all_mappings
+
 
 def _format_fields(data: dict, method: str) -> str:
     """Format fields mode output for a specific method."""
@@ -186,6 +190,7 @@ def _format_fields(data: dict, method: str) -> str:
 
     return "\n".join(lines)
 
+
 def _format_gaps(data: dict, method: str = "") -> str:
     """Format gaps mode output."""
     lines: list[str] = []
@@ -209,6 +214,7 @@ def _format_gaps(data: dict, method: str = "") -> str:
     lines.append(f"Total type gaps: {total}")
     return "\n".join(lines)
 
+
 def provider_type_map_tool(provider: str, method: str = "", mode: str = "overview") -> str:
     """Show shadow type map for a provider.
 
@@ -226,10 +232,7 @@ def provider_type_map_tool(provider: str, method: str = "", mode: str = "overvie
         if _PROVIDER_TYPES_DIR.exists():
             available = [p.stem for p in _PROVIDER_TYPES_DIR.glob("*.yaml")]
         if available:
-            return (
-                f"shadow types not indexed for this provider ('{provider}'). "
-                f"Available providers: {available}."
-            )
+            return f"shadow types not indexed for this provider ('{provider}'). Available providers: {available}."
         return f"shadow types not indexed for this provider ('{provider}')."
 
     if mode == "fields":

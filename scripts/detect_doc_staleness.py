@@ -21,6 +21,7 @@ Reads commit timestamps from `profiles/{PROFILE}/generated/repo_facts.json`
 
 Writes: logs/doc_staleness.json
 """
+
 import json
 import os
 import re
@@ -154,27 +155,36 @@ def main() -> int:
                 unknown_repos.append(repo)
                 continue
             if epoch > doc_mtime:
-                newer.append({
-                    "repo": repo,
-                    "commit_age_days": round((time.time() - epoch) / 86400.0, 1),
-                    "doc_age_days": round((time.time() - doc_mtime) / 86400.0, 1),
-                })
+                newer.append(
+                    {
+                        "repo": repo,
+                        "commit_age_days": round((time.time() - epoch) / 86400.0, 1),
+                        "doc_age_days": round((time.time() - doc_mtime) / 86400.0, 1),
+                    }
+                )
         if newer or unknown_repos:
-            report.append({
-                "doc": str(md.relative_to(DOCS_DIR)),
-                "mtime": time.strftime("%Y-%m-%d", time.gmtime(doc_mtime)),
-                "newer_repo_commits": newer,
-                "unknown_repos": unknown_repos,
-            })
+            report.append(
+                {
+                    "doc": str(md.relative_to(DOCS_DIR)),
+                    "mtime": time.strftime("%Y-%m-%d", time.gmtime(doc_mtime)),
+                    "newer_repo_commits": newer,
+                    "unknown_repos": unknown_repos,
+                }
+            )
 
     report.sort(key=lambda r: -len(r["newer_repo_commits"]))
-    OUT.write_text(json.dumps({
-        "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "profile": PROFILE,
-        "docs_with_frontmatter": docs_with_frontmatter,
-        "stale_candidates": len(report),
-        "candidates": report,
-    }, indent=2))
+    OUT.write_text(
+        json.dumps(
+            {
+                "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "profile": PROFILE,
+                "docs_with_frontmatter": docs_with_frontmatter,
+                "stale_candidates": len(report),
+                "candidates": report,
+            },
+            indent=2,
+        )
+    )
     flagged = sum(1 for r in report if r["newer_repo_commits"])
     print(
         f"✓ {docs_with_frontmatter} opted-in docs, "

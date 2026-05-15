@@ -61,10 +61,19 @@ def summary(calls: list[dict]) -> None:
 
     # Never used tools (from known set)
     all_tools = {
-        "search", "find_dependencies", "trace_impact", "trace_flow",
-        "trace_chain", "trace_field", "repo_overview", "list_repos",
-        "analyze_task", "context_builder", "health_check",
-        "trace_internal", "provider_type_map",
+        "search",
+        "find_dependencies",
+        "trace_impact",
+        "trace_flow",
+        "trace_chain",
+        "trace_field",
+        "repo_overview",
+        "list_repos",
+        "analyze_task",
+        "context_builder",
+        "health_check",
+        "trace_internal",
+        "provider_type_map",
     }
     never_used = all_tools - set(tool_counts.keys())
     if never_used:
@@ -78,7 +87,7 @@ def summary(calls: list[dict]) -> None:
         if q:
             queries.append((c["tool"], q[:80]))
     if queries:
-        print(f"## Recent Queries (last 10)")
+        print("## Recent Queries (last 10)")
         for tool, q in queries[-10:]:
             print(f"  [{tool}] {q}")
 

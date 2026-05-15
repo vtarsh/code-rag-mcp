@@ -10,6 +10,7 @@ This avoids off-target noise on tasks where the question would not help.
 Toggle via env var: CODE_RAG_QUESTIONS_MODE = "off" | "q1" | "q1+q2" | ...
 Default: "off" (no questions injected).
 """
+
 from __future__ import annotations
 
 import os

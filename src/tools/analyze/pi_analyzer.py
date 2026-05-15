@@ -219,7 +219,8 @@ def section_impact(ctx: AnalysisContext) -> str:
             # (msg:..., envoy.*, opencensus.*) that are noise for change impact.
             if ctx.brief:
                 filtered = [
-                    d for d in deps
+                    d
+                    for d in deps
                     if not d["target"].startswith("msg:")
                     and d["edge_type"] not in ("npm_dep_tooling", "proto_message_usage")
                 ]
@@ -383,9 +384,7 @@ def promote_critical_infra(ctx: AnalysisContext) -> None:
     # single call). We do NOT skip when the repo is already in findings with
     # a different ftype — e.g. npm_dep_scan may have added it at low
     # confidence, and the whole point is to upgrade that to high.
-    promoted: set[str] = {
-        f.repo for f in ctx.findings if f.ftype == "critical_trigger"
-    }
+    promoted: set[str] = {f.repo for f in ctx.findings if f.ftype == "critical_trigger"}
     for item in INFRA_REPOS:
         repo = item.get("repo", "")
         if not repo or repo in promoted:
@@ -420,11 +419,7 @@ def section_provider_checklist(ctx: AnalysisContext) -> str:
     if not INFRA_REPOS:
         return ""
 
-    title = (
-        "## 10. Provider Integration Checklist"
-        if ctx.provider
-        else "## 10. Infrastructure Checklist"
-    )
+    title = "## 10. Provider Integration Checklist" if ctx.provider else "## 10. Infrastructure Checklist"
     output = f"{title}\n\n"
     finding_repos = {f.repo for f in ctx.findings}
     desc_tokens = _description_tokens(ctx.description)

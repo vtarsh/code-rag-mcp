@@ -41,7 +41,6 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-
 # ---- Truth table -----------------------------------------------------------
 
 # Map (opus_label, minilm_label) -> (consensus_label, reason).
@@ -62,9 +61,7 @@ def merge_labels(opus_label: str, minilm_label: str) -> tuple[str, str]:
     """Return (consensus_label, consensus_reason) for a row pair."""
     key = (opus_label, minilm_label)
     if key not in CONSENSUS_TABLE:
-        raise ValueError(
-            f"unexpected label pair: opus={opus_label!r} minilm={minilm_label!r}"
-        )
+        raise ValueError(f"unexpected label pair: opus={opus_label!r} minilm={minilm_label!r}")
     return CONSENSUS_TABLE[key]
 
 
@@ -184,7 +181,7 @@ def _disagreement_hint(row: dict[str, Any]) -> str:
     category = row.get("category", "")
     reason = row.get("consensus_reason", "")
     minilm_score = row.get("minilm_score")
-    score_str = f"{minilm_score:.3f}" if isinstance(minilm_score, (int, float)) else "n/a"
+    score_str = f"{minilm_score:.3f}" if isinstance(minilm_score, int | float) else "n/a"
 
     if reason == "conflict_opus_plus_minilm_minus":
         if query_tag == "doc-intent" and category == "code":
@@ -267,21 +264,16 @@ def build_disagreement_markdown(merged: list[dict[str, Any]]) -> str:
     lines.append(f"- **By category:** {dict(category_counter)}")
     lines.append(f"- **By direction:** {dict(reason_counter)}")
     lines.append("")
-    lines.append(
-        "### Most important fields to decide each case"
-    )
+    lines.append("### Most important fields to decide each case")
     lines.append("")
-    lines.append(
-        "- `query_tag` + `category` — surfaces the doc/code axis where judges "
-        "typically split."
-    )
+    lines.append("- `query_tag` + `category` — surfaces the doc/code axis where judges typically split.")
     lines.append(
         "- `note_opus` — Opus's per-row reasoning (the MiniLM side only has a "
         "numeric score, so Opus's prose is the richer signal)."
     )
     lines.append(
         "- `minilm_score` — raw 0..1 relevance; near the 0.15/0.45 thresholds "
-        "usually means \"really ambiguous\", far above/below means MiniLM is "
+        'usually means "really ambiguous", far above/below means MiniLM is '
         "confidently disagreeing with Opus."
     )
     lines.append(
@@ -310,9 +302,7 @@ def build_disagreement_markdown(merged: list[dict[str, Any]]) -> str:
         category = row.get("category", "")
         note_opus = row.get("note_opus", "") or "_(no rationale provided)_"
         minilm_score = row.get("minilm_score")
-        score_str = (
-            f"{minilm_score:.4f}" if isinstance(minilm_score, (int, float)) else "n/a"
-        )
+        score_str = f"{minilm_score:.4f}" if isinstance(minilm_score, int | float) else "n/a"
         direction = row.get("consensus_reason", "")
 
         lines.append(f"### {i}. `{query}`")
@@ -322,9 +312,7 @@ def build_disagreement_markdown(merged: list[dict[str, Any]]) -> str:
         lines.append(f"- **chunk_file:** `{repo}/{fp}`")
         lines.append(f"- **chunk_type / category:** {chunk_type} / {category}")
         lines.append(f"- **direction:** `{direction}`")
-        lines.append(
-            f"- **Opus** (`{row.get('label_opus', '')}`) note: {note_opus}"
-        )
+        lines.append(f"- **Opus** (`{row.get('label_opus', '')}`) note: {note_opus}")
         lines.append(f"- **MiniLM** (`{row.get('label_minilm', '')}`) score: {score_str}")
         lines.append(f"- **Arbitration hint:** {_disagreement_hint(row)}")
         lines.append("")
@@ -346,9 +334,7 @@ def summarize(merged: list[dict[str, Any]]) -> dict[str, Any]:
     dist: Counter[str] = Counter(r["label_consensus"] for r in merged)
     reasons: Counter[str] = Counter(r["consensus_reason"] for r in merged)
     conflicts = [r for r in merged if r["label_consensus"] == "?_CONFLICT"]
-    conflict_intents: Counter[str] = Counter(
-        _classify_intent(r) for r in conflicts
-    )
+    conflict_intents: Counter[str] = Counter(_classify_intent(r) for r in conflicts)
     conflict_categories: Counter[str] = Counter(r.get("category", "") for r in conflicts)
     return {
         "total": len(merged),
@@ -389,8 +375,7 @@ def main() -> int:
 
     if len(opus_rows) != len(minilm_rows):
         print(
-            f"ERROR: row count mismatch — opus={len(opus_rows)} vs "
-            f"minilm={len(minilm_rows)}",
+            f"ERROR: row count mismatch — opus={len(opus_rows)} vs minilm={len(minilm_rows)}",
             file=sys.stderr,
         )
         return 1
@@ -399,9 +384,7 @@ def main() -> int:
 
     write_jsonl(args.out, merged)
     args.disagreements.parent.mkdir(parents=True, exist_ok=True)
-    args.disagreements.write_text(
-        build_disagreement_markdown(merged), encoding="utf-8"
-    )
+    args.disagreements.write_text(build_disagreement_markdown(merged), encoding="utf-8")
 
     stats = summarize(merged)
     print("\n=== SUMMARY ===", flush=True)

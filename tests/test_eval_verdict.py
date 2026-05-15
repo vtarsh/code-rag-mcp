@@ -7,12 +7,13 @@ integration check against the real historical snapshots (v4, v6.2, v7).
 from __future__ import annotations
 
 import json
+
+# Scripts/ isn't a package; import via explicit path insertion.
+import sys
 from pathlib import Path
 
 import pytest
 
-# Scripts/ isn't a package; import via explicit path insertion.
-import sys
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
@@ -28,8 +29,8 @@ from scripts.eval_verdict import (  # noqa: E402
     verdict_from_snapshot,
 )
 
-
 # ---- Metric helper sanity ----
+
 
 class TestComputeR10Mean:
     def test_empty(self):
@@ -79,6 +80,7 @@ class TestBuildDeltaNoneHandling:
         """Both scripts' build_delta must now produce identical output."""
         from scripts.eval_finetune import build_delta as ef_bd
         from scripts.merge_eval_shards import build_delta as me_bd
+
         return ef_bd(base, ft), me_bd(base, ft)
 
     def test_both_none_emits_none_not_zero(self):
@@ -116,8 +118,8 @@ class TestBuildDeltaNoneHandling:
 class TestComputeMrr:
     def test_reciprocal_averaging(self):
         per_task = {
-            "T-1": {"rank_of_first_gt": 1},   # 1/1 = 1
-            "T-2": {"rank_of_first_gt": 2},   # 1/2
+            "T-1": {"rank_of_first_gt": 1},  # 1/1 = 1
+            "T-2": {"rank_of_first_gt": 2},  # 1/2
             "T-3": {"rank_of_first_gt": 11},  # beyond top-10 -> 0
             "T-4": {"rank_of_first_gt": None},
         }
@@ -126,15 +128,16 @@ class TestComputeMrr:
 
 # ---- Counting improvements/regressions ----
 
+
 class TestCountingGate:
     def test_default_threshold(self):
         deltas = {
-            "A": {"recall_at_10": +0.06},   # improved (≥ 0.05)
-            "B": {"recall_at_10": +0.05},   # improved (equal)
-            "C": {"recall_at_10": +0.04},   # neutral
-            "D": {"recall_at_10": -0.04},   # neutral
-            "E": {"recall_at_10": -0.05},   # regressed (equal)
-            "F": {"recall_at_10": -0.10},   # regressed
+            "A": {"recall_at_10": +0.06},  # improved (≥ 0.05)
+            "B": {"recall_at_10": +0.05},  # improved (equal)
+            "C": {"recall_at_10": +0.04},  # neutral
+            "D": {"recall_at_10": -0.04},  # neutral
+            "E": {"recall_at_10": -0.05},  # regressed (equal)
+            "F": {"recall_at_10": -0.10},  # regressed
         }
         n_imp, n_reg = count_improvements_regressions(deltas)
         assert (n_imp, n_reg) == (2, 2)
@@ -155,6 +158,7 @@ class TestCountingGate:
 
 # ---- Gate decision logic ----
 
+
 class TestDecideVerdict:
     def _args(self, **over):
         base: dict = {
@@ -168,20 +172,26 @@ class TestDecideVerdict:
 
     def test_promote_v62_like(self):
         """v6.2 historical: Δr@10=+0.043, ΔHit@5=+0.057, net=+89."""
-        res = decide_verdict(**self._args(
-            delta_r10_all=0.043, delta_hit5_all=0.057,
-            n_improved=129, n_regressed=40,
-        ))
+        res = decide_verdict(
+            **self._args(
+                delta_r10_all=0.043,
+                delta_hit5_all=0.057,
+                n_improved=129,
+                n_regressed=40,
+            )
+        )
         assert res.verdict == "PROMOTE"
         assert "Δr@10=+0.043" in res.reason
 
     def test_promote_boundary(self):
-        res = decide_verdict(**self._args(
-            delta_r10_all=DELTA_R10_THRESHOLD,
-            delta_hit5_all=DELTA_HIT5_THRESHOLD,
-            n_improved=20 + MIN_NET_IMPROVED,
-            n_regressed=20,
-        ))
+        res = decide_verdict(
+            **self._args(
+                delta_r10_all=DELTA_R10_THRESHOLD,
+                delta_hit5_all=DELTA_HIT5_THRESHOLD,
+                n_improved=20 + MIN_NET_IMPROVED,
+                n_regressed=20,
+            )
+        )
         assert res.verdict == "PROMOTE"
 
     def test_reject_r10_negative(self):
@@ -192,41 +202,57 @@ class TestDecideVerdict:
     def test_reject_hit5_negative_even_if_r10_positive(self):
         """Covers the dangerous case: r@10 up via rank-9→10 reshuffles but
         Hit@5 dropped (users see worse results)."""
-        res = decide_verdict(**self._args(
-            delta_r10_all=0.05, delta_hit5_all=-0.01,
-        ))
+        res = decide_verdict(
+            **self._args(
+                delta_r10_all=0.05,
+                delta_hit5_all=-0.01,
+            )
+        )
         assert res.verdict == "REJECT"
         assert "top-5 quality regressed" in res.reason
 
     def test_reject_net_negative(self):
-        res = decide_verdict(**self._args(
-            delta_r10_all=0.02, delta_hit5_all=0.02,
-            n_improved=30, n_regressed=50,
-        ))
+        res = decide_verdict(
+            **self._args(
+                delta_r10_all=0.02,
+                delta_hit5_all=0.02,
+                n_improved=30,
+                n_regressed=50,
+            )
+        )
         assert res.verdict == "REJECT"
         assert "more losers than winners" in res.reason
 
     def test_hold_subthreshold_r10(self):
         """Positive but tiny gain — not a clear win."""
-        res = decide_verdict(**self._args(
-            delta_r10_all=0.005, delta_hit5_all=0.05,
-        ))
+        res = decide_verdict(
+            **self._args(
+                delta_r10_all=0.005,
+                delta_hit5_all=0.05,
+            )
+        )
         assert res.verdict == "HOLD"
         assert "Δr@10" in res.reason
 
     def test_hold_net_below_min(self):
         """Big deltas but only a few ticket wins — too narrow."""
-        res = decide_verdict(**self._args(
-            delta_r10_all=0.1, delta_hit5_all=0.1,
-            n_improved=22, n_regressed=10,   # net=+12 < MIN_NET_IMPROVED
-        ))
+        res = decide_verdict(
+            **self._args(
+                delta_r10_all=0.1,
+                delta_hit5_all=0.1,
+                n_improved=22,
+                n_regressed=10,  # net=+12 < MIN_NET_IMPROVED
+            )
+        )
         assert res.verdict == "HOLD"
         assert "net" in res.reason
 
     def test_zero_change_hold(self):
         res = decide_verdict(
-            delta_r10_all=0.0, delta_hit5_all=0.0,
-            n_improved=0, n_regressed=0,
+            delta_r10_all=0.0,
+            delta_hit5_all=0.0,
+            n_improved=0,
+            n_regressed=0,
         )
         assert res.verdict == "HOLD"
 
@@ -235,8 +261,8 @@ class TestDecideVerdict:
             **self._args(),
             diagnostic_metrics={"mrr_baseline_diag": 0.6, "mrr_ft_diag": 0.7},
         )
-        assert res.metrics["mrr_baseline_diag"] == 0.6
-        assert res.metrics["mrr_ft_diag"] == 0.7
+        assert res.metrics["mrr_baseline_diag"] == pytest.approx(0.6)
+        assert res.metrics["mrr_ft_diag"] == pytest.approx(0.7)
         assert res.metrics["net_improved_r10"] == 60
 
 

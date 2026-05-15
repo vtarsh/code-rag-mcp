@@ -17,6 +17,9 @@ dev = ["pytest", "ruff", "pre-commit"]
 [tool.ruff]
 target-version = "py312"
 line-length = 120
+# Throwaway debug-session artifacts (repro scripts, one-off analysis) are not
+# maintained code — lint them out of the hook entirely.
+extend-exclude = [".claude/debug"]
 
 [tool.ruff.lint]
 select = [
@@ -33,6 +36,9 @@ ignore = [
     "E501",   # line too long (handled by formatter)
     "SIM108", # ternary operator (less readable for complex conditions)
     "B008",   # function call in default argument (used in MCP tool signatures)
+    "RUF001", # ambiguous unicode in strings — Cyrillic is intentional (uk project)
+    "RUF002", # ambiguous unicode in docstrings — Cyrillic is intentional (uk project)
+    "RUF003", # ambiguous unicode in comments — Cyrillic is intentional (uk project)
 ]
 
 [tool.ruff.lint.isort]

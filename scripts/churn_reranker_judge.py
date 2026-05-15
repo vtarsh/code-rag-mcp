@@ -53,9 +53,7 @@ def fetch_snippet(cur: sqlite3.Cursor, repo: str, fp: str, ct: str, max_chars: i
 def score_list(judge, query, items, cur, *, max_chars, batch_size):
     docs = []
     for it in items:
-        snip = fetch_snippet(
-            cur, it.get("repo_name", ""), it.get("file_path", ""), it.get("chunk_type", ""), max_chars
-        )
+        snip = fetch_snippet(cur, it.get("repo_name", ""), it.get("file_path", ""), it.get("chunk_type", ""), max_chars)
         docs.append(f"{it.get('repo_name', '')} {it.get('file_path', '')} {snip}")
     if not docs:
         return 0.0, []
@@ -70,13 +68,15 @@ def main() -> int:
     p.add_argument("--output", type=Path, default=Path("profiles/pay-com/churn_replay/judge_reranker_v8_vs_base.jsonl"))
     p.add_argument("--summary", type=Path, default=Path("profiles/pay-com/churn_replay/judge_reranker_summary.json"))
     p.add_argument("--db", type=Path, default=Path("db/knowledge.db"))
-    p.add_argument("--judge-model", default="cross-encoder/ms-marco-MiniLM-L-6-v2",
-                   help="Neutral reranker. Must NOT be in the v8 FT lineage.")
+    p.add_argument(
+        "--judge-model",
+        default="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        help="Neutral reranker. Must NOT be in the v8 FT lineage.",
+    )
     p.add_argument("--max-pairs", type=int, default=50)
     p.add_argument("--max-chars", type=int, default=1200, help="Snippet char cap (MiniLM 512-token cap)")
     p.add_argument("--batch-size", type=int, default=4)
-    p.add_argument("--tie-threshold", type=float, default=0.03,
-                   help="abs(mean_v8 - mean_base) below this -> tie")
+    p.add_argument("--tie-threshold", type=float, default=0.03, help="abs(mean_v8 - mean_base) below this -> tie")
     args = p.parse_args()
 
     if not args.input.exists():
@@ -112,10 +112,12 @@ def main() -> int:
         for i, pair in enumerate(pairs, 1):
             t = time.perf_counter()
             q = pair.get("query") or ""
-            base_mean, base_scores = score_list(judge, q, pair.get("base_top10") or [], cur,
-                                                 max_chars=args.max_chars, batch_size=args.batch_size)
-            v8_mean, v8_scores = score_list(judge, q, pair.get("v8_top10") or [], cur,
-                                             max_chars=args.max_chars, batch_size=args.batch_size)
+            base_mean, base_scores = score_list(
+                judge, q, pair.get("base_top10") or [], cur, max_chars=args.max_chars, batch_size=args.batch_size
+            )
+            v8_mean, v8_scores = score_list(
+                judge, q, pair.get("v8_top10") or [], cur, max_chars=args.max_chars, batch_size=args.batch_size
+            )
             margin = v8_mean - base_mean
             if abs(margin) < args.tie_threshold:
                 verdict = "tie"
@@ -127,8 +129,11 @@ def main() -> int:
             margins[verdict].append(margin)
 
             entry = {
-                "pair_idx": i, "query": q, "overlap_at_10": pair.get("overlap_at_10"),
-                "base_mean": round(base_mean, 4), "v8_mean": round(v8_mean, 4),
+                "pair_idx": i,
+                "query": q,
+                "overlap_at_10": pair.get("overlap_at_10"),
+                "base_mean": round(base_mean, 4),
+                "v8_mean": round(v8_mean, 4),
                 "margin": round(margin, 4),
                 "base_scores": [round(s, 4) for s in base_scores],
                 "v8_scores": [round(s, 4) for s in v8_scores],
@@ -146,8 +151,12 @@ def main() -> int:
     n = len(pairs)
     all_margins = [m for lst in margins.values() for m in lst]
     summary = {
-        "n": n, "judge_model": args.judge_model, "tie_threshold": args.tie_threshold,
-        "base_wins": counts["a"], "v8_wins": counts["b"], "ties": counts["tie"],
+        "n": n,
+        "judge_model": args.judge_model,
+        "tie_threshold": args.tie_threshold,
+        "base_wins": counts["a"],
+        "v8_wins": counts["b"],
+        "ties": counts["tie"],
         "base_win_rate": round(counts["a"] / n, 4),
         "v8_win_rate": round(counts["b"] / n, 4),
         "tie_rate": round(counts["tie"] / n, 4),

@@ -1,0 +1,938 @@
+{
+  "n_rows": 100,
+  "n_queries_with_baseline_overlap": 52,
+  "pct_with_overlap": 52.0,
+  "v2_baseline": "90/100 = 90.0% (rigged)",
+  "v3_target": "<= 50/100 = 50.0%",
+  "verdict": "FAIL_STILL_BIASED",
+  "per_query": [
+    {
+      "query_id": "v2_001",
+      "n_expected": 5,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "nuvei-docs",
+          "docs/providers/nuvei/documentation_features_authentication.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_002",
+      "n_expected": 3,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "nuvei-docs",
+          "docs/providers/nuvei/documentation_accept-payment_payment-page_output-parameters.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_003",
+      "n_expected": 5,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_004",
+      "n_expected": 5,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_005",
+      "n_expected": 3,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_006",
+      "n_expected": 5,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_007",
+      "n_expected": 5,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_008",
+      "n_expected": 4,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_009",
+      "n_expected": 4,
+      "n_overlap": 2,
+      "overlap_paths": [
+        [
+          "nuvei-docs",
+          "docs/providers/nuvei/documentation_integration_webhooks.md"
+        ],
+        [
+          "nuvei-docs",
+          "docs/providers/nuvei/documentation_integration_webhooks_withdrawal-dmns.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_010",
+      "n_expected": 2,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "nuvei-docs",
+          "docs/providers/nuvei/documentation_integration_response-handling.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_011",
+      "n_expected": 3,
+      "n_overlap": 2,
+      "overlap_paths": [
+        [
+          "nuvei-docs",
+          "docs/providers/nuvei/documentation_additional-links_rest-2-0_integration_testing-cards.md"
+        ],
+        [
+          "nuvei-docs",
+          "docs/providers/nuvei/documentation_integration_response-handling.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_012",
+      "n_expected": 2,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "grpc-apm-aircash",
+          "docs/docs/security-overview.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_013",
+      "n_expected": 5,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_014",
+      "n_expected": 5,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "grpc-apm-trustly",
+          "docs/GOTCHAS.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_015",
+      "n_expected": 5,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "grpc-apm-trustly",
+          "docs/GOTCHAS.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_016",
+      "n_expected": 3,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_017",
+      "n_expected": 5,
+      "n_overlap": 2,
+      "overlap_paths": [
+        [
+          "paynearme-docs",
+          "docs/providers/paynearme/agent-interface.md"
+        ],
+        [
+          "provider-paynearme-devdocs_docs_agent-interface",
+          "docs/references/provider-paynearme-devdocs_docs_agent-interface.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_018",
+      "n_expected": 3,
+      "n_overlap": 2,
+      "overlap_paths": [
+        [
+          "nuvei-docs",
+          "docs/providers/nuvei/documentation_us-and-canada-guides_interac-etransfer.md"
+        ],
+        [
+          "paysafe-docs",
+          "docs/providers/paysafe/en_api-docs_payments-api_add-payment-methods_interac-e-transfer.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_019",
+      "n_expected": 1,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_020",
+      "n_expected": 1,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_021",
+      "n_expected": 3,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "paysafe-docs",
+          "docs/providers/paysafe/en_api-docs_payments-api_add-payment-methods_interac-e-transfer.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_022",
+      "n_expected": 5,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_023",
+      "n_expected": 1,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "paysafe-docs",
+          "docs/providers/paysafe/en_api-docs_payments-api_add-payment-methods_multibanco-via-skrill-quick-checkout.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_024",
+      "n_expected": 5,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "fields",
+          "docs/dictionary/fields.yaml"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_025",
+      "n_expected": 5,
+      "n_overlap": 4,
+      "overlap_paths": [
+        [
+          "paynearme-docs",
+          "docs/providers/paynearme/devdocs_docs_understanding-transaction-timelines.md"
+        ],
+        [
+          "paynearme-docs",
+          "docs/providers/paynearme/devdocs_reference_post_reverse-payment.md"
+        ],
+        [
+          "paynearme-docs",
+          "docs/providers/paynearme/post-reverse-payment.md"
+        ],
+        [
+          "provider-paynearme-devdocs_reference_post_reverse-payment",
+          "docs/references/provider-paynearme-devdocs_reference_post_reverse-payment.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_026",
+      "n_expected": 0,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_027",
+      "n_expected": 5,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "trustly-docs",
+          "docs/providers/trustly/mdd-directdebitmandate.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_028",
+      "n_expected": 3,
+      "n_overlap": 3,
+      "overlap_paths": [
+        [
+          "aircash-docs",
+          "docs/providers/aircash/aircash-frame-v2.md"
+        ],
+        [
+          "aircash-docs",
+          "docs/providers/aircash/frame-pay.md"
+        ],
+        [
+          "aircash-docs",
+          "docs/providers/aircash/frame-withdrawal.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_029",
+      "n_expected": 5,
+      "n_overlap": 2,
+      "overlap_paths": [
+        [
+          "aircash-docs",
+          "docs/providers/aircash/frame-abon.md"
+        ],
+        [
+          "grpc-apm-aircash",
+          "docs/docs/AI-CODING-GUIDE.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_030",
+      "n_expected": 2,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_031",
+      "n_expected": 3,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "grpc-apm-trustly",
+          "docs/GOTCHAS.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_032",
+      "n_expected": 2,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_033",
+      "n_expected": 0,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_034",
+      "n_expected": 3,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "paysafe-docs",
+          "docs/providers/paysafe/en_api-docs_payments-api_add-payment-methods_interac-e-transfer.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_035",
+      "n_expected": 5,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_036",
+      "n_expected": 5,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_037",
+      "n_expected": 3,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_038",
+      "n_expected": 5,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_039",
+      "n_expected": 3,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_040",
+      "n_expected": 3,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_041",
+      "n_expected": 3,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "global-conventions",
+          "docs/GOTCHAS.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_042",
+      "n_expected": 5,
+      "n_overlap": 3,
+      "overlap_paths": [
+        [
+          "entities",
+          "docs/dictionary/entities.yaml"
+        ],
+        [
+          "grpc-apm-trustly",
+          "docs/GOTCHAS.md"
+        ],
+        [
+          "grpc-mpi-aps",
+          "docs/docs/security-overview.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_043",
+      "n_expected": 3,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_044",
+      "n_expected": 5,
+      "n_overlap": 2,
+      "overlap_paths": [
+        [
+          "entities",
+          "docs/dictionary/entities.yaml"
+        ],
+        [
+          "grpc-payment-gateway",
+          "docs/docs/AI-CODING-GUIDE.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_045",
+      "n_expected": 5,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "grpc-providers-features",
+          "docs/GOTCHAS.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_046",
+      "n_expected": 5,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_047",
+      "n_expected": 5,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_048",
+      "n_expected": 5,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "nuvei-docs",
+          "docs/providers/nuvei/documentation_asia-pacific-guides_apac-bank-transfer.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_049",
+      "n_expected": 1,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "nuvei-docs",
+          "docs/providers/nuvei/documentation_integration_response-handling.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_050",
+      "n_expected": 3,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "nuvei-docs",
+          "docs/providers/nuvei/documentation_features_financial-operations_payout.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_051",
+      "n_expected": 3,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_052",
+      "n_expected": 4,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "nuvei-docs",
+          "docs/providers/nuvei/documentation_features_authentication.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_053",
+      "n_expected": 3,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "nuvei-docs",
+          "docs/providers/nuvei/documentation_accept-payment_payment-page_quick-start-for-payment-page.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_054",
+      "n_expected": 3,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_055",
+      "n_expected": 2,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "grpc-apm-trustly",
+          "docs/docs/AI-CODING-GUIDE.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_056",
+      "n_expected": 5,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_057",
+      "n_expected": 3,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "grpc-apm-trustly",
+          "docs/docs/performance-profile.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_058",
+      "n_expected": 3,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_059",
+      "n_expected": 5,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "pr-review-learnings",
+          "docs/references/pr-review-learnings.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_060",
+      "n_expected": 3,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_061",
+      "n_expected": 1,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "paysafe-docs",
+          "docs/providers/paysafe/en_api-docs_payments-api_add-payment-methods_interac-e-transfer.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_062",
+      "n_expected": 4,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "webhooks-notifications",
+          "docs/references/webhooks-notifications.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_063",
+      "n_expected": 5,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_064",
+      "n_expected": 3,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "paysafe-docs",
+          "docs/providers/paysafe/en_api-docs_payments-api_add-payment-methods_interac-e-transfer.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_065",
+      "n_expected": 3,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_066",
+      "n_expected": 3,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_067",
+      "n_expected": 5,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_068",
+      "n_expected": 5,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_069",
+      "n_expected": 3,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "paysafe-docs",
+          "docs/providers/paysafe/en_api-docs_payments-api_add-payment-methods_interac-e-transfer.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_070",
+      "n_expected": 2,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "paysafe-docs",
+          "docs/providers/paysafe/en_api-docs_payments-api_add-payment-methods_interac-e-transfer.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_071",
+      "n_expected": 2,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "paysafe-docs",
+          "docs/providers/paysafe/en_api-docs_payments-api_add-payment-methods_interac-e-transfer.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_072",
+      "n_expected": 1,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "paysafe-docs",
+          "docs/providers/paysafe/en_api-docs_payments-api_add-payment-methods_interac-e-transfer.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_073",
+      "n_expected": 2,
+      "n_overlap": 2,
+      "overlap_paths": [
+        [
+          "nuvei-docs",
+          "docs/providers/nuvei/documentation_us-and-canada-guides_interac-etransfer.md"
+        ],
+        [
+          "paysafe-docs",
+          "docs/providers/paysafe/en_api-docs_payments-api_add-payment-methods_interac-e-transfer.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_074",
+      "n_expected": 5,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "concepts",
+          "docs/dictionary/concepts.yaml"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_075",
+      "n_expected": 2,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "payper-docs",
+          "docs/providers/payper/13-etransfer-status-flow.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_076",
+      "n_expected": 5,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "paynearme-docs",
+          "docs/providers/paynearme/devdocs_docs_chargebacks-and-returns.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_077",
+      "n_expected": 5,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "grpc-apm-aircash",
+          "docs/docs/AI-CODING-GUIDE.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_078",
+      "n_expected": 1,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "payper-docs",
+          "docs/providers/payper/13-etransfer-status-flow.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_079",
+      "n_expected": 4,
+      "n_overlap": 3,
+      "overlap_paths": [
+        [
+          "paynearme-docs",
+          "docs/providers/paynearme/devdocs_docs_processing-refunds.md"
+        ],
+        [
+          "paynearme-docs",
+          "docs/providers/paynearme/devdocs_docs_understanding-transaction-timelines.md"
+        ],
+        [
+          "paynearme-docs",
+          "docs/providers/paynearme/post-refund-payment.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_080",
+      "n_expected": 5,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_081",
+      "n_expected": 3,
+      "n_overlap": 2,
+      "overlap_paths": [
+        [
+          "grpc-apm-trustly",
+          "docs/docs/AI-CODING-GUIDE.md"
+        ],
+        [
+          "grpc-apm-trustly",
+          "docs/docs/security-overview.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_082",
+      "n_expected": 5,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_083",
+      "n_expected": 0,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_084",
+      "n_expected": 3,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "grpc-apm-aircash",
+          "docs/docs/dev-workflow.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_085",
+      "n_expected": 3,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "grpc-apm-aircash",
+          "docs/docs/AI-CODING-GUIDE.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_086",
+      "n_expected": 0,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_087",
+      "n_expected": 0,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_088",
+      "n_expected": 0,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_089",
+      "n_expected": 1,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_090",
+      "n_expected": 0,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_091",
+      "n_expected": 3,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_092",
+      "n_expected": 0,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_093",
+      "n_expected": 5,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "monek-docs",
+          "docs/providers/monek/gettingstarted_migrating-from-securehosting.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_094",
+      "n_expected": 3,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "grpc-core-approvals",
+          "docs/docs/performance-profile.md"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_095",
+      "n_expected": 5,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_096",
+      "n_expected": 0,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_097",
+      "n_expected": 3,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_098",
+      "n_expected": 0,
+      "n_overlap": 0,
+      "overlap_paths": []
+    },
+    {
+      "query_id": "v2_099",
+      "n_expected": 5,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "fields",
+          "docs/dictionary/fields.yaml"
+        ]
+      ]
+    },
+    {
+      "query_id": "v2_100",
+      "n_expected": 5,
+      "n_overlap": 1,
+      "overlap_paths": [
+        [
+          "workflow-worldpay-webhook",
+          "docs/docs/performance-profile.md"
+        ]
+      ]
+    }
+  ]
+}

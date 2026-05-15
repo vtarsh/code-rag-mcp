@@ -11,13 +11,12 @@ Data sources (priority):
 
 from __future__ import annotations
 
+import logging
 import re
 import subprocess
 import threading
 
 from src.config import BASE_DIR, PROFILE_DIR
-
-import logging
 
 _logger = logging.getLogger(__name__)
 
@@ -41,8 +40,8 @@ def _hop_provider_tag(hop: dict) -> str:
       - service parens: "workflow-provider-webhooks (<provider>)"
       - file path: "activities/<provider>/..."
     """
-    svc = (hop.get("service", "") or "")
-    file = (hop.get("file", "") or "")
+    svc = hop.get("service", "") or ""
+    file = hop.get("file", "") or ""
     blob = f"{svc} {file}"
     m = re.search(r"grpc-apm-([a-z0-9-]+?)(?:/|\s|$)", blob, re.IGNORECASE)
     if m:
@@ -75,6 +74,7 @@ def _filter_hops_by_provider(hops: list, provider: str) -> list:
         if tag == "" or tag == provider:
             result.append(hop)
     return result
+
 
 # --- Lazy-loaded YAML cache ---
 _cache: dict[str, dict | list | None] = {}

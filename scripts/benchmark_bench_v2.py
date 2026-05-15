@@ -31,7 +31,6 @@ import sys
 import time
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Optional
 
 import yaml
 
@@ -99,7 +98,7 @@ def keyword_recall(gt_symbols: list[str], results: list[dict], top_n: int = 10) 
 # ---------------------------------------------------------------------------
 
 
-def run_query(query: str, *, limit: int = 20) -> tuple[list[dict], Optional[str]]:
+def run_query(query: str, *, limit: int = 20) -> tuple[list[dict], str | None]:
     """Wrap ``hybrid_search`` — returns ranked results and optional error string."""
     try:
         from src.search.fts import expand_query
@@ -108,7 +107,7 @@ def run_query(query: str, *, limit: int = 20) -> tuple[list[dict], Optional[str]
         expanded = expand_query(query)
         ranked, err, _total = hybrid_search(expanded, limit=limit)
         return (ranked or []), err
-    except Exception as e:  # noqa: BLE001 - benchmark runner is best-effort.
+    except Exception as e:
         return [], f"{type(e).__name__}: {e}"
 
 
@@ -135,15 +134,9 @@ def aggregate(per_query: list[dict]) -> dict:
     overall_rec = [q["file_recall@10"] for q in per_query if q["counts"]]
     overall = {
         "file_recall@10": sum(overall_rec) / len(overall_rec) if overall_rec else 0.0,
-        "file_hit@5": (
-            sum(q["file_hit@5"] for q in per_query) / len(per_query) if per_query else 0.0
-        ),
-        "file_mrr": (
-            sum(q["file_mrr"] for q in per_query) / len(per_query) if per_query else 0.0
-        ),
-        "keyword_recall": (
-            sum(q["keyword_recall"] for q in per_query) / len(per_query) if per_query else 0.0
-        ),
+        "file_hit@5": (sum(q["file_hit@5"] for q in per_query) / len(per_query) if per_query else 0.0),
+        "file_mrr": (sum(q["file_mrr"] for q in per_query) / len(per_query) if per_query else 0.0),
+        "keyword_recall": (sum(q["keyword_recall"] for q in per_query) / len(per_query) if per_query else 0.0),
         "count": len(per_query),
     }
     buckets: dict[str, list[dict]] = defaultdict(list)
@@ -258,7 +251,7 @@ def _markdown_summary(report: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     p.add_argument(
         "--input",

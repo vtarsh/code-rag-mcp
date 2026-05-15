@@ -1,0 +1,1683 @@
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "session expiry APM alternative payment method", "oob_reason": "code_sig"}
+{"query": "doNotExpire APM session workflow", "oob_reason": "code_sig"}
+{"query": "ACTIVATE_EXPIRE_SESSION_WORKFLOW feature flag APM", "oob_reason": "code_sig"}
+{"query": "doNotExpire internalMetadata transaction creation APM", "oob_reason": "code_sig"}
+{"query": "expire session workflow start trigger checkout APM payment method type", "oob_reason": "code_sig"}
+{"query": "express-api-v1 expire session workflow start signalWithStart checkout", "oob_reason": "repo_token"}
+{"query": "doNotExpire true processor provider APM initialize", "oob_reason": "code_sig"}
+{"query": "call-providers-initialize doNotExpire express-api-v1", "oob_reason": "repo_token"}
+{"query": "express-api-v1 temporal expire session signalWithStart activate", "oob_reason": "repo_token"}
+{"query": "express-api-internal process-initialize-data doNotExpire okto nuvei", "oob_reason": "repo_token"}
+{"query": "express-api-v1 call-providers-initialize doNotExpire set internalMetadata", "oob_reason": "repo_token"}
+{"query": "workflow-expire-session doNotExpire check skip expiration", "oob_reason": "repo_token"}
+{"query": "express-api-v1 activateWorkflow expire-session checkout session payment_method_type", "oob_reason": "code_sig"}
+{"query": "workflow-expire-session doNotExpire internalMetadata activity check transaction", "oob_reason": "repo_token"}
+{"query": "workflow-expire-session expire-session-transaction doNotExpire status expirable", "oob_reason": "repo_token"}
+{"query": "express-api-v1 sessions setup checkout APM doNotExpire payment_method_type alternative", "oob_reason": "code_sig"}
+{"query": "express-api-v1 routes sessions setup expire workflow duration", "oob_reason": "repo_token"}
+{"query": "express-api-v1 routes sessions payment expire workflow ACTIVATE duration default", "oob_reason": "code_sig"}
+{"query": "express-api-v1 checkout.js ACTIVATE_EXPIRE_SESSION_WORKFLOW activateWorkflow expireSession", "oob_reason": "code_sig"}
+{"query": "activate-expiration-workflow workflow-provider-webhooks forceExpire duration", "oob_reason": "repo_token"}
+{"query": "express-api-v1 payment.js session ACTIVATE_EXPIRE_SESSION_WORKFLOW activateWorkflow", "oob_reason": "code_sig"}
+{"query": "express-api-v1 sessions payment.js ACTIVATE_EXPIRE_SESSION_WORKFLOW activateWorkflow expireSession", "oob_reason": "code_sig"}
+{"query": "session expiry APM alternative payment method", "oob_reason": "code_sig"}
+{"query": "interac e-transfer APM provider", "oob_reason": "code_sig"}
+{"query": "grpc-apm-payper", "oob_reason": "tok_lt2"}
+{"query": "doNotExpire session transaction APM", "oob_reason": "code_sig"}
+{"query": "new APM provider integration", "oob_reason": "code_sig"}
+{"query": "PAYMENT_METHODS_WITH_LONG_PROCESSING_TIME expire session", "oob_reason": "code_sig"}
+{"query": "doNotExpire internalMetadata processor APM", "oob_reason": "code_sig"}
+{"query": "doNotExpire express-api-internal process-initialize", "oob_reason": "repo_token"}
+{"query": "express-webhooks payper webhook route", "oob_reason": "repo_token"}
+{"query": "express-api-callbacks payper callback", "oob_reason": "repo_token"}
+{"query": "NUVEI_STATUSES_MAP consts webhook", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks nuvei payment handle-activities", "oob_reason": "repo_token"}
+{"query": "grpc-providers-credentials payper", "oob_reason": "repo_token"}
+{"query": "express-webhooks nuvei route provider", "oob_reason": "repo_token"}
+{"query": "workflow-provider-webhooks payper activity", "oob_reason": "repo_token"}
+{"query": "TRANSACTION_STATUSES EXPIRED expiration finalize", "oob_reason": "code_sig"}
+{"query": "grpc-providers-features payper seeds", "oob_reason": "repo_token"}
+{"query": "express-webhooks provider route registration APM", "oob_reason": "code_sig"}
+{"query": "express-api-v1 call-providers-initialize doNotExpire apm", "oob_reason": "repo_token"}
+{"query": "workflow-expire-session workflow.js doNotExpire internalMetadata check", "oob_reason": "code_sig"}
+{"query": "NUVEI_STATUSES_MAP consts.js workflow-provider-webhooks", "oob_reason": "code_sig"}
+{"query": "nuvei DMN expired Status DECLINED expiration event type", "oob_reason": "code_sig"}
+{"query": "payper-interac-etransfer task_plan implementation", "oob_reason": "code_sig"}
+{"query": "expire-session-transaction.js doNotExpire expirable status", "oob_reason": "code_sig"}
+{"query": "apm create express-api-internal process-initialize-data okto nuvei paysafe processor doNotExpire", "oob_reason": "repo_token"}
+{"query": "express-api-callbacks apm callback payper redirect", "oob_reason": "repo_token"}
+{"query": "grpc-apm-configurations apm configuration payment method type", "oob_reason": "repo_token"}
+{"query": "libs-types common.proto provider enum payper", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks consts NUVEI_STATUSES_MAP EXPIRED", "oob_reason": "code_sig"}
+{"query": "grpc-apm-nuvei webhook expiration expired poll", "oob_reason": "repo_token"}
+{"query": "express-webhooks provider nuvei route webhook dispatch", "oob_reason": "repo_token"}
+{"query": "PI-60 payper PRs grpc-apm-payper workflow-provider-webhooks grpc-providers-credentials grpc-providers-features express-webhooks", "oob_reason": "repo_token"}
+{"query": "process-initialize-data okto_cash okto_wallet nuvei doNotExpire true", "oob_reason": "code_sig"}
+{"query": "payper task_plan express-webhooks workflow-provider-webhooks grpc-providers-features grpc-providers-credentials", "oob_reason": "code_sig"}
+{"query": "doNotExpire flag api-internal nuvei APM metadata", "oob_reason": "code_sig"}
+{"query": "activate-expiration-workflow transactionId companyId workflow-provider-webhooks", "oob_reason": "repo_token"}
+{"query": "grpc-webhooks-paycom nuvei notification webhook event", "oob_reason": "repo_token"}
+{"query": "new-provider-setup-flow steps express-webhooks express-api-callbacks grpc-providers-credentials", "oob_reason": "repo_token"}
+{"query": "workflow-expire-session shouldExpire doNotExpire forceExpire transaction status CREATED PENDING", "oob_reason": "code_sig"}
+{"query": "express-api-v1 charges call-providers-initialize doNotExpire internalMetadata", "oob_reason": "repo_token"}
+{"query": "express-api-internal process-initialize-data nuvei doNotExpire", "oob_reason": "repo_token"}
+{"query": "nuvei handle-activities EXPIRED finalize issuerResponseCode auth_expired", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks nuvei EXPIRED updateTransaction finalize result", "oob_reason": "code_sig"}
+{"query": "express-api-v1 call-providers-initialize provider type apm alternative payment method", "oob_reason": "repo_token"}
+{"query": "workflow-expire-session consts PAYMENT_METHODS_WITH_LONG_PROCESSING_TIME", "oob_reason": "code_sig"}
+{"query": "nuvei webhook event type expiration subscription pending APM timeout", "oob_reason": "code_sig"}
+{"query": "grpc-providers-nuvei poll-webhook-details status map EXPIRED", "oob_reason": "code_sig"}
+{"query": "grpc-providers-nuvei PROVIDER_TRANSACTION_STATUS_MAP consts", "oob_reason": "code_sig"}
+{"query": "express-webhooks expired transaction APM forceExpire", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks expire forceExpire doNotExpire", "oob_reason": "repo_token"}
+{"query": "grpc-providers-nuvei consts PROVIDER_TRANSACTION_STATUS_MAP APPROVED DECLINED ERROR EXPIRED", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks consts nuvei NUVEI_STATUSES_MAP APPROVED DECLINED PENDING", "oob_reason": "code_sig"}
+{"query": "grpc-webhooks-paycom transaction expired notification webhook event type", "oob_reason": "repo_token"}
+{"query": "workflow-provider-webhooks nuvei isExpired Timeout Retry Reason expired updateTransaction", "oob_reason": "repo_token"}
+{"query": "grpc-webhooks-paycom transaction.expired event type notification", "oob_reason": "repo_token"}
+{"query": "workflow-provider-webhooks dispatch-webhook-notification nuvei expired EXPIRED", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks nuvei isExpired Reason Timeout handle-activities updateTransaction status EXPIRED", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks nuvei dispatchWebhookNotification callGatewaySaleMethod", "oob_reason": "repo_token"}
+{"query": "grpc-core-schemas statuses-map EXPIRED charge transaction notification", "oob_reason": "code_sig"}
+{"query": "APM session expiration", "oob_reason": "code_sig"}
+{"query": "APM alternative payment method provider", "oob_reason": "code_sig"}
+{"query": "grpc-apm-payper provider service", "oob_reason": "repo_token"}
+{"query": "express-webhooks provider route registration", "oob_reason": "repo_token"}
+{"query": "workflow-expire-session APM payment method long processing", "oob_reason": "code_sig"}
+{"query": "grpc-providers-credentials new provider setup", "oob_reason": "repo_token"}
+{"query": "grpc-providers-features seeds.cql provider feature flags", "oob_reason": "repo_token"}
+{"query": "nuvei network tokenization expiration webhook DMN", "oob_reason": "code_sig"}
+{"query": "grpc-apm-nuvei webhook handler", "oob_reason": "repo_token"}
+{"query": "session expiration timeout PAYMENT_METHODS_WITH_LONG_PROCESSING_TIME", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks APM provider webhook processing", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks nuvei handle-activities expiration", "oob_reason": "repo_token"}
+{"query": "express-webhooks nuvei route provider", "oob_reason": "repo_token"}
+{"query": "libs-types common.proto provider enum", "oob_reason": "code_sig"}
+{"query": "doNotExpire internalMetadata APM", "oob_reason": "code_sig"}
+{"query": "express-api-callbacks callback URL provider", "oob_reason": "code_sig"}
+{"query": "ACTIVATE_EXPIRE_SESSION_WORKFLOW signalWithStart expire session", "oob_reason": "code_sig"}
+{"query": "grpc-networktokens-utils webhook expiration token lifecycle", "oob_reason": "repo_token"}
+{"query": "grpc-payment-gateway provider routing APM apm", "oob_reason": "code_sig"}
+{"query": "express-api-internal doNotExpire process-initialize-data apmMetadata processor", "oob_reason": "repo_token"}
+{"query": "nuvei DMN type expiration subscription pending status", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway session expire APM alternative payment", "oob_reason": "code_sig"}
+{"query": "grpc-apm session doNotExpire expire internalMetadata", "oob_reason": "repo_token"}
+{"query": "grpc-core-schemas provider schema payment method type", "oob_reason": "repo_token"}
+{"query": "express-api-webhooks webhook endpoint provider", "oob_reason": "repo_token"}
+{"query": "express-api-v1 expire session signalWithStart temporal apm payment-method", "oob_reason": "repo_token"}
+{"query": "expiration workflow webhook EXPIRED transaction status update", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway expire session doNotExpire APM", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks consts NUVEI_STATUSES_MAP", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks nuvei payment handle-activities parseWebhook updateTransaction signalAsyncProcessingWorkflow", "oob_reason": "repo_token"}
+{"query": "express-api-v1 apm-create session-independent checkout session expire", "oob_reason": "repo_token"}
+{"query": "workflow-expire-session doNotExpire expiration pending", "oob_reason": "repo_token"}
+{"query": "express-api-internal doNotExpire internalMetadata nuvei", "oob_reason": "repo_token"}
+{"query": "grpc-core-transactions internalMetadata doNotExpire update", "oob_reason": "repo_token"}
+{"query": "express-webhooks src/routes/provider payper route", "oob_reason": "repo_token"}
+{"query": "providers-proto service.proto RPC methods", "oob_reason": "code_sig"}
+{"query": "grpc-webhooks-paycom nuvei expiration notification webhook merchant", "oob_reason": "repo_token"}
+{"query": "workflow-provider-webhooks EXPIRED status nuvei NUVEI_STATUSES_MAP consts", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway apm initialize provider doNotExpire session", "oob_reason": "repo_token"}
+{"query": "payper-interac-etransfer task_plan implementation repos", "oob_reason": "code_sig"}
+{"query": "nuvei EXPIRED Status DMN paywithcrypto crypto webhook status expired declined", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks handle-activities providerStatus PENDING EXPIRED finalize updateTransaction", "oob_reason": "code_sig"}
+{"query": "express-api-v1 checkout activateWorkflow expireSession duration", "oob_reason": "repo_token"}
+{"query": "PI-60 payper audit PRs repos grpc-providers-credentials grpc-providers-features", "oob_reason": "repo_token"}
+{"query": "express-api-internal apm-create apm init initialize doNotExpire", "oob_reason": "repo_token"}
+{"query": "workflow-expire-session consts PAYMENT_METHODS_WITH_LONG_PROCESSING_TIME", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks nuvei payment handle-activities EXPIRED CREATED APPROVED DECLINED ERROR status branch", "oob_reason": "code_sig"}
+{"query": "express-api-internal doNotExpire nuvei process-initialize", "oob_reason": "repo_token"}
+{"query": "grpc-webhooks-paycom transaction expired notification RPC event type", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks activate-expiration-workflow forceExpire APM", "oob_reason": "code_sig"}
+{"query": "grpc-apm-configurations session expiration default APM configuration", "oob_reason": "code_sig"}
+{"query": "express-api-v1 session duration default APM checkout_session_expiry", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks sendWebhookNotification nuvei EXPIRED expired", "oob_reason": "code_sig"}
+{"query": "express-api-v1 sessions payment create expire APM doNotExpire duration payment_method_types", "oob_reason": "code_sig"}
+{"query": "NUVEI_STATUSES_MAP EXPIRED expired mapping consts.js", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway initialize APM expire doNotExpire internalMetadata", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks consts NUVEI STATUSES MAP APPROVED DECLINED PENDING ERROR EXPIRED", "oob_reason": "code_sig"}
+{"query": "consts.js NUVEI_STATUSES_MAP APPROVED DECLINED ERROR EXPIRED PENDING", "oob_reason": "code_sig"}
+{"query": "express-api-v1 consts DEFAULT_SESSION_DURATION", "oob_reason": "code_sig"}
+{"query": "grpc-providers-features APM session expire feature flag", "oob_reason": "code_sig"}
+{"query": "grpc-core-schemas authentication-session-independent checkout session APM expire", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "new APM provider integration pattern initialize sale refund webhook", "oob_reason": "code_sig"}
+{"query": "APM provider integration flow initialize sale refund webhook handling", "oob_reason": "code_sig"}
+{"query": "new APM provider integration pattern initialize sale refund webhook", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "transact365 API base URL endpoint host", "oob_reason": "code_sig"}
+{"query": "libra APM provider", "oob_reason": "code_sig"}
+{"query": "openfinance API base URL host", "oob_reason": "code_sig"}
+{"query": "evo payments API base URL Giropay EPS", "oob_reason": "code_sig"}
+{"query": "grpc-apm-ach API URL base endpoint", "oob_reason": "code_sig"}
+{"query": "skrill automated payments API", "oob_reason": "code_sig"}
+{"query": "transact365 API authentication", "oob_reason": "code_sig"}
+{"query": "transact365 plusdebit HMAC signature auth_key auth_timestamp", "oob_reason": "code_sig"}
+{"query": "skrill automated payments API", "oob_reason": "code_sig"}
+{"query": "skrill automated payments API", "oob_reason": "code_sig"}
+{"query": "skrill API", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "how to integrate new APM payment provider", "oob_reason": "code_sig"}
+{"query": "how to integrate new APM payment provider", "oob_reason": "code_sig"}
+{"query": "how to integrate new APM payment provider", "oob_reason": "code_sig"}
+{"query": "how to integrate new APM payment provider", "oob_reason": "code_sig"}
+{"query": "how to integrate new APM payment provider", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "integrate new APM provider", "oob_reason": "code_sig"}
+{"query": "integrate new APM provider", "oob_reason": "code_sig"}
+{"query": "integrate new APM provider", "oob_reason": "code_sig"}
+{"query": "integrate new APM provider", "oob_reason": "code_sig"}
+{"query": "integrate new APM provider", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "grpc-apm-nuvei", "oob_reason": "tok_lt2"}
+{"query": "grpc-apm-nuvei", "oob_reason": "tok_lt2"}
+{"query": "grpc-providers-nuvei", "oob_reason": "tok_lt2"}
+{"query": "grpc-providers-nuvei", "oob_reason": "tok_lt2"}
+{"query": "grpc-providers-features", "oob_reason": "tok_lt2"}
+{"query": "grpc-providers-features", "oob_reason": "tok_lt2"}
+{"query": "grpc-providers-credentials", "oob_reason": "tok_lt2"}
+{"query": "grpc-providers-credentials", "oob_reason": "tok_lt2"}
+{"query": "grpc-providers-features", "oob_reason": "tok_lt2"}
+{"query": "grpc-payment-gateway", "oob_reason": "tok_lt2"}
+{"query": "grpc-providers-credentials", "oob_reason": "tok_lt2"}
+{"query": "grpc-core-transaction-management", "oob_reason": "tok_lt2"}
+{"query": "grpc-core-transaction-management", "oob_reason": "tok_lt2"}
+{"query": "workflow-transaction repo", "oob_reason": "repo_token"}
+{"query": "workflow-transaction repo", "oob_reason": "repo_token"}
+{"query": "grpc-providers-nuvei", "oob_reason": "tok_lt2"}
+{"query": "grpc-providers-nuvei", "oob_reason": "tok_lt2"}
+{"query": "grpc-providers-features", "oob_reason": "tok_lt2"}
+{"query": "grpc-providers-features", "oob_reason": "tok_lt2"}
+{"query": "backoffice-next", "oob_reason": "tok_lt2"}
+{"query": "backoffice-next", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "map-response status mapping action-aware APM provider", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway", "oob_reason": "tok_lt2"}
+{"query": "grpc-providers-credentials", "oob_reason": "tok_lt2"}
+{"query": "grpc-providers-features", "oob_reason": "tok_lt2"}
+{"query": "grpc-payment-gateway repository", "oob_reason": "repo_token"}
+{"query": "grpc-providers-credentials repository", "oob_reason": "repo_token"}
+{"query": "grpc-apm-trustly", "oob_reason": "tok_lt2"}
+{"query": "grpc-providers-stripe", "oob_reason": "tok_lt2"}
+{"query": "credentials", "oob_reason": "tok_lt2"}
+{"query": "features", "oob_reason": "tok_lt2"}
+{"query": "grpc-apm-skrill repository", "oob_reason": "repo_token"}
+{"query": "workflow-provider-webhooks repository", "oob_reason": "repo_token"}
+{"query": "grpc-payment-gateway repository", "oob_reason": "repo_token"}
+{"query": "grpc-providers-credentials repository", "oob_reason": "repo_token"}
+{"query": "grpc-core-providers repository", "oob_reason": "repo_token"}
+{"query": "map-response status mapping action-aware APM provider", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payper production API URL endpoint base", "oob_reason": "code_sig"}
+{"query": "charges interac redirect_url requires_authentication APM flow", "oob_reason": "code_sig"}
+{"query": "charges APM redirect_url response requires_authentication confirm", "oob_reason": "code_sig"}
+{"query": "APM charges redirect_url initializeUrl response how merchant gets redirect URL", "oob_reason": "code_sig"}
+{"query": "redirect_url authentication_url charge creation APM interac", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "authorization_error authorization validation failed APM create payment method validation", "oob_reason": "code_sig"}
+{"query": "express-api-internal middleware authentication authorization", "oob_reason": "repo_token"}
+{"query": "grpc-apm-payper authorization validation merchant credentials provider", "oob_reason": "repo_token"}
+{"query": "authorization_error authorization validation failed get-credentials-by-id", "oob_reason": "code_sig"}
+{"query": "core-merchants getByID authorization_error UnauthorizedError validation failed", "oob_reason": "code_sig"}
+{"query": "getByID get-by-id method grpc-core-merchants throw UnauthorizedError validation", "oob_reason": "repo_token"}
+{"query": "grpc-payment-gateway initialize merchant validation authorization connection", "oob_reason": "repo_token"}
+{"query": "payper payment_method_type seeds.cql interac eTransfer", "oob_reason": "code_sig"}
+{"query": "credentials merchant authorization_error 400 bad request", "oob_reason": "code_sig"}
+{"query": "authentication session URL alternatives sca APM redirect paymentMethod type", "oob_reason": "code_sig"}
+{"query": "alternatives authenticate SCA redirect APM callback permission_denied forbidden", "oob_reason": "code_sig"}
+{"query": "express-api-authentication alternatives redirect APM interac flow authenticate", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "clientIp client_ip payper required fields", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "provider API error debugging root cause", "oob_reason": "code_sig"}
+{"query": "provider API error debugging root cause", "oob_reason": "code_sig"}
+{"query": "STOP do not search for the error text instead follow algorithm payload builder", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payper required fields initialize ip_address clientIp", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payout APM implementation method", "oob_reason": "code_sig"}
+{"query": "payper payout API endpoint", "oob_reason": "code_sig"}
+{"query": "doNotExpire session APM provider", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "nuvei checksum SHA256 getSessionToken payment.do", "oob_reason": "code_sig"}
+{"query": "trustly DirectDebitMandate JSON-RPC RSA signature", "oob_reason": "code_sig"}
+{"query": "provider error required fields missing ip_address clientIp", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payper error 1006 missing field clientIp ip_address authorization", "oob_reason": "code_sig"}
+{"query": "nuvei invalid checksum EPS payment", "oob_reason": "code_sig"}
+{"query": "trustly sale empty response webhook polling JSON-RPC", "oob_reason": "code_sig"}
+{"query": "nuvei checksum SHA256 merchantId siteId clientRequestId field order formula", "oob_reason": "code_sig"}
+{"query": "trustly sale webhook polling REST logger empty response isFinalResult", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "trustly JSON-RPC RSA-SHA512 signing protocol not REST", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payout flow gateway V1 internal API initiation", "oob_reason": "code_sig"}
+{"query": "SCA authenticate redirect callback APM return_url", "oob_reason": "code_sig"}
+{"query": "express-api-authentication alternatives redirect interac flow", "oob_reason": "repo_token"}
+{"query": "express-api-authentication", "oob_reason": "tok_lt2"}
+{"query": "express-api-callbacks apm callback redirect", "oob_reason": "repo_token"}
+{"query": "express-api-authentication authenticate redirect SCA", "oob_reason": "code_sig"}
+{"query": "express-api-authentication authenticate redirect SCA", "oob_reason": "code_sig"}
+{"query": "express-api-authentication authenticate redirect SCA", "oob_reason": "code_sig"}
+{"query": "express-api-authentication", "oob_reason": "tok_lt2"}
+{"query": "payout flow destination_data provider implementation", "oob_reason": "code_sig"}
+{"query": "payout flow destination_data provider implementation", "oob_reason": "code_sig"}
+{"query": "payout flow destination_data provider implementation", "oob_reason": "code_sig"}
+{"query": "payout_flow.yaml payout chain", "oob_reason": "code_sig"}
+{"query": "payout", "oob_reason": "tok_lt2"}
+{"query": "payout", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "SCA authenticate redirect APM callback return_url interac", "oob_reason": "code_sig"}
+{"query": "session expiry MIT doNotExpire workflow", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payper payout interac grpc-apm", "oob_reason": "repo_token"}
+{"query": "payper payout API request fields phone email amount", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "express-api-v1 payout interac additionalInfo phone paymentMethod", "oob_reason": "repo_token"}
+{"query": "payout phone additionalInfo paymentMethod common.proto PayoutRequest", "oob_reason": "code_sig"}
+{"query": "payper payout eTransfer API required fields phone currency", "oob_reason": "code_sig"}
+{"query": "payper payout body parameters required amount first_name phone", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "workflow-provider-webhooks payper payout webhook handler sale async flow", "oob_reason": "repo_token"}
+{"query": "workflow-provider-webhooks payper activities payout sale webhook", "oob_reason": "repo_token"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "reusablePayouts flag logic email approved APM payout", "oob_reason": "code_sig"}
+{"query": "grpc-apm provider methods payout sale refund pass payment method from request", "oob_reason": "repo_token"}
+{"query": "workflow-provider-webhooks payper handle-activities transaction type routing sale refund payout", "oob_reason": "repo_token"}
+{"query": "methods/payout.js paymentMethod composition from request", "oob_reason": "code_sig"}
+{"query": "payout.js const paymentMethod request body", "oob_reason": "code_sig"}
+{"query": "routes/payouts.js validation interac", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "prepare-provider-params.js gateway", "oob_reason": "code_sig"}
+{"query": "callGatewaySaleMethod callGatewayRefundMethod workflow-provider-webhooks sync", "oob_reason": "repo_token"}
+{"query": "branching payment_method_type transactionType mit dccAccepted externalSettlement skip_new_attempt", "oob_reason": "code_sig"}
+{"query": "webhook IP whitelist cf-connecting-ip x-envoy-external-address no HMAC", "oob_reason": "code_sig"}
+{"query": "generic description Online payment never transaction ID PCI", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "provider_doc", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "[APM] - Plaid verification flow", "oob_reason": "code_sig"}
+{"query": "[APM] - Aeropay integration", "oob_reason": "code_sig"}
+{"query": "[APM] - Nuvei expiration webhook event", "oob_reason": "code_sig"}
+{"query": "[APM] - Trustly verification flow", "oob_reason": "code_sig"}
+{"query": "[APM] - Paypal integration updates", "oob_reason": "code_sig"}
+{"query": "[APM] - Trustly payouts", "oob_reason": "code_sig"}
+{"query": "[APM] - Nuvei  pay by bank", "oob_reason": "code_sig"}
+{"query": "Stripe - add dynamic MCC", "oob_reason": "code_sig"}
+{"query": "[APM] PPRO - Bancomat, satispay", "oob_reason": "code_sig"}
+{"query": "Check CVV removal condition in all live providers", "oob_reason": "code_sig"}
+{"query": "March 2026 - PCI Services update", "oob_reason": "code_sig"}
+{"query": "Iris APM integration", "oob_reason": "code_sig"}
+{"query": "Provider  integration - Libra OBP", "oob_reason": "code_sig"}
+{"query": "Okto Cash APM integrations", "oob_reason": "code_sig"}
+{"query": "paysafe - integration to ACH", "oob_reason": "code_sig"}
+{"query": "ECP - adjust providers credentials token by currency to be dynamic", "oob_reason": "code_sig"}
+{"query": "APS e2e config to grpc service", "oob_reason": "code_sig"}
+{"query": "APM integration - Neosurf", "oob_reason": "code_sig"}
+{"query": "PPRO add bancontact", "oob_reason": "code_sig"}
+{"query": "EPS APM via Nuvei", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "new provider setup APM initialize sale refund payout", "oob_reason": "code_sig"}
+{"query": "payper webhook route express-webhooks", "oob_reason": "repo_token"}
+{"query": "payper credentials authentication grpc-providers-credentials", "oob_reason": "repo_token"}
+{"query": "payper payout webhook handle-activities parse-payload tx_action", "oob_reason": "code_sig"}
+{"query": "payper payout express-api-v1 routes interac", "oob_reason": "repo_token"}
+{"query": "payper methods index.js sale initialize refund", "oob_reason": "code_sig"}
+{"query": "payper route provider express-webhooks src/routes", "oob_reason": "repo_token"}
+{"query": "payper PAYPER_ACTIONS payout handle-activities workflow-provider-webhooks", "oob_reason": "code_sig"}
+{"query": "gateway runtime_routing payper create-or-update-source reusablePayouts", "oob_reason": "code_sig"}
+{"query": "payper PI-60 audit grpc-apm-payper payout missing", "oob_reason": "repo_token"}
+{"query": "payper payout API endpoint eTransfer send disbursement", "oob_reason": "code_sig"}
+{"query": "express-api-v1 payouts payment_method interac additionalInfo phone", "oob_reason": "code_sig"}
+{"query": "payper payout eTransfer POST api v2 body parameters amount first_name email", "oob_reason": "code_sig"}
+{"query": "payper gotchas payout finalize webhook MUST set claimed returned", "oob_reason": "code_sig"}
+{"query": "payper PAYPER_STATUSES_MAP consts workflow-provider-webhooks payout refund", "oob_reason": "code_sig"}
+{"query": "PAYPER_STATUSES_MAP consts.js payment request refund payout claimed", "oob_reason": "code_sig"}
+{"query": "payper express-api-v1 SOURCE_TYPES consts interac payper", "oob_reason": "code_sig"}
+{"query": "Interac e-Transfer provider integration APM", "oob_reason": "code_sig"}
+{"query": "new APM provider setup initialize redirect sale webhook refund payout", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS async refund signal workflow", "oob_reason": "code_sig"}
+{"query": "grpc-providers-credentials migration data-mapper validation new provider", "oob_reason": "repo_token"}
+{"query": "express-api-callbacks APM redirect callback URL registration", "oob_reason": "code_sig"}
+{"query": "express-webhooks payper route registration webhook endpoint", "oob_reason": "repo_token"}
+{"query": "grpc-payment-gateway routing APM provider runtime_routing config", "oob_reason": "code_sig"}
+{"query": "payper IP whitelist verify-ip HMAC signature webhook verification", "oob_reason": "code_sig"}
+{"query": "grpc-providers-features seeds.cql payment_method_type interac sale refund payout", "oob_reason": "code_sig"}
+{"query": "payper consts PAYPER_STATUSES_MAP PAYPER_WHITELISTED_IPS workflow-provider-webhooks", "oob_reason": "code_sig"}
+{"query": "amount smallest unit currency exponent CAD conversion cents", "oob_reason": "code_sig"}
+{"query": "boilerplate card-payment artifacts delete SYNC_WORKFLOWS e2e CI cleanup new APM", "oob_reason": "code_sig"}
+{"query": "express-webhooks provider route index.js payper registration 40 providers", "oob_reason": "code_sig"}
+{"query": "grpc-apm-payper methods initialize sale refund payout make-api-call", "oob_reason": "repo_token"}
+{"query": "new APM provider setup boilerplate grpc", "oob_reason": "code_sig"}
+{"query": "webhook parse-payload handle-activities paysafe APM async sale", "oob_reason": "code_sig"}
+{"query": "express-webhooks provider router webhook route registration APM", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS refund signal webhook temporal", "oob_reason": "code_sig"}
+{"query": "grpc-providers-credentials migration data-mapper validation new provider", "oob_reason": "repo_token"}
+{"query": "express-api-callbacks APM redirect success failure URL callback route", "oob_reason": "code_sig"}
+{"query": "grpc-providers-features seeds.cql payment_method_type interac", "oob_reason": "code_sig"}
+{"query": "initialize redirect APM method grpc-apm redirectUrl make-api-call", "oob_reason": "code_sig"}
+{"query": "grpc-webhooks-paycom webhook dispatcher provider notification routing", "oob_reason": "repo_token"}
+{"query": "express-api-internal APM create initialize apm-create route", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway provider routing config APM new provider registration", "oob_reason": "code_sig"}
+{"query": "payout APM reusablePayouts email pending approved async provider", "oob_reason": "code_sig"}
+{"query": "libs-types common.proto provider enum payment method type APM update", "oob_reason": "code_sig"}
+{"query": "grpc-webhooks-paycom provider webhook dispatch notification temporal signal", "oob_reason": "repo_token"}
+{"query": "currency exponent amount smallest unit CAD formatting provider", "oob_reason": "code_sig"}
+{"query": "webhook IP whitelist HMAC signature verification provider security", "oob_reason": "code_sig"}
+{"query": "Interac e-Transfer provider integration APM", "oob_reason": "code_sig"}
+{"query": "new APM provider setup boilerplate grpc", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS refund async webhook signal", "oob_reason": "code_sig"}
+{"query": "APM redirect callback initialize redirect_url success failure", "oob_reason": "code_sig"}
+{"query": "express-webhooks provider router route registration payper paysafe", "oob_reason": "repo_token"}
+{"query": "seeds.cql payment_method_type interac features provider flags", "oob_reason": "code_sig"}
+{"query": "async refund signal workflow-async-transactions-processing temporal", "oob_reason": "repo_token"}
+{"query": "cloudflare-workers-apm-redirect-controller redirect APM initialize", "oob_reason": "code_sig"}
+{"query": "grpc-webhooks-paycom dispatcher webhook notification provider routing", "oob_reason": "repo_token"}
+{"query": "paysafe interac interac_etransfer paymentType payment_method_type", "oob_reason": "code_sig"}
+{"query": "express-api-internal APM create route provider initialize gateway", "oob_reason": "code_sig"}
+{"query": "consts.js provider registration workflow-provider-webhooks activities index", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway ASYNC_FLOW_PROCESSORS provider list refund async", "oob_reason": "code_sig"}
+{"query": "express-api-callbacks apm callback route provider registration", "oob_reason": "repo_token"}
+{"query": "libs-types common.proto provider enum APM type definition", "oob_reason": "code_sig"}
+{"query": "paysafe interac webhook PAYMENT_HANDLE_PAYABLE paymentType routing conflict", "oob_reason": "code_sig"}
+{"query": "webhook IP whitelist HMAC signature verification validate-signature provider", "oob_reason": "code_sig"}
+{"query": "new APM provider integration grpc-apm boilerplate", "oob_reason": "code_sig"}
+{"query": "redirect-based initialize APM payment flow", "oob_reason": "code_sig"}
+{"query": "webhook async sale callback APM provider", "oob_reason": "code_sig"}
+{"query": "boilerplate-node-providers-grpc-service setup new provider SERVICE_NAME", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway runtime routing provider APM register", "oob_reason": "code_sig"}
+{"query": "providers-mapping payment_method_type seeds.cql partnerKey", "oob_reason": "code_sig"}
+{"query": "grpc-providers-credentials new provider credential setup", "oob_reason": "repo_token"}
+{"query": "providers-proto APM initialize sale refund payout method definition", "oob_reason": "code_sig"}
+{"query": "express-api-webhooks workflow-provider-webhooks provider webhook handling", "oob_reason": "repo_token"}
+{"query": "grpc-apm-configurations APM provider config settings", "oob_reason": "code_sig"}
+{"query": "node-libs-providers-gateway provider routing resolve APM service", "oob_reason": "code_sig"}
+{"query": "express-api-callbacks apm-callback route provider specific redirect URL", "oob_reason": "code_sig"}
+{"query": "Kubernetes deployment helm chart new provider service grpc-apm", "oob_reason": "repo_token"}
+{"query": "grpc-providers-mapping connection provider payment_method_type register new", "oob_reason": "code_sig"}
+{"query": "next-web-alternative-payment-methods frontend APM provider display list", "oob_reason": "code_sig"}
+{"query": "grpc-providers-features seeds.cql trustly volt sale refund payout currency CAD", "oob_reason": "code_sig"}
+{"query": "workflow-reconciliation settlement new provider bank transfer", "oob_reason": "repo_token"}
+{"query": "FORCE_REDIRECTS_PROVIDERS provider callback redirect list", "oob_reason": "code_sig"}
+{"query": "PROVIDERS_WITH_CUSTOM_APPS_MAP sourceDataType APM custom app redirect", "oob_reason": "code_sig"}
+{"query": "grpc-apm-configurations apm_configurations payment_method_type provider type", "oob_reason": "code_sig"}
+{"query": "node-libs-common enums payment-method-types provider types APM enum add new", "oob_reason": "code_sig"}
+{"query": "express-api-v1 verify-requested-payment-methods-types validate connection partnerKey", "oob_reason": "repo_token"}
+{"query": "paysafe interac_etransfer payment_method_type interac", "oob_reason": "code_sig"}
+{"query": "graphql backoffice transaction provider APM type display filter", "oob_reason": "code_sig"}
+{"query": "workflow-payment-completion APM async pending status update", "oob_reason": "code_sig"}
+{"query": "new-provider-setup-flow yaml steps create_repo add_seeds gateway_routing webhook_handler", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks handle-activities new provider add webhook handler temporal", "oob_reason": "repo_token"}
+{"query": "grpc-settlement-account provider settlement configuration new APM", "oob_reason": "code_sig"}
+{"query": "new-provider-setup-flow add_seeds_entry add_callback_route add_webhook_route gateway_routing_config deploy credentials_table", "oob_reason": "code_sig"}
+{"query": "redirect-based initialize APM async webhook sale", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS async refund webhook signal", "oob_reason": "code_sig"}
+{"query": "APM callback redirect success failure URL express-api-callbacks", "oob_reason": "code_sig"}
+{"query": "grpc-providers-credentials migration data-mapper validation new provider", "oob_reason": "repo_token"}
+{"query": "seeds.cql grpc-providers-features payment_method_type sale refund payout", "oob_reason": "code_sig"}
+{"query": "express-webhooks router provider webhook route registration", "oob_reason": "repo_token"}
+{"query": "map-response.js provider status mapping action-aware sale refund", "oob_reason": "code_sig"}
+{"query": "webhook IP whitelist HMAC signature verification provider security", "oob_reason": "code_sig"}
+{"query": "cloudflare-workers-apm-redirect-controller redirect APM provider", "oob_reason": "code_sig"}
+{"query": "boilerplate card-payment artifacts delete SYNC_WORKFLOWS e2e CI cleanup", "oob_reason": "code_sig"}
+{"query": "amount currency smallest unit exponent CAD cents conversion provider", "oob_reason": "code_sig"}
+{"query": "express-api-internal apm create provider initialize route additionalInfo", "oob_reason": "repo_token"}
+{"query": "common.proto libs-types provider enum APM new provider registration", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway ASYNC_FLOW_PROCESSORS refund provider config async signal workflow", "oob_reason": "code_sig"}
+{"query": "Trustly handle-activities webhook tx_action", "oob_reason": "code_sig"}
+{"query": "Paysafe handle-activities webhook tx_action", "oob_reason": "code_sig"}
+{"query": "payout route validation fields express-api-v1", "oob_reason": "repo_token"}
+{"query": "handle-activities tx_action sale refund payout webhook", "oob_reason": "code_sig"}
+{"query": "handle-activities tx_action webhook notification", "oob_reason": "code_sig"}
+{"query": "paymentMethod additionalInfo isFinalResult sale.js", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks Paysafe handle activities tx_action", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks Trustly handle-activities tx_action", "oob_reason": "code_sig"}
+{"query": "payouts.js validation amount currency customer email phone", "oob_reason": "code_sig"}
+{"query": "methods payout.js paymentMethod req.paymentMethod Volt", "oob_reason": "code_sig"}
+{"query": "grpc-providers-paysafe payout reusablePayouts disableReusablePayouts", "oob_reason": "repo_token"}
+{"query": "paysafe webhook handle-activities PAYMENT PAYOUT REFUND status route", "oob_reason": "code_sig"}
+{"query": "APM provider initialize redirect webhook sale flow grpc-apm", "oob_reason": "code_sig"}
+{"query": "grpc-apm boilerplate new provider scaffold", "oob_reason": "repo_token"}
+{"query": "APM_TYPES express-api-v1 apm provider list add", "oob_reason": "code_sig"}
+{"query": "paysafe payout grpc-apm-paysafe methods/payout.js", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks handle-activities trustly tx type", "oob_reason": "repo_token"}
+{"query": "grpc-apm-payper initialize sale refund methods", "oob_reason": "repo_token"}
+{"query": "grpc-apm-payper initialize.js sale.js refund.js", "oob_reason": "code_sig"}
+{"query": "grpc-apm-payper webhook handle-activities workflow payper", "oob_reason": "repo_token"}
+{"query": "payper features seeds.cql payment_method_type interac_etransfer", "oob_reason": "code_sig"}
+{"query": "payper express-webhooks route register webhooks/payper", "oob_reason": "repo_token"}
+{"query": "payper APM_TYPES express-api-v1 payment method type", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS refund signal webhook paysafe", "oob_reason": "code_sig"}
+{"query": "grpc-providers-credentials migration data-mapper validation new provider", "oob_reason": "repo_token"}
+{"query": "apm-create express-api-internal APM_TYPES redirect init", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS async refund signal webhook", "oob_reason": "code_sig"}
+{"query": "APM redirect initialize response redirectUrl paynearme okto", "oob_reason": "code_sig"}
+{"query": "webhook IP whitelist HMAC signature verification express-webhooks", "oob_reason": "code_sig"}
+{"query": "trustly webhook signature verification HMAC", "oob_reason": "code_sig"}
+{"query": "grpc-apm-trustly gotchas webhooks redirect initialize", "oob_reason": "repo_token"}
+{"query": "grpc-apm initialize redirect URL response async sale pending", "oob_reason": "code_sig"}
+{"query": "seeds.cql feature flags payment_method_type verification payout supported", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks parse-payload statuses-map tx_action", "oob_reason": "code_sig"}
+{"query": "reusablePayouts pending approved email phone payout APM", "oob_reason": "code_sig"}
+{"query": "express-webhooks add provider raw body signature parser", "oob_reason": "repo_token"}
+{"query": "SYNC_WORKFLOWS skip_new_attempt externalSettlement feature flag async webhook decision", "oob_reason": "code_sig"}
+{"query": "grpc-providers-credentials adding new credentials table", "oob_reason": "repo_token"}
+{"query": "grpc-apm-trustly gotchas handle-activities account payment BACS parse", "oob_reason": "code_sig"}
+{"query": "next-web-pay-with-bank APM redirect supported transactionType", "oob_reason": "code_sig"}
+{"query": "grpc-apm-payper repo", "oob_reason": "repo_token"}
+{"query": "redirect URL initialize APM async webhook handle-activities paysafe", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS refund signal grpc-payment-gateway", "oob_reason": "code_sig"}
+{"query": "webhook HMAC signature verification IP allowlist middleware express-webhooks", "oob_reason": "code_sig"}
+{"query": "nuvei error code mapping ISO issuer response code fallback", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS refund signal workflow temporal paysafe handle-activities", "oob_reason": "code_sig"}
+{"query": "boilerplate delete card e2e SYNC_WORKFLOWS avs cvc scaffold APM", "oob_reason": "code_sig"}
+{"query": "prepaid voucher APM provider redirect initialize", "oob_reason": "code_sig"}
+{"query": "paysafecash voucher prepaid APM", "oob_reason": "code_sig"}
+{"query": "neosurf SOAP REST initialize sale refund", "oob_reason": "code_sig"}
+{"query": "neosurf prepaid voucher APM", "oob_reason": "code_sig"}
+{"query": "grpc-apm-neosurf neosurf provider", "oob_reason": "repo_token"}
+{"query": "new APM provider integration steps boilerplate grpc-apm", "oob_reason": "code_sig"}
+{"query": "grpc-providers-features seeds.cql provider capability flags refund webhook prepaid", "oob_reason": "repo_token"}
+{"query": "new-provider-setup-flow steps grpc-apm boilerplate webhook route express-webhooks", "oob_reason": "repo_token"}
+{"query": "prepaid voucher APM redirect provider", "oob_reason": "code_sig"}
+{"query": "async webhook sale APM transaction final status redirect", "oob_reason": "code_sig"}
+{"query": "grpc-apm-neosurf", "oob_reason": "tok_lt2"}
+{"query": "cash voucher APM provider redirect KYC initialize", "oob_reason": "code_sig"}
+{"query": "paynearme initialize redirect KYC voucher webhook sale", "oob_reason": "code_sig"}
+{"query": "cash voucher APM KYC redirect provider", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "prepaid voucher APM redirect initialize provider", "oob_reason": "code_sig"}
+{"query": "methods/refund.js attempt 1 udf transactionId aid1 new transaction", "oob_reason": "code_sig"}
+{"query": "aircash voucher initialize prepaid redirect_url", "oob_reason": "code_sig"}
+{"query": "jeton initialize callback URL build authenticationData JWT", "oob_reason": "code_sig"}
+{"query": "grpc-providers-credentials schema apm provider voucher", "oob_reason": "repo_token"}
+{"query": "express-api-internal apm-create routes neosurf paymentMethodType", "oob_reason": "repo_token"}
+{"query": "jeton initialize JSON.parse authenticationData try catch unhandled", "oob_reason": "code_sig"}
+{"query": "aircash refund methods refund.js paymentMethod", "oob_reason": "code_sig"}
+{"query": "webhook signature verify HMAC apm secret express-webhooks", "oob_reason": "code_sig"}
+{"query": "jeton statuses-map.js mapping pending declined approved", "oob_reason": "code_sig"}
+{"query": "jeton map-response PENDING override finalize empty unknown status default", "oob_reason": "code_sig"}
+{"query": "aircash sale fallback non-APPROVED phone parameters payment method", "oob_reason": "code_sig"}
+{"query": "grpc-providers-features seeds.cql refund payout verification sub_provider", "oob_reason": "code_sig"}
+{"query": "refund_partial refund_multiple feature flag seeds.cql provider features check", "oob_reason": "code_sig"}
+{"query": "express-api-callbacks routes apm provider register new", "oob_reason": "repo_token"}
+{"query": "grpc-payment-gateway sale routing provider name switch case APM", "oob_reason": "code_sig"}
+{"query": "grpc-webhooks-paycom routing provider register apm webhook URL path", "oob_reason": "code_sig"}
+{"query": "paynearme cash voucher initialize KYC redirect", "oob_reason": "code_sig"}
+{"query": "boilerplate-node-providers-grpc-service new APM provider setup", "oob_reason": "code_sig"}
+{"query": "paynearme initialize KYC identity verification create_order", "oob_reason": "code_sig"}
+{"query": "aircash cash voucher APM payout refund", "oob_reason": "code_sig"}
+{"query": "paynearme refund reverse_payment grpc-apm-paynearme reverse", "oob_reason": "code_sig"}
+{"query": "aircash refund.js paymentMethod udf attempt threading", "oob_reason": "code_sig"}
+{"query": "PAYNEARME_STATUSES_MAP parse-payload reverse_type chargeback bank return", "oob_reason": "code_sig"}
+{"query": "paynearme webhook signature verification HMAC site_identifier security", "oob_reason": "code_sig"}
+{"query": "paynearme handle-activities tx_action switch payment confirmation reverse", "oob_reason": "code_sig"}
+{"query": "grpc-providers-credentials new provider validation schema add", "oob_reason": "repo_token"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "cash voucher prepaid APM redirect KYC", "oob_reason": "code_sig"}
+{"query": "neosurf", "oob_reason": "tok_lt2"}
+{"query": "paynearme sale webhook KYC voucher", "oob_reason": "code_sig"}
+{"query": "prepaid voucher APM redirect initialize sale", "oob_reason": "code_sig"}
+{"query": "paysafe Interac e-transfer payment handle webhook PAYMENT_HANDLE_PAYABLE", "oob_reason": "code_sig"}
+{"query": "grpc-providers-features seeds.cql payment_method_type capability flags", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks handle-activities tx_action statuses-map refund", "oob_reason": "code_sig"}
+{"query": "paynearme reverse_payment refund implementation method", "oob_reason": "code_sig"}
+{"query": "prepaid voucher APM provider initialize redirect", "oob_reason": "code_sig"}
+{"query": "grpc-apm-fonix initialize sale refund voucher", "oob_reason": "repo_token"}
+{"query": "grpc-apm-ecopayz prepaid voucher initialize", "oob_reason": "repo_token"}
+{"query": "cash voucher APM provider redirect KYC", "oob_reason": "code_sig"}
+{"query": "payper provider repo grpc-apm-payper", "oob_reason": "repo_token"}
+{"query": "KYC verification redirect initialize APM provider compliance", "oob_reason": "code_sig"}
+{"query": "aircash CALLBACK_URL WEBHOOKS_URL successUrl failureUrl initialize", "oob_reason": "code_sig"}
+{"query": "grpc-providers-mapping provider type map APM new provider entry", "oob_reason": "code_sig"}
+{"query": "express-webhooks paynearme route registration webhook entry point", "oob_reason": "repo_token"}
+{"query": "paynearme statuses-map.js status mapping PENDING DECLINED", "oob_reason": "code_sig"}
+{"query": "next-web-alternative-payment-methods APM provider listing frontend", "oob_reason": "code_sig"}
+{"query": "grpc-core-schemas provider name enum new APM", "oob_reason": "code_sig"}
+{"query": "grpc-providers-credentials payper interac credentials migration data-mapper", "oob_reason": "repo_token"}
+{"query": "grpc-providers-credentials provider config missing credentials", "oob_reason": "repo_token"}
+{"query": "ASYNC_FLOW_PROCESSORS grpc-payment-gateway refund signal payper paysafe trustly", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway initialize APM method missing add new provider routing", "oob_reason": "code_sig"}
+{"query": "paynearme dob date of birth additionalInfo KYC paymentMethod", "oob_reason": "code_sig"}
+{"query": "grpc-providers-mapping APM_TYPES new provider register apm payment-methods", "oob_reason": "code_sig"}
+{"query": "grpc-graphql-authorization payment_method_type APM allow list", "oob_reason": "code_sig"}
+{"query": "webhook signature HMAC verify fail-open paynearme fonix trustly", "oob_reason": "code_sig"}
+{"query": "backoffice-web provider list APM display name icon", "oob_reason": "code_sig"}
+{"query": "grpc-providers-mapping APM_PROVIDER_TYPE_MAP add new provider initialize sale refund payout", "oob_reason": "code_sig"}
+{"query": "grpc-apm-configurations seeds redirect behavior new APM provider", "oob_reason": "code_sig"}
+{"query": "paysafe interac sale POST payments two-step PAYMENT_HANDLE_PAYABLE webhook payable status", "oob_reason": "code_sig"}
+{"query": "seeds.cql provider feature flags processing_currency_codes country_codes capabilities", "oob_reason": "code_sig"}
+{"query": "paynearme methods/sale.js paymentMethod destructure attempt udf", "oob_reason": "code_sig"}
+{"query": "paynearme refund missing greenfield reverse_payment cash voucher new tx udf attempt", "oob_reason": "code_sig"}
+{"query": "prepaid voucher expiration TTL timeout PENDING workflow polling", "oob_reason": "code_sig"}
+{"query": "node-libs-providers-common APM constants payment method type list interac etransfer", "oob_reason": "code_sig"}
+{"query": "merchant connection APM new provider grpc-core-acquirers payment-method-type binding", "oob_reason": "code_sig"}
+{"query": "refund attempt udf format aid grpc-apm sale.js correct", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks new activity register temporal worker namespace", "oob_reason": "repo_token"}
+{"query": "grpc-payment-gateway initialize APM redirect provider routing apmType async", "oob_reason": "code_sig"}
+{"query": "grpc-providers-credentials validation schema new APM credentials shape secret", "oob_reason": "code_sig"}
+{"query": "currency amount minor units cents formatPrecision APM provider", "oob_reason": "code_sig"}
+{"query": "PROVIDERS_WITH_CUSTOM_APPS_MAP next-web-alternative-payment-methods sourceDataType frontend", "oob_reason": "code_sig"}
+{"query": "currency exponent CAD smallest unit amount paysafe interac CAD cents", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway provider new APM enum require module wire", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway routes/index.js add new provider boilerplate dispatcher", "oob_reason": "code_sig"}
+{"query": "grpc-providers-features capabilities currency country APM voucher restricted", "oob_reason": "code_sig"}
+{"query": "express-webhooks routes apm new provider mounting registration", "oob_reason": "repo_token"}
+{"query": "grpc-providers-features sale verification authorization payout features schema", "oob_reason": "repo_token"}
+{"query": "paynearme refund methods/refund.js implementation prepaid voucher", "oob_reason": "code_sig"}
+{"query": "workflow async-transactions-processing signal sale completion redirect APM", "oob_reason": "code_sig"}
+{"query": "PROVIDERS_WITH_CUSTOM_APPS_MAP express-api-v1 sourceDataType APM", "oob_reason": "code_sig"}
+{"query": "workflow-async-transactions-processing signal sale finalize PENDING webhook arrives", "oob_reason": "code_sig"}
+{"query": "grpc-providers-credentials validation-strategy data-mapper provider new", "oob_reason": "repo_token"}
+{"query": "seeds.cql payment_method_type single row provider", "oob_reason": "code_sig"}
+{"query": "webhook idempotency duplicate tx_action sale race condition", "oob_reason": "code_sig"}
+{"query": "KYC dob date of birth paymentMethod additionalInfo PII masking logs", "oob_reason": "code_sig"}
+{"query": "KYC additionalInfo initialize redirect verification decline", "oob_reason": "code_sig"}
+{"query": "HMAC SHA256 webhook signature verify JWT callback", "oob_reason": "code_sig"}
+{"query": "payout reusablePayouts approved pending email phone validation express-api-v1", "oob_reason": "repo_token"}
+{"query": "JWT redirect callback URL attempt signature tamper validate", "oob_reason": "code_sig"}
+{"query": "barcode QR code redirect URL store retail location voucher display", "oob_reason": "code_sig"}
+{"query": "paynearme cash voucher KYC redirect initialize webhook", "oob_reason": "code_sig"}
+{"query": "new-provider-setup-flow steps boilerplate seeds.cql APM_TYPES payment-methods", "oob_reason": "code_sig"}
+{"query": "KYC redirect cash voucher provider flow", "oob_reason": "code_sig"}
+{"query": "paysafe Interac e-transfer payment handle redirect PAYMENT_HANDLE_PAYABLE", "oob_reason": "code_sig"}
+{"query": "paysafe Interac merchant routing provider selection paymentType INTERAC_ETRANSFER", "oob_reason": "code_sig"}
+{"query": "CAD currency provider gateway gating allowed currencies validation", "oob_reason": "code_sig"}
+{"query": "paysafe Interac webhook PAYABLE PAYMENT_HANDLE sale POST payments two stage", "oob_reason": "code_sig"}
+{"query": "refund Interac eTransfer not supported chargeback dispute APM", "oob_reason": "code_sig"}
+{"query": "grpc-payment-control routing rule provider currency CAD merchant interac", "oob_reason": "code_sig"}
+{"query": "SOAP XML envelope provider voucher", "oob_reason": "code_sig"}
+{"query": "HMAC SHA1 signature provider authentication hash", "oob_reason": "code_sig"}
+{"query": "voucher PIN code prepaid masking PCI logging", "oob_reason": "code_sig"}
+{"query": "SOAP fault parsing XML error response handling", "oob_reason": "code_sig"}
+{"query": "ecopayz SHA1 control hash field ordering checksum", "oob_reason": "code_sig"}
+{"query": "utf-8 charset encoding XML payload special characters escape", "oob_reason": "code_sig"}
+{"query": "paynearme initialize redirect URL webhook sale async", "oob_reason": "code_sig"}
+{"query": "webhook origin verification IP whitelist HMAC signature provider", "oob_reason": "code_sig"}
+{"query": "handle-activities.js tx_action sale refund payout switch APM webhook", "oob_reason": "code_sig"}
+{"query": "parse-payload.js statuses-map tx_action webhook provider", "oob_reason": "code_sig"}
+{"query": "grpc-apm-ppro initialize redirect APM voucher sale webhook", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS payment gateway async refund", "oob_reason": "code_sig"}
+{"query": "reusablePayouts reusablePayments seeds.cql features flags APM", "oob_reason": "code_sig"}
+{"query": "grpc-apm-paynearme initialize.js redirect url payload", "oob_reason": "code_sig"}
+{"query": "paynearme initialize KYC smart_token create_order redirect", "oob_reason": "code_sig"}
+{"query": "grpc-apm-paynearme sale.js poll webhook refund", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS providers list gateway config refund async", "oob_reason": "code_sig"}
+{"query": "paynearme handle-activities authorization confirmation sale tx_action type", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS const list providers names include", "oob_reason": "code_sig"}
+{"query": "paynearme statuses-map SUCCESS PENDING FAILED transaction", "oob_reason": "code_sig"}
+{"query": "grpc-providers-credentials payper volt trustly data-mapper validation migration", "oob_reason": "repo_token"}
+{"query": "express-webhooks routes provider-name-router entry 1-2 lines", "oob_reason": "repo_token"}
+{"query": "paynearme signature verification HMAC IP whitelist webhook origin", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks handle-activities aircash parse-payload voucher", "oob_reason": "repo_token"}
+{"query": "grpc-apm redirect url initialize async webhook sale payout refund pattern", "oob_reason": "repo_token"}
+{"query": "APM_TYPES provider registration list new provider", "oob_reason": "code_sig"}
+{"query": "aircash webhook handler webhooks activities handle-activities tx_action", "oob_reason": "code_sig"}
+{"query": "paynearme initialize redirect KYC create_order smart_token", "oob_reason": "code_sig"}
+{"query": "new-provider-setup-flow end-to-end steps APM redirect-based", "oob_reason": "code_sig"}
+{"query": "aircash initialize payout refund method code file libs callback_url", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks handle-activities parse-payload new provider registration", "oob_reason": "repo_token"}
+{"query": "new-provider-setup-flow yaml all steps grpc-providers-credentials seeds.cql express-webhooks", "oob_reason": "repo_token"}
+{"query": "payment gateway sale method route provider dispatch APM", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway call-providers-gateway provider routing APM_TYPES paynearme aircash", "oob_reason": "code_sig"}
+{"query": "new-provider-setup-flow.yaml steps grpc-apm scaffold seeds.cql feature_flags apm_create", "oob_reason": "code_sig"}
+{"query": "call-providers-gateway switch processor provider aircash case APM map", "oob_reason": "code_sig"}
+{"query": "grpc-providers-features seeds.cql provider capabilities refund payout verification", "oob_reason": "repo_token"}
+{"query": "APM_TYPES provider name register voucher prepaid aircash constant", "oob_reason": "code_sig"}
+{"query": "aircash webhook parse-payload handle-activities workflow-provider-webhooks", "oob_reason": "repo_token"}
+{"query": "express-api-v1 APM_TYPES payment-methods raw-data additional-info provider enable", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks activities folder provider payment parse-payload statuses-map tx_action", "oob_reason": "code_sig"}
+{"query": "grpc-providers-mapping statuses-map provider status mapping PE AB TO internal codes", "oob_reason": "repo_token"}
+{"query": "APM_TYPES list aircash definition consts enum", "oob_reason": "code_sig"}
+{"query": "paynearme payment handle-activities tx_action sale refund payout status", "oob_reason": "code_sig"}
+{"query": "express-webhooks route new provider signature verification webhook receiver", "oob_reason": "repo_token"}
+{"query": "SOURCE_TYPES enum pay-com common aircash paysafecard list", "oob_reason": "code_sig"}
+{"query": "grpc-providers-credentials libs data-mapper validation existing provider libs/paynearme aircash", "oob_reason": "repo_token"}
+{"query": "grpc-providers-credentials index.js strategy map register provider aircash data-mapper", "oob_reason": "code_sig"}
+{"query": "aircash credentials authentication provider api key storage grpc-providers-credentials", "oob_reason": "repo_token"}
+{"query": "new-provider-setup-flow boilerplate-node-providers-grpc-service create grpc-apm steps", "oob_reason": "repo_token"}
+{"query": "express-webhooks routes provider router aircash payper paynearme add route", "oob_reason": "repo_token"}
+{"query": "express-webhooks routes provider index.js all providers bind aircash paynearme nuvei", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks consts.js statuses_map APM_PAYMENT_METHODS register new provider", "oob_reason": "code_sig"}
+{"query": "paynearme KYC initialize customer details kycReference consumer", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks consts.js AIRCASH_STATUSES_MAP TRUSTLY_STATUSES_MAP provider constants export", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks activities paynearme aircash handle-activities parse-payload statuses-map tx_action", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks activities index.js barrel export aircash trustly paysafe", "oob_reason": "code_sig"}
+{"query": "grpc-providers-credentials provider credentials schema aircash paynearme authentication", "oob_reason": "repo_token"}
+{"query": "seeds.cql aircash provider payment_method_types connection seed", "oob_reason": "code_sig"}
+{"query": "trustly webhook parse-payload handle-activities tx_action sale refund", "oob_reason": "code_sig"}
+{"query": "express-api-v1 APM_TYPES charges routes apm providers trustly aircash", "oob_reason": "code_sig"}
+{"query": "paynearme sale webhook polling async no sale API", "oob_reason": "code_sig"}
+{"query": "grpc-providers-features seeds cql aircash provider feature flags", "oob_reason": "repo_token"}
+{"query": "libs-types provider names providerName enum APM types aircash paynearme", "oob_reason": "code_sig"}
+{"query": "async sale async webhook provider does not return status immediately pending APPROVED webhook callback", "oob_reason": "code_sig"}
+{"query": "payouts routes express-api-v1 aircash payout create approved pending reusable", "oob_reason": "repo_token"}
+{"query": "express-api-internal apm-create routes providers PROVIDERS_WITH_CUSTOM_APPS_MAP", "oob_reason": "code_sig"}
+{"query": "aircash gotchas pitfall signature transactionId RSA amount mismatch", "oob_reason": "code_sig"}
+{"query": "express-webhooks aircash route pass webhook delivery url", "oob_reason": "repo_token"}
+{"query": "grpc-payment-gateway initialize redirect APM_REDIRECT_PROVIDERS routing apm call-providers", "oob_reason": "code_sig"}
+{"query": "async flow processors grpc-payment-gateway ASYNC_FLOW_PROCESSORS add provider", "oob_reason": "code_sig"}
+{"query": "express-webhooks routes providers paths list aircash register route webhook", "oob_reason": "repo_token"}
+{"query": "ASYNC_FLOW_PROCESSORS consts payment-gateway list aircash trustly paynearme", "oob_reason": "code_sig"}
+{"query": "express-webhooks consts providers list route prefix registrations", "oob_reason": "repo_token"}
+{"query": "workflow-provider-webhooks signatures verify verifyPaynearmeSignature verifyAircashSignature libs", "oob_reason": "repo_token"}
+{"query": "seeds.cql aircash trustly paynearme payment_method_type currencies features row", "oob_reason": "code_sig"}
+{"query": "grpc-providers-mapping providers map provider-name aircash paynearme cash-voucher registration", "oob_reason": "repo_token"}
+{"query": "reusablePayouts approved pending email async APM payout flag", "oob_reason": "code_sig"}
+{"query": "express-api-v1 APM_TYPES constants list aircash trustly paynearme", "oob_reason": "code_sig"}
+{"query": "aircash initialize payload callback url authenticationData methods/initialize.js libs map-request", "oob_reason": "code_sig"}
+{"query": "NOTIFICATION_URL CALLBACK_URL webhooks.pay.com consts env variables provider initialize", "oob_reason": "code_sig"}
+{"query": "paynearme get-token-payload create-order HMAC signature kyc consumer details address", "oob_reason": "code_sig"}
+{"query": "boilerplate-node-providers-grpc-service new provider setup steps methods initialize sale refund", "oob_reason": "repo_token"}
+{"query": "call-providers-initialize.js APM_TYPES APM redirect flow scope", "oob_reason": "code_sig"}
+{"query": "express-webhooks route register new provider path /webhooks/okto list providers", "oob_reason": "repo_token"}
+{"query": "redirect-based initialize APM response redirectUrl paymentUrl", "oob_reason": "code_sig"}
+{"query": "prepaid voucher APM provider neosurf", "oob_reason": "code_sig"}
+{"query": "webhook sale finalize signal async refund ASYNC_FLOW_PROCESSORS", "oob_reason": "code_sig"}
+{"query": "aircash route provider express-webhooks", "oob_reason": "repo_token"}
+{"query": "activities index.js register aircash provider", "oob_reason": "code_sig"}
+{"query": "paymentMethodToken format type:identifier APM interac", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS refund grpc-payment-gateway async", "oob_reason": "code_sig"}
+{"query": "apm-create route handler internal APM provider", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payper payout eTransfer API", "oob_reason": "code_sig"}
+{"query": "payper refund API body parameters udfs", "oob_reason": "code_sig"}
+{"query": "nuvei payout SEPA bank transfer", "oob_reason": "code_sig"}
+{"query": "payout method options bank transfer IBAN", "oob_reason": "code_sig"}
+{"query": "SEPA payout async flow delayed completion", "oob_reason": "code_sig"}
+{"query": "SEPA payouts API endpoint payment method", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS payout async", "oob_reason": "code_sig"}
+{"query": "SEPA payout withdrawal flow status webhook", "oob_reason": "code_sig"}
+{"query": "payout method payload bank account IBAN", "oob_reason": "code_sig"}
+{"query": "payout type bank_transfer SEPA wire", "oob_reason": "code_sig"}
+{"query": "nuvei API endpoint payout", "oob_reason": "code_sig"}
+{"query": "DELAYED_COMPLETION_PROVIDERS payout pending", "oob_reason": "code_sig"}
+{"query": "verified SEPA payouts name verification algorithm", "oob_reason": "code_sig"}
+{"query": "payment method type APM payout", "oob_reason": "code_sig"}
+{"query": "paymentMethodType bank_transfer APM payout routing", "oob_reason": "code_sig"}
+{"query": "nuvei DMN notification webhook callback", "oob_reason": "code_sig"}
+{"query": "payout validation SEPA bank_transfer type", "oob_reason": "code_sig"}
+{"query": "SEPA Payouts payout request example userPaymentOptionId addUPOAPM IBAN apmData", "oob_reason": "code_sig"}
+{"query": "nuvei withdrawal payout DMN notification status approved declined", "oob_reason": "code_sig"}
+{"query": "payout DMN wdRequestStatus wdOrderStatus Approved Pending Declined notification type", "oob_reason": "code_sig"}
+{"query": "nuvei payout DMN fields wdRequestStatus WITHDRAW_ORDER_NOTIFICATION", "oob_reason": "code_sig"}
+{"query": "SEPA instant payout RFI process mandatory parameters firstName lastName email", "oob_reason": "code_sig"}
+{"query": "SEPA payout nuvei APM bank_account payment_method_type", "oob_reason": "code_sig"}
+{"query": "nuvei SEPA bank transfer payout withdrawal", "oob_reason": "code_sig"}
+{"query": "SEPA payout payload IBAN beneficiary apm_sepa_payout", "oob_reason": "code_sig"}
+{"query": "SEPA payouts DMN flow wdRequestStatus notificationType WITHDRAW", "oob_reason": "code_sig"}
+{"query": "accountCapture API request vs_iban apmPayerInfo match_score verified bank account", "oob_reason": "code_sig"}
+{"query": "nuvei webhook DMN payout notification async status", "oob_reason": "code_sig"}
+{"query": "nuvei webhook payout DMN notification pending approved", "oob_reason": "code_sig"}
+{"query": "nuvei webhook DMN parameters deposit withdrawal notificationType clientUniqueId", "oob_reason": "code_sig"}
+{"query": "nuvei DMN withdrawal separate URL deposit different notification payout wdRequestId wdRequestStatus", "oob_reason": "code_sig"}
+{"query": "nuvei withdrawal notification URL cannot sent dynamically integration team separate", "oob_reason": "code_sig"}
+{"query": "nuvei payout notificationType WITHDRAW_REQUEST WITHDRAW_ORDER DMN fields", "oob_reason": "code_sig"}
+{"query": "initialize multiple API calls createUser session setup before payout", "oob_reason": "code_sig"}
+{"query": "addUPOAPM create user payment option idempotent duplicate IBAN", "oob_reason": "code_sig"}
+{"query": "error code 1060 missing payment data UPO payout", "oob_reason": "code_sig"}
+{"query": "paysafe VERIFICATION transactionType interac payment handle", "oob_reason": "code_sig"}
+{"query": "external_settlement feature flag settlement payout", "oob_reason": "code_sig"}
+{"query": "external_settlement settled settlement workflow reconciliation", "oob_reason": "code_sig"}
+{"query": "risk-ani ANI verification library IBAN name check", "oob_reason": "code_sig"}
+{"query": "DMN retry timeout notification failure webhook", "oob_reason": "code_sig"}
+{"query": "async transaction expiration timeout PENDING stuck", "oob_reason": "code_sig"}
+{"query": "Nuvei DMN webhook retry policy HTTP response timeout delivery", "oob_reason": "code_sig"}
+{"query": "Nuvei DMN handling retry response 200 OK resend attempts", "oob_reason": "code_sig"}
+{"query": "DMN retry 15 minutes 24 hours 96 times resend notification merchant response", "oob_reason": "code_sig"}
+{"query": "Add ESA Number, Payouts, and Affiliated Account Fields to Merchant Application", "oob_reason": "code_sig"}
+{"query": "Provisioning", "oob_reason": "tok_lt2"}
+{"query": "Notify AML Team on Approval Request", "oob_reason": "code_sig"}
+{"query": "Add MCC Type Support and Funding Code Mapping for Entity MCCs", "oob_reason": "code_sig"}
+{"query": "[ABU] Create grpc-vault-abu", "oob_reason": "code_sig"}
+{"query": "[Routing] APM Routing Through Risk Engine with payment_method_type", "oob_reason": "code_sig"}
+{"query": "Add merchant_evidence_required_by Column to Disputes Table", "oob_reason": "code_sig"}
+{"query": "[APM] - Payper integration", "oob_reason": "code_sig"}
+{"query": "Monthly Task Creation for MCC 5967 Merchants", "oob_reason": "code_sig"}
+{"query": "[ABU] Add abu related payment method options", "oob_reason": "code_sig"}
+{"query": "[API] Add filtering for bulk charges get route", "oob_reason": "code_sig"}
+{"query": "[API] Block refreshed client secret if payment completed", "oob_reason": "code_sig"}
+{"query": "OKTO CASH - 6-digit code instead of barcode", "oob_reason": "code_sig"}
+{"query": "OKTO CASH - princess skin", "oob_reason": "code_sig"}
+{"query": "[API] Route for refreshing payment session client secret", "oob_reason": "code_sig"}
+{"query": "[Vault] Retry DEK decrypt in case of error", "oob_reason": "code_sig"}
+{"query": "Tech debt: migrate `workflow-onboarding-merchant-providers` to typescript", "oob_reason": "repo_token"}
+{"query": "[CORE] Extend core-transactions with custom issuer text fields", "oob_reason": "code_sig"}
+{"query": "Card form with data closed after CTP loading", "oob_reason": "code_sig"}
+{"query": "Export Assessment Form PDF and Attach as Legal Entity Business Document", "oob_reason": "code_sig"}
+{"query": "Okto Cash APM integrations", "oob_reason": "code_sig"}
+{"query": "APM integration - Neosurf", "oob_reason": "code_sig"}
+{"query": "[API] Remove populating is_custom_decline_message to merchants", "oob_reason": "code_sig"}
+{"query": "[API] Endpoints set for card block list", "oob_reason": "code_sig"}
+{"query": "Add consumer_email to subscriptions", "oob_reason": "code_sig"}
+{"query": "[CSV] Add authentication transaction related field to mapper", "oob_reason": "code_sig"}
+{"query": "[RISK] Adding cybersource billing address validation", "oob_reason": "code_sig"}
+{"query": "Implement export to PDF in pricing quote drilldown page", "oob_reason": "code_sig"}
+{"query": "Add `settlement_account` Option to LogicFieldsValueFieldType", "oob_reason": "code_sig"}
+{"query": "Error in express-vault", "oob_reason": "repo_token"}
+{"query": "[RISK] - Make default outcome THREEDS_NOT_REQUIRED", "oob_reason": "code_sig"}
+{"query": "workflow-payment-completion async payout nuvei signal processing", "oob_reason": "repo_token"}
+{"query": "[API] Not allow init apm if previous request in flight", "oob_reason": "code_sig"}
+{"query": "workflow-payment-completion DELAYED_COMPLETION_PROVIDERS ASYNC_FLOW_PROCESSORS signalAsyncProcessingWorkflow", "oob_reason": "code_sig"}
+{"query": "grpc-providers-mapping error codes nuvei payout SEPA error mapping", "oob_reason": "code_sig"}
+{"query": "grpc-core-pricing payout fee calculation payment method type eu_bank_account", "oob_reason": "code_sig"}
+{"query": "MPI challenge: fix 1 ms diff in double processing", "oob_reason": "code_sig"}
+{"query": "notification merchant payout webhook grpc-webhooks-notifications callback status change", "oob_reason": "repo_token"}
+{"query": "workflow-payment-completion fee creation shouldSendNotification payout webhook notification merchant", "oob_reason": "repo_token"}
+{"query": "grpc-providers-nuvei payout map-response processorTransactionId transactionId externalTransactionId", "oob_reason": "repo_token"}
+{"query": "grpc-core-connections merchant connection payment_method_type provider routing setup", "oob_reason": "code_sig"}
+{"query": "settlement workflow-settlement-worker external_settlement payout bank_account provider", "oob_reason": "code_sig"}
+{"query": "[API] Skip volt polling status logging and add tx status validation", "oob_reason": "code_sig"}
+{"query": "backoffice dashboard payment method type display payout eu_bank_account transaction details", "oob_reason": "code_sig"}
+{"query": "nuvei DMN payout wdRequestStatus merchantWDRequestId webhook parse payload fields", "oob_reason": "code_sig"}
+{"query": "nuvei SEPA payout error codes decline reasons error-mapping payout withdrawal", "oob_reason": "code_sig"}
+{"query": "[3DS] Stripe - add support of non_payment_authentication", "oob_reason": "code_sig"}
+{"query": "grpc-providers-nuvei payout.js getPaymentMethodDetails getCredentials createUser addUPOAPM flow", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway payout method createOrUpdateSource PAYMENT_METHOD_TO_DB_MAPPING source reusablePayouts", "oob_reason": "code_sig"}
+{"query": "[API] Refunds - ValidationError: \"transaction.dateTime\" is not allowed to be empty", "oob_reason": "code_sig"}
+{"query": "PAYMENT_METHOD_TO_DB_MAPPING bank_account eu_bank_account source type mapping", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway payout ASYNC_FLOW_PROCESSORS async flow startPaymentCompletionWorkflow waitForSignal", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway payout.js ASYNC_FLOW_PROCESSORS scheduleAsyncTransactionProcessingWorkflow PENDING async provider", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks nuvei payout handle-activities signalAsyncProcessingWorkflow updateTransaction", "oob_reason": "repo_token"}
+{"query": "nuvei handle-activities.js route path payout webhook activities routing", "oob_reason": "code_sig"}
+{"query": "express-webhooks nuvei wildcard route POST path payout webhook routing", "oob_reason": "code_sig"}
+{"query": "Add PSD2 Classification Fields", "oob_reason": "code_sig"}
+{"query": "express-webhooks routes provider index.js nuvei route registration wildcard", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway payout.js createFeesForActions fee creation payout sendNotification shouldSendNotification", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway payout PAYOUT_STATUS_TO_NOTIFICATION_TYPE_MAP sendNotification payout notification type", "oob_reason": "code_sig"}
+{"query": "Automatic Task Creation for Risk and AML Renewal Dates", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway consts PAYOUT_STATUS_TO_NOTIFICATION_TYPE_MAP DELAYED_COMPLETION_PROVIDERS ASYNC_FLOW_PROCESSORS", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks sendWebhookNotification payout notification merchant approved declined signal", "oob_reason": "repo_token"}
+{"query": "grpc-payment-gateway payout.js sendNotification PENDING notification skip async", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway payout.js sendNotification closingRequests PAYOUT_STATUS approved pending", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks nuvei payment handle-activities.js parse-webhook parseNuveiPaymentWebhook clientUniqueId transactionId", "oob_reason": "code_sig"}
+{"query": "volt payout handle-activities.js signalAsyncProcessingWorkflow updateTransaction sendWebhookNotification processorTransactionId", "oob_reason": "code_sig"}
+{"query": "volt payout handle-activities.js signalAsyncProcessingWorkflow full code", "oob_reason": "code_sig"}
+{"query": "[API] Extend payment method options with descriptor suffix", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway payout.js scheduleAsyncTransactionProcessingWorkflow shouldSendNotification waitForSignal completion", "oob_reason": "code_sig"}
+{"query": "grpc-providers-mapping nuvei error code mapping payout decline", "oob_reason": "repo_token"}
+{"query": "grpc-providers-nuvei consts.js PROVIDER_TRANSACTION_STATUS_MAP PENDING DECLINED status mapping APM_PAYMENT_METHODS", "oob_reason": "code_sig"}
+{"query": "Add Pre-validation for VAT Number Before Sending Requests", "oob_reason": "code_sig"}
+{"query": "grpc-providers-mapping service purpose error code mapping provider decline", "oob_reason": "repo_token"}
+{"query": "grpc-core-connections add-merchant-connection partnerKey provider routingKey payment_method_type nuvei", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway getRoutingDetails routing connection partnerKey provider routingKey payment method type resolution", "oob_reason": "repo_token"}
+{"query": "grpc-payment-gateway discover-routing-key connection lookup payment method type processor selection", "oob_reason": "repo_token"}
+{"query": "Respect AVS payment options in card providers", "oob_reason": "code_sig"}
+{"query": "Add GOOGLEPAY_PAN_ONLY wallet type", "oob_reason": "code_sig"}
+{"query": "[API] Retry attempt counter", "oob_reason": "code_sig"}
+{"query": "tokenizer sensitive payment methods SENSITIVE_PAYMENT_METHODS", "oob_reason": "code_sig"}
+{"query": "SOURCE_TYPES source type validation payout express-api", "oob_reason": "code_sig"}
+{"query": "nuvei payout webhook DMN handler", "oob_reason": "code_sig"}
+{"query": "nuvei adapter payout APM payment methods", "oob_reason": "code_sig"}
+{"query": "eu_bank_account SEPA bank transfer payout", "oob_reason": "code_sig"}
+{"query": "Add \"Special Attributes\" Field for Individuals (including CPR requirement and financial service)", "oob_reason": "code_sig"}
+{"query": "race condition NOT_FOUND webhook arrives before transaction saved", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS DELAYED_COMPLETION_PROVIDERS pending status webhook", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS DELAYED_COMPLETION_PROVIDERS payout pending", "oob_reason": "code_sig"}
+{"query": "grpc-payment-risk cardTypes check-risk skip non-card", "oob_reason": "repo_token"}
+{"query": "[API] Enhance payment_method_options with configuration set id", "oob_reason": "code_sig"}
+{"query": "SEPA payout nuvei PI-61 bank transfer", "oob_reason": "code_sig"}
+{"query": "Nuvei DMN webhook payout wdRequestStatus merchantWDRequestId correlation", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway payout waitForSignal processAsyncTransaction nuvei", "oob_reason": "repo_token"}
+{"query": "PAYOUT_EXCLUDED_SOURCE_TYPES payout destination type", "oob_reason": "code_sig"}
+{"query": "DELAYED_COMPLETION_PROVIDERS payper payout async signal workflow-payment-completion", "oob_reason": "code_sig"}
+{"query": "SOURCE_DATA_TYPE_TO_PAYMENT_METHOD_TYPE tokenizer consts", "oob_reason": "code_sig"}
+{"query": "Migrate `logic_fields` to Postgres", "oob_reason": "code_sig"}
+{"query": "nuvei payout DMN wdRequestStatus fields withdrawal notification", "oob_reason": "code_sig"}
+{"query": "nuvei SEPA payout DMN wdRequestStatus merchantWDRequestId withdrawal", "oob_reason": "code_sig"}
+{"query": "nuvei addUPOAPM idempotent same IBAN userPaymentOptionId", "oob_reason": "code_sig"}
+{"query": "grpc-apm-payper payout method handler codebase map architecture", "oob_reason": "repo_token"}
+{"query": "nuvei SEPA payout withdrawal flow DMN wdRequestStatus Pending Approved Declined", "oob_reason": "code_sig"}
+{"query": "Handle `request_sca_exemption` options in payment risk", "oob_reason": "code_sig"}
+{"query": "nuvei SEPA payout flow createUser addUPOAPM withdrawal", "oob_reason": "code_sig"}
+{"query": "grpc-apm-vyne payout method codebase architecture", "oob_reason": "repo_token"}
+{"query": "grpc-apm-aeropay codebase map architecture payout", "oob_reason": "repo_token"}
+{"query": "grpc-apm-nuvei payout method handler codebase", "oob_reason": "repo_token"}
+{"query": "payout retry workflow stuck PENDING expiration timeout mechanism", "oob_reason": "code_sig"}
+{"query": "[API] Copy partial approval controls to payment session routes", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks payper payout handle-activities", "oob_reason": "repo_token"}
+{"query": "workflow-provider-webhooks aeropay payout handle-activities webhook", "oob_reason": "repo_token"}
+{"query": "grpc-payment-gateway payout bank_transfer source saved bankAccount", "oob_reason": "code_sig"}
+{"query": "proto payout bank account SEPA iban proto message definition", "oob_reason": "code_sig"}
+{"query": "PI-61 SEPA payout plan nuvei task implementation", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway create-or-update-source payout bankAccount source saving", "oob_reason": "repo_token"}
+{"query": "express-api-internal payout bank transfer route endpoint", "oob_reason": "repo_token"}
+{"query": "PI-61 task plan SEPA nuvei payout implementation", "oob_reason": "code_sig"}
+{"query": "payper-interac-etransfer task plan implementation grpc-apm-payper express-webhooks workflow-provider-webhooks credentials features", "oob_reason": "repo_token"}
+{"query": "grpc-providers-nuvei payout method existing card flow", "oob_reason": "repo_token"}
+{"query": "payper-interac-etransfer implementation plan repos grpc-apm-payper express-webhooks workflow credentials features complete", "oob_reason": "repo_token"}
+{"query": "grpc-providers-credentials nuvei authentication data payout", "oob_reason": "repo_token"}
+{"query": "express-api-v1 payout validation bank_account eu_bank_account us_bank_account source types consts", "oob_reason": "code_sig"}
+{"query": "grpc-apm-vyne payout bank transfer implementation repos changed tokenizer express-api features credentials", "oob_reason": "repo_token"}
+{"query": "aeropay payout implementation task repos changed tokenizer express-api features credentials webhook", "oob_reason": "repo_token"}
+{"query": "grpc-payment-gateway ASYNC_FLOW_PROCESSORS DELAYED_COMPLETION_PROVIDERS list", "oob_reason": "code_sig"}
+{"query": "PI-60 payper interac implementation audit repos PRs changes grpc-apm-payper workflow-provider-webhooks credentials features", "oob_reason": "repo_token"}
+{"query": "express-webhooks route provider nuvei payper aeropay vyne payout wildcard", "oob_reason": "repo_token"}
+{"query": "grpc-providers-features seeds.cql payper vyne aeropay paysafe payout bank_account", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks aeropay payment handle-activities parse-payload payout webhook alreadyProcessed", "oob_reason": "repo_token"}
+{"query": "cloudflare-workers-tokenize2 SENSITIVE_PAYMENT_METHODS bank_account tokenize", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway workflow-payment-completion async flow payout processing webhook signal", "oob_reason": "repo_token"}
+{"query": "Create `pricing_quotes` table in onboarding-pricing microservice", "oob_reason": "code_sig"}
+{"query": "PI-60 audit missing ASYNC_FLOW_PROCESSORS gateway env var payper configuration", "oob_reason": "code_sig"}
+{"query": "grpc-core-settings payment method options config bankAccount eu_bank_account sepa", "oob_reason": "code_sig"}
+{"query": "[API] Introduce new payout method options", "oob_reason": "code_sig"}
+{"query": "Extend core-dashboards With merchant_ids and type", "oob_reason": "code_sig"}
+{"query": "Create `AGENTS.md` with coding guidelines", "oob_reason": "code_sig"}
+{"query": "[API] Adding snowflake id validation", "oob_reason": "code_sig"}
+{"query": "processorExistingTokenIds payout bank_account", "oob_reason": "code_sig"}
+{"query": "PPRO: Klarna Pay Now Standalone", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "bank_account payout vault token processorExistingTokenIds", "oob_reason": "code_sig"}
+{"query": "vault data store hop grpc-vault-bankaccounts processorExistingTokenIds payment method flow check", "oob_reason": "repo_token"}
+{"query": "SEPA payout eu_bank_account", "oob_reason": "code_sig"}
+{"query": "nuvei payout method implementation eu_bank_account", "oob_reason": "code_sig"}
+{"query": "nuvei SEPA payout API request payload iban", "oob_reason": "code_sig"}
+{"query": "SEPA payout step addUPOAPM payout request userPaymentOptionId", "oob_reason": "code_sig"}
+{"query": "eu_bank_account payment_method_type features seeds", "oob_reason": "code_sig"}
+{"query": "nuvei payout payment_method_type features seeds config", "oob_reason": "code_sig"}
+{"query": "volt payout bank_account iban vault getPaymentMethod", "oob_reason": "code_sig"}
+{"query": "express api v1 payout route handler bank_account eu_bank_account", "oob_reason": "code_sig"}
+{"query": "nuvei addUPOAPM SEPA userPaymentOptionId apmgw_SEPA_Payout", "oob_reason": "code_sig"}
+{"query": "nuvei SEPA payout step 1 2 3 session token addUPOAPM /payout request example", "oob_reason": "code_sig"}
+{"query": "grpc-apm payout vault bankaccounts getPaymentMethod token iban accountNumber", "oob_reason": "repo_token"}
+{"query": "SOURCE_TYPES bank_account eu_bank_account payout destination type", "oob_reason": "code_sig"}
+{"query": "nuvei webhook payout DMN handlePayment status APPROVED PENDING", "oob_reason": "code_sig"}
+{"query": "SOURCE_TYPES PAYOUT_EXCLUDED_SOURCE_TYPES consts bank_account eu_bank_account", "oob_reason": "code_sig"}
+{"query": "nuvei APM_PAYMENT_METHODS SEPA payment_method consts", "oob_reason": "code_sig"}
+{"query": "nuvei METHOD_TYPE_MAP payment method type card apm consts", "oob_reason": "code_sig"}
+{"query": "getPaymentMethodDetails bank_account token vault payout providers-common", "oob_reason": "code_sig"}
+{"query": "SOURCE_TYPES const enum card_token bank_account us_bank_account eu_bank_account", "oob_reason": "code_sig"}
+{"query": "SOURCE_TYPES CARD BANK eu_bank us_bank consts.js", "oob_reason": "code_sig"}
+{"query": "getPaymentMethodDetails bank_account type switch case vault resolve token", "oob_reason": "code_sig"}
+{"query": "nuvei consts METHOD_TYPE_MAP NETWORK_TOKEN_PAYMENT_METHOD_TYPES", "oob_reason": "code_sig"}
+{"query": "map-response payout reusablePayouts status PENDING mapResponse convention", "oob_reason": "code_sig"}
+{"query": "grpc-providers-credentials nuvei credential validation store", "oob_reason": "repo_token"}
+{"query": "grpc-apm purpose architecture when needed vs grpc-providers direct", "oob_reason": "repo_token"}
+{"query": "gateway runtime routing apm vs providers dispatch payment_method_type card bank_account", "oob_reason": "code_sig"}
+{"query": "Nuvei payout eu_bank_account plan", "oob_reason": "code_sig"}
+{"query": "nuvei EPS credentials SEPA", "oob_reason": "code_sig"}
+{"query": "payout refund eu_bank_account payment method", "oob_reason": "code_sig"}
+{"query": "express-vault tokenize bank accounts schema", "oob_reason": "repo_token"}
+{"query": "payout schema eu_bank_account response", "oob_reason": "code_sig"}
+{"query": "Nuvei DMN merchantWDRequestId payout", "oob_reason": "code_sig"}
+{"query": "feature flags seed nuvei eu_bank_account payout refund", "oob_reason": "code_sig"}
+{"query": "Nuvei payout notificationUrl webhook DMN", "oob_reason": "code_sig"}
+{"query": "nuvei SEPA payout credentials siteId", "oob_reason": "code_sig"}
+{"query": "payout amount validation limits express-api", "oob_reason": "repo_token"}
+{"query": "adapter calls vault-bankaccounts getPaymentMethodDetails bank_account", "oob_reason": "code_sig"}
+{"query": "Nuvei SEPA payout addUPOAPM apmData iban", "oob_reason": "code_sig"}
+{"query": "Nuvei verified SEPA payout notificationUrl urlDetails", "oob_reason": "code_sig"}
+{"query": "Nuvei SEPA payout merchantWDRequestId wdRequestId withdrawal", "oob_reason": "code_sig"}
+{"query": "Nuvei SEPA payout flow addUPOAPM step-by-step notificationUrl", "oob_reason": "code_sig"}
+{"query": "Nuvei SEPA payout urlDetails notificationUrl request example", "oob_reason": "code_sig"}
+{"query": "Nuvei payout DMN notificationUrl webhook registration", "oob_reason": "code_sig"}
+{"query": "Nuvei SEPA payout endpoint urlDetails", "oob_reason": "code_sig"}
+{"query": "SEPA payout DMN notification URL registration webhook", "oob_reason": "code_sig"}
+{"query": "SEPA payout withdrawal notification URL provide Integration Team", "oob_reason": "code_sig"}
+{"query": "SEPA payout urlDetails.notificationUrl DMN payout request example", "oob_reason": "code_sig"}
+{"query": "Nuvei payout response fields transactionId wdRequestId SEPA", "oob_reason": "code_sig"}
+{"query": "Nuvei payout endpoint payout.do withdrawal APM", "oob_reason": "code_sig"}
+{"query": "Nuvei addUPOAPM SEPA required fields paymentMethodName", "oob_reason": "code_sig"}
+{"query": "Nuvei payout DMN withdrawal notification wdRequestStatus merchantWDRequestId", "oob_reason": "code_sig"}
+{"query": "Nuvei checksum formula SHA256 calculation", "oob_reason": "code_sig"}
+{"query": "Nuvei SEPA payouts payout flow createUser addUPOAPM request example IBAN", "oob_reason": "code_sig"}
+{"query": "Nuvei payout.do card withdrawal endpoint REST API", "oob_reason": "code_sig"}
+{"query": "Nuvei DMN payout withdrawal request order notification example fields", "oob_reason": "code_sig"}
+{"query": "Nuvei SEPA payouts addUPOAPM example request billingAddress country email IBAN apmData", "oob_reason": "code_sig"}
+{"query": "Nuvei WITHDRAW_ORDER_NOTIFICATION WITHDRAW_REQUEST_NOTIFICATION DMN type payout", "oob_reason": "code_sig"}
+{"query": "Nuvei Faster Payments /payouts REST API 2.0 endpoint transactionId payoutId response", "oob_reason": "code_sig"}
+{"query": "Nuvei payout DMN wdRequestId merchantWDRequestId clientUniqueId Status notification parameters table", "oob_reason": "code_sig"}
+{"query": "Nuvei createUser checksum formula advanced API merchantId merchantSiteId userTokenId", "oob_reason": "code_sig"}
+{"query": "Nuvei SEPA payouts payout request example merchantId userPaymentOptionId userTokenId amount currency", "oob_reason": "code_sig"}
+{"query": "Nuvei REST API 2.0 payouts endpoint vs payout.do advanced cashier", "oob_reason": "code_sig"}
+{"query": "Nuvei verified faster payments DMN example wdRequestStatus Pending Approved merchantWDRequestId wdRequestId notificationType", "oob_reason": "code_sig"}
+{"query": "Nuvei addUPOAPM.do advanced API input parameters checksum merchantId merchantSiteId", "oob_reason": "code_sig"}
+{"query": "Nuvei SEPA payout billingAddress firstName lastName country email addUPOAPM mandatory user details", "oob_reason": "code_sig"}
+{"query": "Nuvei DMN webhook handler notification wdRequestStatus merchantWDRequestId callback", "oob_reason": "code_sig"}
+{"query": "Nuvei APM input parameters SEPA_Payouts IBAN billingAddress country email firstName lastName", "oob_reason": "code_sig"}
+{"query": "Nuvei APM input parameters table SEPA Payouts apmgw_SEPA_Payouts IBAN mandatory billingAddress userDetails", "oob_reason": "code_sig"}
+{"query": "Nuvei DMN parameters merchantWDRequestId wdRequestId wdRequestStatus type notificationType WITHDRAW_REQUEST WITHDRAW_ORDER", "oob_reason": "code_sig"}
+{"query": "Nuvei payout transactionStatus externalTransactionId PENDING response status", "oob_reason": "code_sig"}
+{"query": "Nuvei payout notificationUrl urlDetails per request DMN registration", "oob_reason": "code_sig"}
+{"query": "Nuvei payout.do endpoint URL example card withdrawal ppp api v1", "oob_reason": "code_sig"}
+{"query": "Nuvei REST API 2.0 payouts response payoutId transactionId amount currency additionalTransactionInfo", "oob_reason": "code_sig"}
+{"query": "Nuvei bancontact payout response example transactionStatus APPROVED transactionId userPaymentOptionId gwErrorCode", "oob_reason": "code_sig"}
+{"query": "payout.do endpoint URL withdrawal SEPA APM request format", "oob_reason": "code_sig"}
+{"query": "SEPA payouts IBAN bank transfer", "oob_reason": "code_sig"}
+{"query": "payout SEPA IBAN provider pay-com implementation", "oob_reason": "code_sig"}
+{"query": "payout", "oob_reason": "tok_lt2"}
+{"query": "SEPA payout IBAN bank account", "oob_reason": "code_sig"}
+{"query": "paymentMethod bankAccount IBAN payout request proto", "oob_reason": "code_sig"}
+{"query": "nuvei payout webhook DMN race condition transaction not found", "oob_reason": "code_sig"}
+{"query": "eu_bank_account IBAN tokenizer validation", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS DELAYED_COMPLETION_PROVIDERS payment-gateway", "oob_reason": "code_sig"}
+{"query": "reusablePayouts create-or-update-source gateway PENDING", "oob_reason": "code_sig"}
+{"query": "eu_bank_account IBAN tokenize", "oob_reason": "code_sig"}
+{"query": "tokenize-bank-accounts route SEPA IBAN validation", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS DELAYED_COMPLETION_PROVIDERS", "oob_reason": "code_sig"}
+{"query": "cloudflare-workers-tokenize2 get-tokenizer-payload bank_account country", "oob_reason": "code_sig"}
+{"query": "reusablePayouts UPO create-or-update-source", "oob_reason": "code_sig"}
+{"query": "nuvei webhook handler DMN payload parsing signature verification", "oob_reason": "code_sig"}
+{"query": "SENSITIVE_PAYMENT_METHODS bank_account eu_bank_account", "oob_reason": "code_sig"}
+{"query": "eu_bank_account IBAN SEPA payout", "oob_reason": "code_sig"}
+{"query": "skip_new_attempt external_settlement processing_currency_codes", "oob_reason": "code_sig"}
+{"query": "nuvei gotchas payout SEPA IBAN eu_bank_account", "oob_reason": "code_sig"}
+{"query": "SEPA payout apmgw_SEPA_Payouts addUPOAPM createUser userPaymentOptionId checksum", "oob_reason": "code_sig"}
+{"query": "nuvei", "oob_reason": "tok_lt2"}
+{"query": "tokenizer IBAN gotcha SEPA vault bank_account country EU", "oob_reason": "code_sig"}
+{"query": "reusablePayouts PENDING transaction gateway override", "oob_reason": "code_sig"}
+{"query": "webhook race condition duplicate DMN retry pattern alreadyProcessed", "oob_reason": "code_sig"}
+{"query": "create-or-update-source bank_account us_bank_account in_bank_account", "oob_reason": "code_sig"}
+{"query": "Nuvei gotchas checksum APM payout reasonCode error", "oob_reason": "code_sig"}
+{"query": "ff3 radix FF3Cipher accountNumber IBAN numeric fingerprint", "oob_reason": "code_sig"}
+{"query": "eu_bank_account iban bank transfer payout sepa provider implementation", "oob_reason": "code_sig"}
+{"query": "in_bank_account India IBAN grpc-apm-volt vyne bank account country detection", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS workflow async payout condition timeout trigger", "oob_reason": "code_sig"}
+{"query": "ff3 FF3Cipher radix 10 numeric only string IBAN value encrypt error", "oob_reason": "code_sig"}
+{"query": "payout express-api-v1 eu_bank_account iban destination_data", "oob_reason": "code_sig"}
+{"query": "mcp improvement vault discovery PI-61 eu_bank_account", "oob_reason": "code_sig"}
+{"query": "payout method gateway routing provider selection eu_bank_account", "oob_reason": "code_sig"}
+{"query": "grpc-vault-bankaccounts sources processorExistingTokenIds", "oob_reason": "repo_token"}
+{"query": "providers.proto payout request response accountHolderName bank_account", "oob_reason": "code_sig"}
+{"query": "Nuvei DMN webhook payout transactionId wdRequestId txId TransactionID correlation", "oob_reason": "code_sig"}
+{"query": "updateBankAccount processorExistingTokenIds struct merge service.proto", "oob_reason": "code_sig"}
+{"query": "grpc-apm-plaid iban save bank account country detection", "oob_reason": "repo_token"}
+{"query": "nuvei webhook DMN payout signature express-webhooks route", "oob_reason": "code_sig"}
+{"query": "nuvei SEPA payout DMN webhook example pending approved declined wdRequestId", "oob_reason": "code_sig"}
+{"query": "workflow-async-transactions-processing handleAsyncProcessing trigger condition timeout", "oob_reason": "repo_token"}
+{"query": "grpc-providers-nuvei payout clientRequestId checksum signature merchantWDRequestId", "oob_reason": "repo_token"}
+{"query": "express-webhooks nuvei route path registration provider-webhooks dispatch", "oob_reason": "repo_token"}
+{"query": "eu_bank_account payment method type iban vault bankaccounts", "oob_reason": "code_sig"}
+{"query": "nuvei SEPA payout DMN wdRequestStatus merchantWDRequestId TransactionID response fields", "oob_reason": "code_sig"}
+{"query": "nuvei payout method.js iban eu_bank_account createUser addUPOAPM", "oob_reason": "code_sig"}
+{"query": "Nuvei getBankAccount payout IBAN token adapter save-payment-method", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway ASYNC_FLOW_PROCESSORS payout scheduleAsyncTransactionProcessingWorkflow", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS DELAYED_COMPLETION_PROVIDERS gateway payout pending", "oob_reason": "code_sig"}
+{"query": "cloudflare-workers-tokenize2 gotcha SENSITIVE_PAYMENT_METHODS country EU generic", "oob_reason": "code_sig"}
+{"query": "eu_bank_account SOURCE_TYPES source types payment method type consts", "oob_reason": "code_sig"}
+{"query": "workflow-async-transactions-processing triggerActivity handle-activity-with-trigger-signal", "oob_reason": "repo_token"}
+{"query": "express-vault tokenize-bank-accounts joi schema iban validation", "oob_reason": "repo_token"}
+{"query": "IBAN ff3 radix letter fingerprint numeric only digit bank_account tokenize EU country", "oob_reason": "code_sig"}
+{"query": "workflow-async-transactions-processing workflow.js proxy activity handleAsyncProcessing condition", "oob_reason": "code_sig"}
+{"query": "create-or-update-source reusablePayouts processorExistingTokenIds UPO bank_account", "oob_reason": "code_sig"}
+{"query": "workflow-payment-completion DELAYED_COMPLETION_PROVIDERS signal condition trigger", "oob_reason": "code_sig"}
+{"query": "workflow-payment-completion handleAsyncProcessing handleActivityWithTriggerSignal payout refund", "oob_reason": "repo_token"}
+{"query": "grpc-vault-utils getBankAccountProcessorExistingTokenIds ExistingTokenIdsResponse bank", "oob_reason": "repo_token"}
+{"query": "gotchas nuvei payout bank_account iban eu_bank_account SEPA", "oob_reason": "code_sig"}
+{"query": "grpc-apm-payper payout webhook handler alreadyProcessed issuerResponseCode ignoreNotFoundError pattern", "oob_reason": "repo_token"}
+{"query": "scheduleAsyncTransactionProcessingWorkflow workflow-async-transactions-processing gateway signal payout", "oob_reason": "repo_token"}
+{"query": "grpc-apm-nuvei complete gotchas content error classification fallback timestamp webhook request-log reasonCode", "oob_reason": "repo_token"}
+{"query": "volt bank_account iban getPaymentMethodDetails payload builder payout destination", "oob_reason": "code_sig"}
+{"query": "grpc-apm-payper payout webhook claim async finalize issuerResponseCode reusablePayouts formula", "oob_reason": "repo_token"}
+{"query": "trustly bank_account iban payout vault-bankaccounts updateBankAccount getBankAccount", "oob_reason": "code_sig"}
+{"query": "grpc-apm-payper first webhook not_found expected non retryable second webhook", "oob_reason": "code_sig"}
+{"query": "nuvei sepa payout DMN full example fields TransactionID ppp_status productId response", "oob_reason": "code_sig"}
+{"query": "workflow-async-transactions-processing gateway signal handle trigger waitForSignal", "oob_reason": "repo_token"}
+{"query": "nuvei DMN webhook integrations general fields schema merchant_unique_id status transactionID withdraw", "oob_reason": "code_sig"}
+{"query": "get-payment-method.js libs e2e eu_bank_account destination_data", "oob_reason": "code_sig"}
+{"query": "[Passkey] Add route to express-vault to get credentials for token", "oob_reason": "repo_token"}
+{"query": "skipNewAttempt skip_new_attempt feature flag provider features", "oob_reason": "code_sig"}
+{"query": "skip_new_attempt purpose what does it do update transaction option", "oob_reason": "code_sig"}
+{"query": "feature-flags provider features skip_new_attempt ecopayz aircash behaviour", "oob_reason": "code_sig"}
+{"query": "processorExistingTokenIds", "oob_reason": "tok_lt2"}
+{"query": "skip_new_attempt checkout-gated", "oob_reason": "code_sig"}
+{"query": "destination_vs_destination_data", "oob_reason": "tok_lt2"}
+{"query": "processorExistingTokenIds Nuvei SEPA payouts adapter-side read repeat transactions", "oob_reason": "code_sig"}
+{"query": "Trustly payment_method_type verification MIT", "oob_reason": "code_sig"}
+{"query": "payment state machine for APM providers", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "Add SEPA bank transfer payouts via Nuvei for eu_bank_account (IBAN). Currently Nuvei supports only card payouts, need to extend for European bank accounts.", "oob_reason": "tok_gt15"}
+{"query": "SEPA payout Nuvei EPS eu_bank_account", "oob_reason": "code_sig"}
+{"query": "SEPA payout Nuvei EPS eu_bank_account", "oob_reason": "code_sig"}
+{"query": "tokenizer bank account IBAN sensitive vault", "oob_reason": "code_sig"}
+{"query": "async payout webhook handler pattern PENDING", "oob_reason": "code_sig"}
+{"query": "WorkflowIdReusePolicy REJECT_DUPLICATE concurrent DMN", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS DELAYED_COMPLETION_PROVIDERS env", "oob_reason": "code_sig"}
+{"query": "grpc-providers-nuvei consts eu_bank_account apmMap", "oob_reason": "code_sig"}
+{"query": "cloudflare-workers-tokenize2 SENSITIVE_PAYMENT_METHODS", "oob_reason": "code_sig"}
+{"query": "express-vault tokenize-bank-accounts", "oob_reason": "repo_token"}
+{"query": "workflow-provider-webhooks activities payper payment handle-activities", "oob_reason": "repo_token"}
+{"query": "grpc-providers-aptpay update-card processorExistingTokenIds", "oob_reason": "repo_token"}
+{"query": "grpc-payment-gateway consts DELAYED_COMPLETION_PROVIDERS", "oob_reason": "code_sig"}
+{"query": "workflow-payment-completion consts ASYNC_FLOW_PROCESSORS", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "SEPA payout Nuvei EPS eu_bank_account", "oob_reason": "code_sig"}
+{"query": "tokenizer bank account IBAN sensitive vault", "oob_reason": "code_sig"}
+{"query": "async payout webhook handler pattern PENDING", "oob_reason": "code_sig"}
+{"query": "WorkflowIdReusePolicy REJECT_DUPLICATE concurrent DMN", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS DELAYED_COMPLETION_PROVIDERS env", "oob_reason": "code_sig"}
+{"query": "SEPA payout Nuvei EPS eu_bank_account", "oob_reason": "code_sig"}
+{"query": "tokenizer bank account IBAN sensitive vault", "oob_reason": "code_sig"}
+{"query": "async payout webhook handler pattern PENDING", "oob_reason": "code_sig"}
+{"query": "WorkflowIdReusePolicy REJECT_DUPLICATE concurrent DMN", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS DELAYED_COMPLETION_PROVIDERS env", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "WorkflowIdReusePolicy REJECT_DUPLICATE concurrent DMN", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "SEPA payout Nuvei EPS eu_bank_account", "oob_reason": "code_sig"}
+{"query": "tokenizer bank account IBAN sensitive vault", "oob_reason": "code_sig"}
+{"query": "async payout webhook handler pattern PENDING", "oob_reason": "code_sig"}
+{"query": "WorkflowIdReusePolicy REJECT_DUPLICATE concurrent DMN", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS DELAYED_COMPLETION_PROVIDERS env", "oob_reason": "code_sig"}
+{"query": "SEPA payout Nuvei EPS eu_bank_account", "oob_reason": "code_sig"}
+{"query": "tokenizer bank account IBAN sensitive vault", "oob_reason": "code_sig"}
+{"query": "async payout webhook handler pattern PENDING", "oob_reason": "code_sig"}
+{"query": "WorkflowIdReusePolicy REJECT_DUPLICATE concurrent DMN", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS DELAYED_COMPLETION_PROVIDERS env", "oob_reason": "code_sig"}
+{"query": "SEPA payout Nuvei EPS eu_bank_account zzz1776536249253", "oob_reason": "code_sig"}
+{"query": "tokenizer bank account IBAN sensitive vault zzz1776536250414", "oob_reason": "code_sig"}
+{"query": "async payout webhook handler pattern PENDING zzz1776536252032", "oob_reason": "code_sig"}
+{"query": "WorkflowIdReusePolicy REJECT_DUPLICATE concurrent DMN zzz1776536254987", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS DELAYED_COMPLETION_PROVIDERS env zzz1776536260139", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS DELAYED_COMPLETION_PROVIDERS env", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "SEPA payout Nuvei EPS eu_bank_account", "oob_reason": "code_sig"}
+{"query": "tokenizer bank account IBAN sensitive vault", "oob_reason": "code_sig"}
+{"query": "async payout webhook handler pattern PENDING", "oob_reason": "code_sig"}
+{"query": "WorkflowIdReusePolicy REJECT_DUPLICATE concurrent DMN", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS DELAYED_COMPLETION_PROVIDERS env", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "CREATE TABLE sources PRIMARY KEY unique_identifier merchant_id consumer_id type", "oob_reason": "code_sig"}
+{"query": "get-by-primary-key.js SourcesMapper query type uniqueIdentifier", "oob_reason": "code_sig"}
+{"query": "get-by-primary-key.js SourcesMapper find code full module.exports body", "oob_reason": "code_sig"}
+{"query": "SourcesMapper find query CQL merchant consumer type unique_identifier database mapping", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "bank_account payment method type", "oob_reason": "code_sig"}
+{"query": "payment_method_types SEPA eu_bank_account", "oob_reason": "code_sig"}
+{"query": "bank_account constant shared enum", "oob_reason": "code_sig"}
+{"query": "SOURCE_TYPES EU_BANK_ACCOUNT us_bank_account in_bank_account", "oob_reason": "code_sig"}
+{"query": "BANK_ACCOUNT_METHODS gateway consts", "oob_reason": "code_sig"}
+{"query": "ProviderError transactionStatus DECLINED issuerResponseCode PE", "oob_reason": "code_sig"}
+{"query": "throw provider soft decline ERROR status retry temporal payout", "oob_reason": "code_sig"}
+{"query": "getSepaSyncResponse Nuvei SEPA payout sync response mapping", "oob_reason": "code_sig"}
+{"query": "map-response.js response mapper libs transactionStatus finalize", "oob_reason": "code_sig"}
+{"query": "finalize result DECLINED PROCESSING_ERROR soft decline mapping", "oob_reason": "code_sig"}
+{"query": "PI-61 SEPA error mapping Nuvei handover", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "provider adapter multi-step API calls sequential early exit decline pattern", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "error codes merchant dashboard API reporting Nuvei transaction return codes", "oob_reason": "code_sig"}
+{"query": "Nuvei Gateway Response Codes reason SEPA decline", "oob_reason": "code_sig"}
+{"query": "gwErrorReason SEPA Declined Insufficient funds Invalid IBAN", "oob_reason": "code_sig"}
+{"query": "Nuvei SEPA payout reason error createUser addUPOAPM", "oob_reason": "code_sig"}
+{"query": "Nuvei SEPA payout reason status declined error codes list", "oob_reason": "code_sig"}
+{"query": "Nuvei APM error reasons user blocked decline invalid IBAN AML", "oob_reason": "code_sig"}
+{"query": "Nuvei SEPA payout error DMN transaction reason codes IBAN validation failed", "oob_reason": "code_sig"}
+{"query": "Nuvei response handling gateway decline reasons table error codes APM", "oob_reason": "code_sig"}
+{"query": "grpc-apm-nuvei sepa payout map response reason", "oob_reason": "repo_token"}
+{"query": "Nuvei SEPA payouts response reason status ERROR DECLINED createUser errCode", "oob_reason": "code_sig"}
+{"query": "Nuvei response handling API Generic Error Codes errCode reason list 1001 1002 1003 1004", "oob_reason": "code_sig"}
+{"query": "Nuvei API Response Codes 1001 1002 1003 1100 generic errors user userTokenId", "oob_reason": "code_sig"}
+{"query": "Error code mapping all providers format code text ISO internal providerCode priority ladder", "oob_reason": "code_sig"}
+{"query": "nuvei apm SEPA payouts errCode reason DMN merchant notification table response examples", "oob_reason": "code_sig"}
+{"query": "Nuvei gateway decline reason Insufficient funds Invalid account number AML hold Timeout Retry list", "oob_reason": "code_sig"}
+{"query": "Nuvei gwErrorReason list complete Insufficient funds Declined Timeout/Retry AML hold Closed account Invalid account number", "oob_reason": "code_sig"}
+{"query": "nuvei response handling gwErrorReason table Do not honor Exceeds withdrawal Expired card Insufficient funds Lost card", "oob_reason": "tok_gt15"}
+{"query": "nuvei addUPOAPM errCode reason error invalid apmData IBAN paymentMethodName user", "oob_reason": "code_sig"}
+{"query": "nuvei gateway decline reason table suspected fraud transaction AML PSD2 compliance", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "trustly", "oob_reason": "tok_lt2"}
+{"query": "trustly", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "EPX feature flags", "oob_reason": "code_sig"}
+{"query": "Nuvei SEPA response fields reason errCode gwErrorReason paymentMethodErrorReason DECLINED", "oob_reason": "code_sig"}
+{"query": "Nuvei card payout DECLINED response gwErrorReason gwErrorCode paymentMethodErrorReason", "oob_reason": "code_sig"}
+{"query": "SEPA payout Nuvei reason errCode gwErrorReason", "oob_reason": "code_sig"}
+{"query": "Nuvei payout reason decline IBAN insufficient funds", "oob_reason": "code_sig"}
+{"query": "trustly", "oob_reason": "tok_lt2"}
+{"query": "trustly", "oob_reason": "tok_lt2"}
+{"query": "handleSepaPayout nuvei SEPA payout", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "SEPA Nuvei adapter payment method", "oob_reason": "code_sig"}
+{"query": "Nuvei payout SEPA IBAN payoutMethod", "oob_reason": "code_sig"}
+{"query": "grpc-providers-nuvei payout flow", "oob_reason": "repo_token"}
+{"query": "SEPA payout addUPOAPM createUser checksum Nuvei", "oob_reason": "code_sig"}
+{"query": "createUser API request parameters mandatory fields checksum", "oob_reason": "code_sig"}
+{"query": "addUPOAPM request parameters mandatory fields IBAN", "oob_reason": "code_sig"}
+{"query": "payout API request mandatory parameters amount currency userPaymentOptionId", "oob_reason": "code_sig"}
+{"query": "checksum SHA-256 hashAlgorithm merchantSecretKey concatenation", "oob_reason": "code_sig"}
+{"query": "payout API endpoint example request userTokenId clientUniqueId deviceDetails", "oob_reason": "code_sig"}
+{"query": "payout example existing UPO SEPA", "oob_reason": "code_sig"}
+{"query": "timeStamp format YYYYMMDDHHMMSS Nuvei", "oob_reason": "code_sig"}
+{"query": "Nuvei payout urlDetails notificationUrl required field DMN webhook", "oob_reason": "code_sig"}
+{"query": "vault-bankaccounts eu_bank_account IBAN schema fields", "oob_reason": "code_sig"}
+{"query": "addUPOAPM checksum parameters order SHA-256", "oob_reason": "code_sig"}
+{"query": "Nuvei RFI process billing address dateOfBirth mandatory", "oob_reason": "code_sig"}
+{"query": "grpc-vault-bankaccounts getBankAccount schema iban account_holder_name country", "oob_reason": "code_sig"}
+{"query": "grpc-payment-gateway payout provider consumer eu_bank_account paymentMethod token", "oob_reason": "code_sig"}
+{"query": "Nuvei payout SEPA error codes errCode reason", "oob_reason": "code_sig"}
+{"query": "Nuvei addUPOAPM error response reason transactionStatus SEPA", "oob_reason": "code_sig"}
+{"query": "Nuvei response handling transactionStatus PENDING APPROVED DECLINED ERROR", "oob_reason": "code_sig"}
+{"query": "SEPA payout webhook DMN PROCESSING timestamp", "oob_reason": "code_sig"}
+{"query": "Nuvei SEPA payouts transactionStatus status webhook PROCESSING", "oob_reason": "code_sig"}
+{"query": "external_settlement feature flag consumer", "oob_reason": "code_sig"}
+{"query": "eu_bank_account subtype vault bankaccounts schema", "oob_reason": "code_sig"}
+{"query": "skip_new_attempt idempotent retry updateTransaction", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS", "oob_reason": "tok_lt2"}
+{"query": "core-sources getByPrimaryKey type bank_account table mapping", "oob_reason": "code_sig"}
+{"query": "PAYMENT_METHOD_TO_DB_MAPPING eu_bank_account", "oob_reason": "code_sig"}
+{"query": "core-sources getByPrimaryKey source type bank_account", "oob_reason": "code_sig"}
+{"query": "eu_bank_account scylla table schema source", "oob_reason": "code_sig"}
+{"query": "schedule-payment-completion-workflow processAsyncTransaction workflowType ASYNC_FLOW_PROCESSORS payout", "oob_reason": "code_sig"}
+{"query": "PAYMENT_METHOD_KEYS env consts grpc-core-sources", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS paysafe trustly payper nuvei SEPA payout gateway consts", "oob_reason": "code_sig"}
+{"query": "grpc-core-sources env consts PAYMENT_METHOD_KEYS default list full", "oob_reason": "code_sig"}
+{"query": "payout.js scheduleAsyncTransactionProcessingWorkflow processAsyncTransaction ASYNC_FLOW_PROCESSORS workflowType", "oob_reason": "code_sig"}
+{"query": "grpc-core-sources get-by-primary-key merchantId consumerId type uniqueIdentifier", "oob_reason": "repo_token"}
+{"query": "SourcesMapper createMapper tables column_types partition_keys", "oob_reason": "code_sig"}
+{"query": "payout.js ASYNC_FLOW_PROCESSORS.includes PROCESSOR_VALUE PENDING ERROR scheduleAsync workflowType", "oob_reason": "code_sig"}
+{"query": "SourceObject proto message bankAccount euBankAccount uk_bank_account us_bank_account", "oob_reason": "code_sig"}
+{"query": "grpc-core-sources get-by-primary-key find SourcesMapper type eu_bank_account", "oob_reason": "code_sig"}
+{"query": "ASYNC_FLOW_PROCESSORS scheduleAsyncTransactionProcessingWorkflow processAsyncTransaction call payout.js code", "oob_reason": "code_sig"}
+{"query": "grpc-core-sources scylla.cql table sources", "oob_reason": "repo_token"}
+{"query": "pm_eu_bank_account token regex SOURCE_TOKEN_ID eu_bank_account", "oob_reason": "code_sig"}
+{"query": "SourceObject message card paypal upi netbanking bank_account volt ppro fonix eu_bank_account", "oob_reason": "code_sig"}
+{"query": "create-or-update-source paymentMethod type mapping grpc-payment-gateway", "oob_reason": "repo_token"}
+{"query": "PAYMENT_METHOD_KEYS paysafecard volt bank_account paypalBillingAgreement", "oob_reason": "code_sig"}
+{"query": "grpc-apm-nuvei create-or-update-source type eu_bank_account bank_account", "oob_reason": "code_sig"}
+{"query": "createMapper cassandra columns unknown column UDT insert Scylla driver", "oob_reason": "code_sig"}
+{"query": "Nuvei createUser REST API required parameters email firstName lastName userTokenId", "oob_reason": "code_sig"}
+{"query": "Nuvei addUPOAPM REST API apmData IBAN billingAddress checksum parameters", "oob_reason": "code_sig"}
+{"query": "SEPA payout vault update processorExistingTokenIds", "oob_reason": "code_sig"}
+{"query": "Nuvei SEPA payouts sequence checksum order fields", "oob_reason": "code_sig"}
+{"query": "SEPA Payouts introduction send payout request UPO steps flow", "oob_reason": "code_sig"}
+{"query": "Nuvei payout transactionStatus APPROVED PENDING DECLINED ERROR response", "oob_reason": "code_sig"}
+{"query": "Nuvei createUser request parameters email countryCode firstName lastName RFI", "oob_reason": "code_sig"}
+{"query": "addUPOAPM checksum Nuvei SHA-256 concatenated parameters order", "oob_reason": "code_sig"}
+{"query": "Nuvei DMN SEPA payout webhook response fields ppp_status Status transactionStatus", "oob_reason": "code_sig"}
+{"query": "Nuvei DMN parameters payout ppp_status PPP_TransactionID errCode reason APM notification payload", "oob_reason": "code_sig"}
+{"query": "parse-webhook.js nuvei apm dmn fields status clientUniqueId transactionId", "oob_reason": "code_sig"}
+{"query": "Nuvei DMN output parameters full table payment-dmns.md", "oob_reason": "code_sig"}
+{"query": "nuvei parse-webhook.js full code clientUniqueId TransactionID Status payment_method NUVEI_STATUSES_MAP", "oob_reason": "code_sig"}
+{"query": "APM webhook async callback signal workflow sepa", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks nuvei misc webhook parse body SEPA advanceResponseChecksum", "oob_reason": "code_sig"}
+{"query": "map-response transactionStatus DECLINED SUCCESS status check APM", "oob_reason": "code_sig"}
+{"query": "Nuvei transactionStatus APPROVED sepa webhook dmn notification", "oob_reason": "code_sig"}
+{"query": "apm SEPA payout pending status response mapping", "oob_reason": "code_sig"}
+{"query": "Nuvei payout status transactionStatus PENDING DMN sepa DIRECT_DEBIT", "oob_reason": "code_sig"}
+{"query": "nuvei DMN parse webhook transactionStatus payout status update workflow", "oob_reason": "code_sig"}
+{"query": "grpc-apm-trustly payout.js libs map-response paymentMethod bank account", "oob_reason": "code_sig"}
+{"query": "nuvei transactionStatus APPROVED field real sale payout response success", "oob_reason": "code_sig"}
+{"query": "nuvei sepa payouts response status transactionStatus PENDING APPROVED DECLINED", "oob_reason": "code_sig"}
+{"query": "nuvei DMN withdrawal sepa payout callback webhook async completion status", "oob_reason": "code_sig"}
+{"query": "nuvei payout.do response sepa sample transactionStatus DECLINED status SUCCESS", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks nuvei handle activities parse webhook sepa", "oob_reason": "repo_token"}
+{"query": "grpc-providers-nuvei gotchas sepa payout", "oob_reason": "repo_token"}
+{"query": "workflow-provider-webhooks nuvei handle-activities sepa payout completion", "oob_reason": "repo_token"}
+{"query": "nuvei SEPA_Payouts apmgw_SEPA_Direct_Debit payment_method webhook", "oob_reason": "code_sig"}
+{"query": "nuvei sepa payouts sample response DMN Approved clientUniqueId", "oob_reason": "code_sig"}
+{"query": "Nuvei createUser parameter type String required optional userTokenId clientRequestId firstName lastName dateOfBirth country email timeStamp checksum table", "oob_reason": "tok_gt15"}
+{"query": "nuvei payout SEPA_Payouts transactionStatus DECLINED DMN response example fields", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "compose-payment-method eu_bank_account bank account dob additionalInfo", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "workflow-payout-retry paymentGateway.payout consumerId call", "oob_reason": "repo_token"}
+{"query": "create-payout.ts consumerData.id consumerId paymentGateway payout invoke", "oob_reason": "code_sig"}
+{"query": "create-payout.ts consumerData getConsumer getByID resolver flow new customer", "oob_reason": "code_sig"}
+{"query": "SEPA payout transaction status PENDING APPROVED DECLINED ERROR mapping", "oob_reason": "code_sig"}
+{"query": "Nuvei transactionStatus possible values payout DMN webhook", "oob_reason": "code_sig"}
+{"query": "Nuvei payout.do transactionStatus APPROVED DECLINED PENDING response", "oob_reason": "code_sig"}
+{"query": "SEPA DMN withdrawal Nuvei possible values Status Reason fields", "oob_reason": "code_sig"}
+{"query": "Nuvei /payout status ERROR transactionStatus ERROR request side failure shape", "oob_reason": "code_sig"}
+{"query": "SEPA provider async payout webhook pending response handling pattern", "oob_reason": "code_sig"}
+{"query": "INTERNAL_ISSUER_RESPONSE_CODE PROCESSING_ERROR ACQUIRER_BLOCKED TOKEN_DEACTIVATED enum definition", "oob_reason": "code_sig"}
+{"query": "Nuvei transactionStatus values APPROVED DECLINED ERROR REDIRECT PENDING", "oob_reason": "code_sig"}
+{"query": "Nuvei SEPA payout.do sync response approved pending transactionStatus", "oob_reason": "code_sig"}
+{"query": "createUser SEPA RFI address dateOfBirth", "oob_reason": "code_sig"}
+{"query": "external_settlement feature flag provider", "oob_reason": "code_sig"}
+{"query": "eu_bank_account tokenization SEPA", "oob_reason": "code_sig"}
+{"query": "SENSITIVE_PAYMENT_METHODS bank_account", "oob_reason": "code_sig"}
+{"query": "OVERRIDE_BASE_DIR_FOR_PROTO includeDirs proto resolve CWD", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "Nuvei withdrawal DMN wdRequestStatus responseTimeStamp statuses", "oob_reason": "code_sig"}
+{"query": "Nuvei withdrawal DMN payout callback format", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "nuvei pay_by_bank sale webhook payload fields", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "eu_bank_account source type column mapping Scylla", "oob_reason": "code_sig"}
+{"query": "grpc-core-sources SourcesMapper columns bank_account eu_bank_account registered", "oob_reason": "code_sig"}
+{"query": "volt map-response bank_account type source", "oob_reason": "code_sig"}
+{"query": "NUVEI_PAYOUT_STATUSES_MAP updated pending approved declined", "oob_reason": "code_sig"}
+{"query": "validate-payment-method-token-and-return-source PAYMENT_METHOD_TO_DB_MAPPING eu_bank_account volt bank_account", "oob_reason": "code_sig"}
+{"query": "createOrUpdateSource bank_account type source volt nuvei map-response", "oob_reason": "code_sig"}
+{"query": "nuveiCredentialsByProvider eu_bank_account nuveiMerchantSecretKey fallback partial override", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "Nuvei DMN payout Status Updated enum sepa", "oob_reason": "code_sig"}
+{"query": "node-libs-grpc-tools struct decode Object.keys length heuristic", "oob_reason": "repo_token"}
+{"query": "Nuvei SEPA payout webhook Updated status intermediate", "oob_reason": "code_sig"}
+{"query": "Nuvei sepa payout DMN status \"Updated\" \"Pending\" intermediate transaction", "oob_reason": "code_sig"}
+{"query": "workflow-provider-webhooks try catch signalAsyncProcessingWorkflow pattern", "oob_reason": "repo_token"}
+{"query": "nuveiCredentialsByProvider shape eu_bank_account config credentials", "oob_reason": "code_sig"}
+{"query": "Nuvei DMN payout body Status enum possible values", "oob_reason": "code_sig"}
+{"query": "country alpha2 normalization bank_account tokenization ingress", "oob_reason": "code_sig"}
+{"query": "getCredentials provider payment_method fallback nuveiMerchantSecretKey partial", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "SEPA payout DMN Status enum values approved declined pending", "oob_reason": "code_sig"}
+{"query": "withdrawal DMN wdRequestStatus SEPA APM status", "oob_reason": "code_sig"}
+{"query": "SEPA withdrawal DMN notification webhook callback fields", "oob_reason": "code_sig"}
+{"query": "apmgw_SEPA_Payouts DMN callback status notification", "oob_reason": "code_sig"}
+{"query": "Nuvei withdrawal DMN APM payout notification payload sample", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "where is transaction status set to ERROR for nuvei payout SEPA", "oob_reason": "code_sig"}
+{"query": "DMN late arrival ERROR transaction overwrite policy", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "PKCS7 sign encrypt provider request body inpay openssl spawn", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "child_process spawn shell-out provider crypto", "oob_reason": "code_sig"}
+{"query": "grpc-core-sources eu_bank_account UDT register payment method type", "oob_reason": "code_sig"}
+{"query": "grpc-providers-credentials at-rest encryption no application encryption", "oob_reason": "repo_token"}
+{"query": "trustly grpc-apm-trustly gotcha private key passphrase env loadKeyMaterial", "oob_reason": "repo_token"}
+{"query": "grpc-providers-features inpay payper rows seeds", "oob_reason": "repo_token"}
+{"query": "Dockerfile FROM gcr.io distroless apk", "oob_reason": "code_sig"}
+{"query": "PCI scope IBAN card number bank account secrets in logs", "oob_reason": "code_sig"}
+{"query": "grpc-providers-features add new provider seeds row migrations", "oob_reason": "repo_token"}
+{"query": "grpc-payment-gateway BANK_ACCOUNT_METHODS payment_method_to_db_mapping", "oob_reason": "code_sig"}
+{"query": "helm deploy values yaml ASYNC_FLOW_PROCESSORS env var production override", "oob_reason": "code_sig"}
+{"query": "webhook-IP whitelist verify-ip provider workflow-provider-webhooks", "oob_reason": "repo_token"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "paymentMethod.type assigned in source response for SEPA bank_account", "oob_reason": "code_sig"}
+{"query": "certificate fingerprint pinning SHA-256", "oob_reason": "code_sig"}
+{"query": "webhook signature verify public key X509 importX509", "oob_reason": "code_sig"}
+{"query": "PKCS7 SMIME decrypt verify openssl provider", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "bank payout APM new provider rail upcoming roadmap", "oob_reason": "code_sig"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}
+{"query": "payment", "oob_reason": "tok_lt2"}
+{"query": "anything", "oob_reason": "tok_lt2"}

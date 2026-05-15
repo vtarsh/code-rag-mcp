@@ -98,7 +98,7 @@ def classify_file(file_path: str, file_type: str) -> str:
     return "code"
 
 
-def load_existing(path: Path) -> "OrderedDict[str, list[dict]]":
+def load_existing(path: Path) -> OrderedDict[str, list[dict]]:
     """Load existing candidates grouped by query, preserving input order."""
     by_q: OrderedDict[str, list[dict]] = OrderedDict()
     for line in path.read_text().splitlines():
@@ -152,8 +152,7 @@ def main() -> int:
     doc_queries: list[str] = [q for q in by_q if _DOC_QUERY_RE.search(q)]
     non_doc_queries: list[str] = [q for q in by_q if not _DOC_QUERY_RE.search(q)]
     print(
-        f"loaded {len(by_q)} queries from {args.input}: "
-        f"doc-intent={len(doc_queries)}, non-doc={len(non_doc_queries)}",
+        f"loaded {len(by_q)} queries from {args.input}: doc-intent={len(doc_queries)}, non-doc={len(non_doc_queries)}",
         flush=True,
     )
     print("doc-intent queries:", flush=True)

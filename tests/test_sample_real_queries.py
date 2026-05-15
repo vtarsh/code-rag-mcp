@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 _SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "sample_real_queries.py"
@@ -89,7 +89,7 @@ def test_normalise_whitespace_and_case() -> None:
 
 
 def test_split_sessions_by_idle_gap() -> None:
-    now = datetime(2026, 4, 1, 10, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 1, 10, 0, 0, tzinfo=UTC)
     entries = [
         {"ts": now, "query": "a", "norm": "a"},
         {"ts": now + timedelta(minutes=5), "query": "b", "norm": "b"},
@@ -108,12 +108,9 @@ def test_split_sessions_empty() -> None:
 
 
 def test_per_session_cap_applied() -> None:
-    now = datetime(2026, 4, 1, 10, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 1, 10, 0, 0, tzinfo=UTC)
     # 10 distinct queries within one session — cap must trim.
-    entries = [
-        {"ts": now + timedelta(seconds=i), "query": f"q{i}", "norm": f"q{i}"}
-        for i in range(10)
-    ]
+    entries = [{"ts": now + timedelta(seconds=i), "query": f"q{i}", "norm": f"q{i}"} for i in range(10)]
     sampled, stats = sample_real_queries.sample_stratified(
         entries, n=100, per_session_cap=3, idle_gap=timedelta(minutes=30), seed=42
     )
@@ -124,7 +121,7 @@ def test_per_session_cap_applied() -> None:
 
 
 def test_global_dedup_across_sessions() -> None:
-    now = datetime(2026, 4, 1, 10, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 1, 10, 0, 0, tzinfo=UTC)
     entries = [
         {"ts": now, "query": "webhook", "norm": "webhook"},
         {"ts": now + timedelta(minutes=5), "query": "trustly", "norm": "trustly"},
@@ -143,11 +140,8 @@ def test_global_dedup_across_sessions() -> None:
 
 
 def test_sample_is_deterministic_with_seed() -> None:
-    now = datetime(2026, 4, 1, 10, 0, 0, tzinfo=timezone.utc)
-    entries = [
-        {"ts": now + timedelta(minutes=i * 60), "query": f"q{i}", "norm": f"q{i}"}
-        for i in range(50)
-    ]
+    now = datetime(2026, 4, 1, 10, 0, 0, tzinfo=UTC)
+    entries = [{"ts": now + timedelta(minutes=i * 60), "query": f"q{i}", "norm": f"q{i}"} for i in range(50)]
     s1, _ = sample_real_queries.sample_stratified(
         entries, n=10, per_session_cap=5, idle_gap=timedelta(minutes=30), seed=42
     )
@@ -158,11 +152,8 @@ def test_sample_is_deterministic_with_seed() -> None:
 
 
 def test_sample_changes_with_different_seed() -> None:
-    now = datetime(2026, 4, 1, 10, 0, 0, tzinfo=timezone.utc)
-    entries = [
-        {"ts": now + timedelta(minutes=i * 60), "query": f"q{i}", "norm": f"q{i}"}
-        for i in range(50)
-    ]
+    now = datetime(2026, 4, 1, 10, 0, 0, tzinfo=UTC)
+    entries = [{"ts": now + timedelta(minutes=i * 60), "query": f"q{i}", "norm": f"q{i}"} for i in range(50)]
     s1, _ = sample_real_queries.sample_stratified(
         entries, n=10, per_session_cap=5, idle_gap=timedelta(minutes=30), seed=42
     )
@@ -173,7 +164,7 @@ def test_sample_changes_with_different_seed() -> None:
 
 
 def test_write_output_roundtrips(tmp_path: Path) -> None:
-    now = datetime(2026, 4, 1, 10, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 1, 10, 0, 0, tzinfo=UTC)
     sampled = [{"ts": now, "query": "test query", "norm": "test query"}]
     out = tmp_path / "nested" / "out.jsonl"
     sample_real_queries.write_output(out, sampled)

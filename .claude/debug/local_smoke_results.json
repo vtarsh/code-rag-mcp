@@ -1,0 +1,28 @@
+[
+  {
+    "tag": "docs-mxbai",
+    "kind": "docs",
+    "base_model": "mixedbread-ai/mxbai-embed-large-v1",
+    "train_data": {
+      "ok": true,
+      "msg": "7129 rows OK",
+      "path": "/tmp/r1_cosent_triplets_v3.jsonl"
+    },
+    "eval_data": {
+      "ok": true,
+      "msg": "100 rows OK",
+      "path": "/Users/vaceslavtarsevskij/.code-rag-mcp/profiles/pay-com/doc_intent_eval_v3.jsonl"
+    },
+    "model_load": {
+      "ok": true,
+      "msg": "loaded in 4.0s, dim=1024"
+    },
+    "mini_pipeline": {
+      "ok": false,
+      "msg": "long-encode (Bug 6o): NaN/Inf in vectors after reload",
+      "elapsed_s": 22.9
+    },
+    "overall_ok": false,
+    "elapsed_s": 39.6
+  }
+]

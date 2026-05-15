@@ -1,0 +1,50 @@
+{"query": "payment", "score": 1, "rationale": "single token, generic"}
+{"query": "anything", "score": 1, "rationale": "generic placeholder, ignore"}
+{"query": "SEPA payout Nuvei EPS eu_bank_account", "score": 2, "rationale": "provider + payment topic = doc-intent"}
+{"query": "WorkflowIdReusePolicy REJECT_DUPLICATE concurrent DMN", "score": 0, "rationale": "specific Temporal API constants"}
+{"query": "ASYNC_FLOW_PROCESSORS DELAYED_COMPLETION_PROVIDERS env", "score": 1, "rationale": "env-var lookup, mixed"}
+{"query": "grpc-providers-features", "score": 2, "rationale": "repo-token only = repo overview, doc-intent"}
+{"query": "tokenizer bank account IBAN sensitive vault", "score": 2, "rationale": "concept lookup, doc-intent"}
+{"query": "async payout webhook handler pattern PENDING", "score": 2, "rationale": "pattern + concept = doc-intent"}
+{"query": "how to integrate new APM payment provider", "score": 2, "rationale": "explicit how-to"}
+{"query": "integrate new APM provider", "score": 2, "rationale": "how-to"}
+{"query": "grpc-providers-nuvei", "score": 2, "rationale": "repo-token only = repo overview"}
+{"query": "grpc-providers-credentials", "score": 2, "rationale": "repo-token only = repo overview"}
+{"query": "grpc-providers-credentials migration data-mapper validation new provider", "score": 2, "rationale": "how-to"}
+{"query": "trustly", "score": 2, "rationale": "provider name = provider overview"}
+{"query": "skrill automated payments API", "score": 2, "rationale": "provider + concept = doc"}
+{"query": "express-api-authentication authenticate redirect SCA", "score": 1, "rationale": "mixed code+concept"}
+{"query": "payout flow destination_data provider implementation", "score": 2, "rationale": "concept + flow = doc"}
+{"query": "payout", "score": 2, "rationale": "single concept noun = doc-intent"}
+{"query": "session expiry APM alternative payment method", "score": 2, "rationale": "concept + APM = doc-intent"}
+{"query": "express-webhooks nuvei route provider", "score": 2, "rationale": "repo + provider = doc-intent"}
+{"query": "workflow-expire-session consts PAYMENT_METHODS_WITH_LONG_PROCESSING_TIME", "score": 0, "rationale": "const lookup"}
+{"query": "new APM provider integration pattern initialize sale refund webhook", "score": 2, "rationale": "how-to integration"}
+{"query": "grpc-apm-nuvei", "score": 2, "rationale": "repo-token only = repo overview"}
+{"query": "grpc-payment-gateway", "score": 2, "rationale": "repo-token only = repo overview"}
+{"query": "grpc-core-transaction-management", "score": 2, "rationale": "repo-token only = repo overview"}
+{"query": "workflow-transaction repo", "score": 2, "rationale": "repo overview, has 'repo' marker"}
+{"query": "backoffice-next", "score": 2, "rationale": "repo-token only = repo overview"}
+{"query": "map-response status mapping action-aware APM provider", "score": 2, "rationale": "concept = doc"}
+{"query": "grpc-payment-gateway repository", "score": 2, "rationale": "repo overview"}
+{"query": "grpc-providers-credentials repository", "score": 2, "rationale": "repo overview"}
+{"query": "EPS APM via Nuvei", "score": 2, "rationale": "provider + concept = doc"}
+{"query": "process-initialize-data okto_cash okto_wallet nuvei doNotExpire true", "score": 0, "rationale": "code symbol"}
+{"query": "reusablePayouts approved pending email async APM payout flag", "score": 1, "rationale": "flag + concept, mixed"}
+{"query": "grpc-apm-paynearme sale.js poll webhook refund", "score": 0, "rationale": "specific .js file"}
+{"query": "PROVIDERS_WITH_CUSTOM_APPS_MAP next-web-alternative-payment-methods sourceDataType frontend", "score": 0, "rationale": "const + repo-symbol"}
+{"query": "webhook IP whitelist HMAC signature verification validate-signature provider", "score": 2, "rationale": "concept = doc"}
+{"query": "generic description Online payment never transaction ID PCI", "score": 2, "rationale": "concept doc-intent"}
+{"query": "payper error 1006 missing field clientIp ip_address authorization", "score": 1, "rationale": "debugging, mixed"}
+{"query": "ff3 radix FF3Cipher accountNumber IBAN numeric fingerprint", "score": 0, "rationale": "specific class name lookup"}
+{"query": "grpc-providers-nuvei PROVIDER_TRANSACTION_STATUS_MAP consts", "score": 0, "rationale": "const lookup"}
+{"query": "workflow-provider-webhooks nuvei EXPIRED updateTransaction finalize result", "score": 0, "rationale": "code-flow"}
+{"query": "payper payout interac grpc-apm", "score": 2, "rationale": "provider + payout topic = doc"}
+{"query": "paynearme methods/sale.js paymentMethod destructure attempt udf", "score": 0, "rationale": ".js code"}
+{"query": "barcode QR code redirect URL store retail location voucher display", "score": 2, "rationale": "concept = doc"}
+{"query": "nuvei parse-webhook.js full code clientUniqueId TransactionID Status payment_method NUVEI_STATUSES_MAP", "score": 0, "rationale": ".js full code"}
+{"query": "activate-expiration-workflow transactionId companyId workflow-provider-webhooks", "score": 0, "rationale": "code-flow lookup"}
+{"query": "aircash cash voucher APM payout refund", "score": 2, "rationale": "provider + concept = doc"}
+{"query": "tokenizer IBAN gotcha SEPA vault bank_account country EU", "score": 2, "rationale": "explicit 'gotcha' = doc-intent"}
+{"query": "merchant connection APM new provider grpc-core-acquirers payment-method-type binding", "score": 2, "rationale": "how-to integration"}
+{"query": "payment state machine for APM providers", "score": 2, "rationale": "concept = doc"}

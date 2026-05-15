@@ -147,62 +147,46 @@ def test_detect_stratum_unknown_returns_none():
     assert _detect_stratum("") is None
 
 
-def test_should_skip_rerank_off_stratum(monkeypatch):
-    """Doc-intent + OFF stratum → skip reranker."""
-    monkeypatch.delenv("CODE_RAG_DOC_RERANK_OFF", raising=False)
-    assert _should_skip_rerank("webhook signature validation", is_doc_intent=True) is True
-    assert _should_skip_rerank("trustly callback handler", is_doc_intent=True) is True
-    assert _should_skip_rerank("payment method extractor", is_doc_intent=True) is True
-    assert _should_skip_rerank("aptpay payout schedule", is_doc_intent=True) is True
+@pytest.mark.parametrize(
+    "case_id,query,is_doc_intent,env_off,expected_skip",
+    [
+        # OFF strata + doc-intent → skip reranker
+        ("off-webhook", "webhook signature validation", True, None, True),
+        ("off-trustly", "trustly callback handler", True, None, True),
+        ("off-payment-method", "payment method extractor", True, None, True),
+        ("off-payout", "aptpay payout schedule", True, None, True),
+        # KEEP strata + doc-intent → run reranker
+        ("keep-nuvei", "nuvei integration overview", True, None, False),
+        ("keep-aircash", "aircash deposit example", True, None, False),
+        ("keep-refund", "refund flow examples", True, None, False),
+        ("keep-interac", "payper interac etransfer", True, None, False),
+        ("keep-provider", "psp integration overview", True, None, False),
+        # Unknown stratum + doc-intent → conservative default = run
+        ("unknown", "how to configure idempotency", True, None, False),
+        # Code-intent always runs reranker even with stratum tokens
+        ("code-intent-overrides-off", "webhook validation", False, None, False),
+        # env=1 kill-switch forces skip on ALL doc-intent queries
+        ("envkill-keep", "nuvei integration overview", True, "1", True),
+        ("envkill-unknown", "how to configure idempotency", True, "1", True),
+        # env=1 has no effect on code-intent queries
+        ("envkill-no-code", "handler.ts handleCallback(req)", False, "1", False),
+        # env='0' / non-'1' → kill-switch off; per-stratum gate active
+        ("env0-keep", "nuvei integration overview", True, "0", False),
+        ("env0-unknown", "how to configure idempotency", True, "0", False),
+        ("env0-off-still-skips", "webhook signature validation", True, "0", True),
+    ],
+)
+def test_should_skip_rerank(monkeypatch, case_id, query, is_doc_intent, env_off, expected_skip):
+    """Comprehensive gate logic for `_should_skip_rerank`.
 
-
-def test_should_skip_rerank_keep_stratum(monkeypatch):
-    """Doc-intent + KEEP stratum → run reranker."""
-    monkeypatch.delenv("CODE_RAG_DOC_RERANK_OFF", raising=False)
-    assert _should_skip_rerank("nuvei integration overview", is_doc_intent=True) is False
-    assert _should_skip_rerank("aircash deposit example", is_doc_intent=True) is False
-    assert _should_skip_rerank("refund flow examples", is_doc_intent=True) is False
-    assert _should_skip_rerank("payper interac etransfer", is_doc_intent=True) is False
-    assert _should_skip_rerank("psp integration overview", is_doc_intent=True) is False
-
-
-def test_should_skip_rerank_unknown_stratum(monkeypatch):
-    """Doc-intent + unknown stratum → run reranker (conservative default)."""
-    monkeypatch.delenv("CODE_RAG_DOC_RERANK_OFF", raising=False)
-    assert _should_skip_rerank("how to configure idempotency", is_doc_intent=True) is False
-
-
-def test_should_skip_rerank_non_doc_intent(monkeypatch):
-    """Code-intent query → run reranker even when stratum tokens match."""
-    monkeypatch.delenv("CODE_RAG_DOC_RERANK_OFF", raising=False)
-    # webhook stratum token present, but is_doc_intent=False overrides everything.
-    assert _should_skip_rerank("webhook validation", is_doc_intent=False) is False
-
-
-def test_should_skip_rerank_kill_switch_overrides_keep(monkeypatch):
-    """env=1 forces skip on ALL doc-intent queries, including KEEP strata."""
-    monkeypatch.setenv("CODE_RAG_DOC_RERANK_OFF", "1")
-    # nuvei is KEEP, but env=1 wins.
-    assert _should_skip_rerank("nuvei integration overview", is_doc_intent=True) is True
-    # Unknown stratum + env=1 → also skip.
-    assert _should_skip_rerank("how to configure idempotency", is_doc_intent=True) is True
-
-
-def test_should_skip_rerank_kill_switch_no_effect_on_code_intent(monkeypatch):
-    """env=1 does NOT force skip on code-intent queries."""
-    monkeypatch.setenv("CODE_RAG_DOC_RERANK_OFF", "1")
-    assert _should_skip_rerank("handler.ts handleCallback(req)", is_doc_intent=False) is False
-
-
-def test_should_skip_rerank_env_zero_treated_as_unset(monkeypatch):
-    """env='0' (and any non-'1' value) keeps the kill-switch off."""
-    monkeypatch.setenv("CODE_RAG_DOC_RERANK_OFF", "0")
-    # KEEP stratum: not skipped.
-    assert _should_skip_rerank("nuvei integration overview", is_doc_intent=True) is False
-    # Unknown stratum: not skipped.
-    assert _should_skip_rerank("how to configure idempotency", is_doc_intent=True) is False
-    # OFF stratum: still skipped (per-stratum gate is independent of env).
-    assert _should_skip_rerank("webhook signature validation", is_doc_intent=True) is True
+    Covers per-stratum gating (OFF/KEEP/unknown), code-intent override, and
+    the `CODE_RAG_DOC_RERANK_OFF` kill-switch (env='1' only — '0' is a no-op).
+    """
+    if env_off is None:
+        monkeypatch.delenv("CODE_RAG_DOC_RERANK_OFF", raising=False)
+    else:
+        monkeypatch.setenv("CODE_RAG_DOC_RERANK_OFF", env_off)
+    assert _should_skip_rerank(query, is_doc_intent=is_doc_intent) is expected_skip
 
 
 # ---------------------------------------------------------------------------

@@ -20,9 +20,19 @@ from pathlib import Path
 DB_PATH = Path(__file__).parent.parent / "db" / "knowledge.db"
 
 PI_KEYWORDS = [
-    "apm-", "providers-", "payment-gateway", "webhooks", "express-api",
-    "e2e-tests", "libs-types", "core-schemas", "core-transactions",
-    "cdc-tests", "core-settings", "risk-engine", "risk-rules",
+    "apm-",
+    "providers-",
+    "payment-gateway",
+    "webhooks",
+    "express-api",
+    "e2e-tests",
+    "libs-types",
+    "core-schemas",
+    "core-transactions",
+    "cdc-tests",
+    "core-settings",
+    "risk-engine",
+    "risk-rules",
 ]
 
 
@@ -36,8 +46,7 @@ def mine(min_support: int = 3, min_confidence: float = 0.5, pi_only: bool = Fals
     if _tasks_db.exists():
         db.execute(f"ATTACH DATABASE '{_tasks_db}' AS tasks")
     rows = db.execute(
-        "SELECT ticket_id, repos_changed FROM task_history "
-        "WHERE repos_changed IS NOT NULL AND repos_changed != ''"
+        "SELECT ticket_id, repos_changed FROM task_history WHERE repos_changed IS NOT NULL AND repos_changed != ''"
     ).fetchall()
 
     tasks = []
@@ -80,7 +89,7 @@ def mine(min_support: int = 3, min_confidence: float = 0.5, pi_only: bool = Fals
 
     # Output as YAML-ready format
     rule_map: dict[str, list[str]] = {}
-    for r1, r2, count, p1, p2 in rules:
+    for r1, r2, _count, p1, p2 in rules:
         if p1 >= min_confidence:
             rule_map.setdefault(r1, []).append(r2)
         if p2 >= min_confidence:
@@ -90,7 +99,7 @@ def mine(min_support: int = 3, min_confidence: float = 0.5, pi_only: bool = Fals
     print()
     for trigger in sorted(rule_map):
         companions = sorted(set(rule_map[trigger]))
-        print(f'  {trigger}: {json.dumps(companions)}')
+        print(f"  {trigger}: {json.dumps(companions)}")
 
     print(f"\nTotal triggers: {len(rule_map)}")
     print(f"Total rules: {sum(len(v) for v in rule_map.values())}")

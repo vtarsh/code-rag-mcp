@@ -221,9 +221,7 @@ def main() -> None:
         repos = [repo_filter]
     else:
         repos = sorted(
-            d.name
-            for d in RAW_DIR.iterdir()
-            if d.is_dir() and any(d.name.startswith(p) for p in PROVIDER_PREFIXES)
+            d.name for d in RAW_DIR.iterdir() if d.is_dir() and any(d.name.startswith(p) for p in PROVIDER_PREFIXES)
         )
 
     for repo_name in repos:

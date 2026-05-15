@@ -101,9 +101,21 @@ def test_merge_rows_preserves_all_input_fields(merger_module) -> None:
     row = merged[0]
 
     # Every original field from the Opus row is present.
-    for k in ("query", "query_tag", "rank", "repo_name", "file_path", "file_type",
-              "chunk_type", "combined_score", "rerank_score", "penalty",
-              "category", "note", "regen_source"):
+    for k in (
+        "query",
+        "query_tag",
+        "rank",
+        "repo_name",
+        "file_path",
+        "file_type",
+        "chunk_type",
+        "combined_score",
+        "rerank_score",
+        "penalty",
+        "category",
+        "note",
+        "regen_source",
+    ):
         assert k in row, f"missing {k!r} in merged row"
 
     # New consensus fields.
@@ -190,15 +202,15 @@ def test_main_end_to_end(merger_module, tmp_path: Path, monkeypatch) -> None:
     opus_rows = [
         _input_row("agree", "a.md", 1, "+", note="doc matches"),
         _input_row("agree-neg", "b.md", 1, "-", note="not relevant"),
-        _input_row("conflict", "c.md", 1, "+", note="Opus says yes",
-                   query_tag="repo-intent", category="code"),
+        _input_row("conflict", "c.md", 1, "+", note="Opus says yes", query_tag="repo-intent", category="code"),
         _input_row("ambig", "d.md", 1, "+", note="Opus confident"),
     ]
     minilm_rows = [
         _input_row("agree", "a.md", 1, "+", minilm_score=0.8, judge="minilm-L6"),
         _input_row("agree-neg", "b.md", 1, "-", minilm_score=0.05, judge="minilm-L6"),
-        _input_row("conflict", "c.md", 1, "-", minilm_score=0.08, judge="minilm-L6",
-                   query_tag="repo-intent", category="code"),
+        _input_row(
+            "conflict", "c.md", 1, "-", minilm_score=0.08, judge="minilm-L6", query_tag="repo-intent", category="code"
+        ),
         _input_row("ambig", "d.md", 1, "?", minilm_score=0.3, judge="minilm-L6"),
     ]
     opus_path = tmp_path / "opus.jsonl"
@@ -210,19 +222,21 @@ def test_main_end_to_end(merger_module, tmp_path: Path, monkeypatch) -> None:
 
     argv = [
         "merge_dual_judge_labels",
-        "--opus", str(opus_path),
-        "--minilm", str(minilm_path),
-        "--out", str(out_path),
-        "--disagreements", str(md_path),
+        "--opus",
+        str(opus_path),
+        "--minilm",
+        str(minilm_path),
+        "--out",
+        str(out_path),
+        "--disagreements",
+        str(md_path),
     ]
     monkeypatch.setattr("sys.argv", argv)
     rc = merger_module.main()
     assert rc == 0
 
     # Consensus jsonl: all 4 rows, correct labels, every input field preserved.
-    out_rows = [
-        json.loads(line) for line in out_path.read_text().splitlines() if line.strip()
-    ]
+    out_rows = [json.loads(line) for line in out_path.read_text().splitlines() if line.strip()]
     assert len(out_rows) == 4
     labels = [r["label_consensus"] for r in out_rows]
     assert labels == ["+", "-", "?_CONFLICT", "+"]
@@ -260,10 +274,14 @@ def test_main_errors_when_row_counts_differ(merger_module, tmp_path: Path, monke
 
     argv = [
         "merge_dual_judge_labels",
-        "--opus", str(opus_path),
-        "--minilm", str(minilm_path),
-        "--out", str(tmp_path / "c.jsonl"),
-        "--disagreements", str(tmp_path / "d.md"),
+        "--opus",
+        str(opus_path),
+        "--minilm",
+        str(minilm_path),
+        "--out",
+        str(tmp_path / "c.jsonl"),
+        "--disagreements",
+        str(tmp_path / "d.md"),
     ]
     monkeypatch.setattr("sys.argv", argv)
     rc = merger_module.main()
@@ -273,10 +291,14 @@ def test_main_errors_when_row_counts_differ(merger_module, tmp_path: Path, monke
 def test_main_errors_when_input_missing(merger_module, tmp_path: Path, monkeypatch) -> None:
     argv = [
         "merge_dual_judge_labels",
-        "--opus", str(tmp_path / "nope.jsonl"),
-        "--minilm", str(tmp_path / "nope2.jsonl"),
-        "--out", str(tmp_path / "c.jsonl"),
-        "--disagreements", str(tmp_path / "d.md"),
+        "--opus",
+        str(tmp_path / "nope.jsonl"),
+        "--minilm",
+        str(tmp_path / "nope2.jsonl"),
+        "--out",
+        str(tmp_path / "c.jsonl"),
+        "--disagreements",
+        str(tmp_path / "d.md"),
     ]
     monkeypatch.setattr("sys.argv", argv)
     rc = merger_module.main()

@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 """Proactivity eval — does analyze_task flag the 5 PI-60 reviewer bugs
-on a CLEAN prompt under LOO conditions?
+on a CLEAN prompt?
 
 Ground truth: `profiles/pay-com/real_comments_2026-04-10.md` — 5 line-level
 review comments from reviewer `vboychyk` on PI-60 payper PRs. Each is a
 pattern that existed elsewhere in the codebase but our sessions did not
 surface when touching payper.
-
-LOO setup (run separately before this eval):
-    python profiles/pay-com/scripts/build_leave_one_out.py --exclude-task PI-60
 
 Clean prompt: a generic APM integration description paraphrased from the
 PI-60 Jira ticket with NO reference to paysafe, s2s, shared routes,
@@ -23,6 +20,7 @@ Usage:
     python3 scripts/proactivity_eval.py --verbose
     python3 scripts/proactivity_eval.py --raw-output /tmp/analyze.md
 """
+
 from __future__ import annotations
 
 import argparse
@@ -56,7 +54,7 @@ class Rubric:
     id: str
     title: str
     signals: list[str]  # regex patterns (case-insensitive)
-    bug_ref: str        # short description of the PR bug
+    bug_ref: str  # short description of the PR bug
 
 
 # Each rubric scores 1 if ANY signal matches the analyze_task output.
@@ -134,10 +132,12 @@ RUBRICS: list[Rubric] = [
 
 
 def call_analyze_task(prompt: str) -> str:
-    payload = json.dumps({
-        "description": prompt,
-        "exclude_task_id": EXCLUDE_TASK_ID,
-    }).encode()
+    payload = json.dumps(
+        {
+            "description": prompt,
+            "exclude_task_id": EXCLUDE_TASK_ID,
+        }
+    ).encode()
     req = urllib.request.Request(
         DAEMON_URL,
         data=payload,

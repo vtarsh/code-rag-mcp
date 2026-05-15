@@ -84,7 +84,11 @@ def test_trace_field_tool_filters_by_provider(tmp_path, monkeypatch):
                     {"service": "grpc-apm-volt", "file": "libs/map-response.js", "role": "producer"},
                     {"service": "grpc-apm-payper", "file": "libs/map-response.js", "role": "producer"},
                     {"service": "grpc-payment-gateway", "file": "methods/sale.js", "role": "consumer"},
-                    {"service": "workflow-provider-webhooks (volt)", "file": "activities/volt/x.js", "role": "consumer"},
+                    {
+                        "service": "workflow-provider-webhooks (volt)",
+                        "file": "activities/volt/x.js",
+                        "role": "consumer",
+                    },
                 ],
             },
         },

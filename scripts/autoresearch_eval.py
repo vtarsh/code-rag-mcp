@@ -17,6 +17,7 @@ This script runs the same conceptual_queries from benchmarks.yaml but:
 Emits a single final line the autoresearch loop parses:
   Average MRR score: 0.xxx
 """
+
 from __future__ import annotations
 
 import os
@@ -28,8 +29,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.bench_utils import resolve_profile_dir, run_hybrid_search  # noqa: E402
-
+from scripts.bench_utils import resolve_profile_dir, run_hybrid_search
 
 TOP_K = int(os.environ.get("AUTORESEARCH_TOP_K", "3"))
 

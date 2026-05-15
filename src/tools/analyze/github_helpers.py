@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -21,6 +22,11 @@ from src.config import (
 )
 
 _SAFE_REPO_NAME = re.compile(r"^[a-zA-Z0-9._-]+$")
+
+# `gh` CLI is intentionally not installed in this environment (MCP github is used instead).
+# Detect once at import time and short-circuit all gh_api() calls when absent — silently,
+# so analyze_task degrades to "no GitHub branch/PR enrichment" without log spam.
+_GH_AVAILABLE = shutil.which("gh") is not None
 
 # Max repos to query via GitHub API (prevents timeout on large finding sets)
 _MAX_GITHUB_REPOS = MAX_GITHUB_REPOS
@@ -48,7 +54,11 @@ def gh_api(endpoint: str) -> dict | list | None:
 
     Results are cached in-memory with a 10-minute TTL.
     Failures (None) are never cached.
+    Returns None immediately if `gh` CLI is not installed.
     """
+    if not _GH_AVAILABLE:
+        return None
+
     # Check cache (thread-safe)
     with _gh_cache_lock:
         entry = _gh_cache.get(endpoint)

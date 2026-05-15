@@ -91,17 +91,19 @@ def parse_trace(data: dict) -> dict:
         error = tags.get("error", False) or tags.get("otel.status_code") == "ERROR"
         error_msg = tags.get("grpc.error_message", tags.get("otel.status_description", ""))
 
-        span_infos.append({
-            "span_id": s["spanID"],
-            "parent_id": s["references"][0]["spanID"] if s.get("references") else None,
-            "service": svc,
-            "operation": _operation_label(s, tags),
-            "kind": kind,
-            "duration_ms": duration_ms,
-            "start_time": s["startTime"],
-            "error": bool(error),
-            "error_message": error_msg if error_msg else None,
-        })
+        span_infos.append(
+            {
+                "span_id": s["spanID"],
+                "parent_id": s["references"][0]["spanID"] if s.get("references") else None,
+                "service": svc,
+                "operation": _operation_label(s, tags),
+                "kind": kind,
+                "duration_ms": duration_ms,
+                "start_time": s["startTime"],
+                "error": bool(error),
+                "error_message": error_msg if error_msg else None,
+            }
+        )
 
     # Sort by start time
     span_infos.sort(key=lambda x: x["start_time"])
@@ -121,18 +123,19 @@ def parse_trace(data: dict) -> dict:
             child = span_by_id.get(cid)
             if not child:
                 continue
-            child_tags = _tag_map(child)
             child_svc = svc_map.get(child["processID"], child["processID"])
             if child_svc != si["service"]:
                 edge_key = (si["service"], child_svc, si["operation"])
                 if edge_key not in seen_edges:
                     seen_edges.add(edge_key)
-                    edges.append({
-                        "from": si["service"],
-                        "to": child_svc,
-                        "operation": si["operation"],
-                        "duration_ms": si["duration_ms"],
-                    })
+                    edges.append(
+                        {
+                            "from": si["service"],
+                            "to": child_svc,
+                            "operation": si["operation"],
+                            "duration_ms": si["duration_ms"],
+                        }
+                    )
 
     # External calls (HTTP to outside services)
     external_calls = []
@@ -141,11 +144,13 @@ def parse_trace(data: dict) -> dict:
             continue
         op = si["operation"]
         if "sandbox" in op or "payper.ca" in op or "trustly" in op or "nuvei" in op:
-            external_calls.append({
-                "from": si["service"],
-                "url": op,
-                "duration_ms": si["duration_ms"],
-            })
+            external_calls.append(
+                {
+                    "from": si["service"],
+                    "url": op,
+                    "duration_ms": si["duration_ms"],
+                }
+            )
 
     # Detect provider from spans
     # Patterns: apm-payper, providers-nuvei (not credentials/features/mapping), card-nuvei
@@ -195,8 +200,10 @@ def format_text(summary: dict) -> str:
 
     lines.append(f"Provider: {provider}")
     lines.append(f"Trace: {summary['trace_id'][:12]}...")
-    lines.append(f"Duration: {root.get('total_duration_ms', 0):.1f}ms | "
-                 f"Services: {summary['service_count']} | Spans: {summary['total_spans']}")
+    lines.append(
+        f"Duration: {root.get('total_duration_ms', 0):.1f}ms | "
+        f"Services: {summary['service_count']} | Spans: {summary['total_spans']}"
+    )
     lines.append(f"Entry: {root.get('service', '?')} {root.get('operation', '?')}")
     lines.append("")
 

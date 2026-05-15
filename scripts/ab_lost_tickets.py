@@ -40,17 +40,12 @@ BASE_MODEL = "Alibaba-NLP/gte-reranker-modernbert-base"
 def load_lost_tickets() -> list[str]:
     hb = json.loads(HYBRID_SNAP.read_text())["per_task_baseline"]
     fb = json.loads(FTS_SNAP.read_text())["per_task_baseline"]
-    return [
-        tid
-        for tid in hb
-        if hb[tid].get("recall_at_10", 0) == 0 and fb.get(tid, {}).get("recall_at_10", 0) > 0
-    ]
+    return [tid for tid in hb if hb[tid].get("recall_at_10", 0) == 0 and fb.get(tid, {}).get("recall_at_10", 0) > 0]
 
 
 def load_task_for_ticket(conn: sqlite3.Connection, ticket: str) -> dict | None:
     row = conn.execute(
-        "SELECT ticket_id, summary, description, jira_comments, repos_changed "
-        "FROM task_history WHERE ticket_id = ?",
+        "SELECT ticket_id, summary, description, jira_comments, repos_changed FROM task_history WHERE ticket_id = ?",
         (ticket,),
     ).fetchone()
     if not row:

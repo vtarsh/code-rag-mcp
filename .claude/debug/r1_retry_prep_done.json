@@ -1,0 +1,57 @@
+{
+  "train_pairs_path": "/tmp/r1_train_pairs_v3.jsonl",
+  "cosent_triplets_path": "/tmp/r1_cosent_triplets_v3.jsonl",
+  "n_train_pairs": 1069,
+  "n_triplets": 5362,
+  "n_unique_queries": 846,
+  "validation_passed": true,
+  "disjoint_leaks": 0,
+  "n_eval_disjoint_queries": 202,
+  "n_eval_disjoint_paths": 319,
+  "trainer_hardened": true,
+  "trainer_hardening": {
+    "min_train_rows_constant": 1000,
+    "absolute_path_logged_at_startup": true,
+    "row_count_logged_at_startup": true,
+    "first_three_row_queries_logged": true,
+    "refuse_message_calls_out_payfin_v0": true,
+    "override_flag": "--i-know-im-using-tiny-data"
+  },
+  "test_count_delta": 7,
+  "new_tests": [
+    "test_train_aborts_if_too_few_rows",
+    "test_train_aborts_message_calls_out_legacy_dataset",
+    "test_train_logs_absolute_train_path_at_startup",
+    "test_train_logs_first_three_row_queries",
+    "test_train_allow_tiny_data_override",
+    "test_cli_flag_i_know_im_using_tiny_data_plumbed",
+    "test_min_train_rows_constant_documented"
+  ],
+  "pytest_status": "836 passed, 1 skipped",
+  "post_change_collected_tests": 837,
+  "test_delta_in_train_docs_embedder_file": "+7 (32 -> 39 collected; +7 R1-retry-prep guard tests)",
+  "miner_logs": {
+    "miner_log": "/tmp/r1_mine_v3.log",
+    "resolve_log": "/tmp/r1_resolve_v3.log"
+  },
+  "doc_file_types_used": [
+    "doc",
+    "docs",
+    "gotchas",
+    "reference",
+    "provider_doc",
+    "task",
+    "flow_annotation",
+    "dictionary",
+    "domain_registry"
+  ],
+  "rationale": "Doc tower training distribution must mirror serving distribution (DOC_FILE_TYPES in src/index/builders/docs_vector_indexer.py). LEFT JOIN on chunk_meta (only ~34% of doc chunks have chunk_meta rows) so provider_doc+reference+dictionary chunks survive resolution.",
+  "max_negs_per_pair": 7,
+  "seed": 42,
+  "eval_disjoint_files": [
+    "profiles/pay-com/doc_intent_eval_v3_n200.jsonl",
+    "profiles/pay-com/doc_intent_eval_v3.jsonl"
+  ],
+  "incident_fixed": "/tmp/phase2_r1_outcome.txt:80-83 (R1-stage2 -17.7pp from stale 10-pair payfin-v0 dataset)",
+  "next_step_blocked_on_user_go": "Stage B: ssh pod and run train_docs_embedder.py against /tmp/r1_cosent_triplets_v3.jsonl with --loss=cosent (NOT --i-know-im-using-tiny-data; the guard MUST fire if anything goes wrong)"
+}

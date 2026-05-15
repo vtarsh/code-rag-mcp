@@ -139,15 +139,38 @@ _KEYWORD_FILE_TRIGGERS: dict[str, list[str]] = {
 # or "sale" alone are not sufficient — there must be at least one of
 # these discriminators AND one operation keyword.
 _APM_CONTEXT_MARKERS = (
-    "apm", "grpc-apm", "grpc-providers", "payper", "paysafe", "trustly",
-    "nuvei", "volt", "ppro", "aeropay", "paynearme", "fonix", "epx",
-    "worldpay", "checkout", "braintree", "credorax",
+    "apm",
+    "grpc-apm",
+    "grpc-providers",
+    "payper",
+    "paysafe",
+    "trustly",
+    "nuvei",
+    "volt",
+    "ppro",
+    "aeropay",
+    "paynearme",
+    "fonix",
+    "epx",
+    "worldpay",
+    "checkout",
+    "braintree",
+    "credorax",
     "alternative payment method",
-    "new provider", "add a new provider", "add a provider",
-    "provider integration", "integrate a provider", "integrate a new provider",
-    "new apm", "apm integration",
-    "onboard a new", "launch a new", "bank-transfer", "bank transfer",
-    "payment method provider", "new payment method",
+    "new provider",
+    "add a new provider",
+    "add a provider",
+    "provider integration",
+    "integrate a provider",
+    "integrate a new provider",
+    "new apm",
+    "apm integration",
+    "onboard a new",
+    "launch a new",
+    "bank-transfer",
+    "bank transfer",
+    "payment method provider",
+    "new payment method",
 )
 
 # Operation-family keywords: if a task mentions 2+ of these, it is very
@@ -155,12 +178,31 @@ _APM_CONTEXT_MARKERS = (
 # Used as a second gate condition in _has_apm_context.
 _OPERATION_FAMILIES: list[tuple[str, ...]] = [
     ("sale", "charge", "purchase", "capture", "direct charge"),
-    ("payout", "disburse", "disbursement", "send money", "send funds",
-     "withdraw", "withdrawal", "credit customer", "transfer to customer", "pay out"),
+    (
+        "payout",
+        "disburse",
+        "disbursement",
+        "send money",
+        "send funds",
+        "withdraw",
+        "withdrawal",
+        "credit customer",
+        "transfer to customer",
+        "pay out",
+    ),
     ("refund", "reversal"),
     ("verification", "verify", "kyc", "identity confirmation", "identity check", "authentication"),
-    ("webhook", "callback", "notification", "notifications", "async notification",
-     "status update", "state change", "push event", "payment state"),
+    (
+        "webhook",
+        "callback",
+        "notification",
+        "notifications",
+        "async notification",
+        "status update",
+        "state change",
+        "push event",
+        "payment state",
+    ),
 ]
 
 
@@ -194,15 +236,30 @@ def _detect_trigger_keywords(description: str | None) -> list[str]:
 # stays closed even with multi-family keyword hits — those tasks coincidentally
 # mention "sales" / "refunds" as metrics, not as coding operations.
 _NON_INTEGRATION_MARKERS = (
-    "backoffice", "back office", "back-office",
-    "dashboard", "dashboards",
-    "metrics", "metric",
-    "report", "reports", "reporting",
-    "analytics", "bi ", " bi",
-    "chart", "charts", "graph", "graphs",
-    "export csv", "export excel", "csv export",
-    "admin panel", "admin page",
-    "monitoring dashboard", "kpi",
+    "backoffice",
+    "back office",
+    "back-office",
+    "dashboard",
+    "dashboards",
+    "metrics",
+    "metric",
+    "report",
+    "reports",
+    "reporting",
+    "analytics",
+    "bi ",
+    " bi",
+    "chart",
+    "charts",
+    "graph",
+    "graphs",
+    "export csv",
+    "export excel",
+    "csv export",
+    "admin panel",
+    "admin page",
+    "monitoring dashboard",
+    "kpi",
 )
 
 
@@ -225,9 +282,7 @@ def _has_apm_context(description: str | None, provider: str = "") -> bool:
     d = description.lower()
     if any(marker in d for marker in _APM_CONTEXT_MARKERS):
         return True
-    if _count_operation_families(d) >= 2 and not any(m in d for m in _NON_INTEGRATION_MARKERS):
-        return True
-    return False
+    return _count_operation_families(d) >= 2 and not any(m in d for m in _NON_INTEGRATION_MARKERS)
 
 
 def _match_shared_files_by_keywords(
@@ -328,23 +383,33 @@ def _render_shared_file_warning(matches: list[tuple[str, dict]], provider: str, 
                 primary = siblings[0]
                 secondary = siblings[1] if len(siblings) > 1 else ""
                 if method:
-                    out += f"- **Run now**: `provider_type_map(\"{primary}\", \"{method}\", \"fields\")` — compare contract for `{method}` method\n"
+                    out += f'- **Run now**: `provider_type_map("{primary}", "{method}", "fields")` — compare contract for `{method}` method\n'
                     if secondary:
-                        out += f"- **Also run**: `provider_type_map(\"{secondary}\", \"{method}\", \"fields\")`\n"
-                    out += f"- **Then search**: `search(\"{primary} {method} {fpath.split('/')[-1]}\")` — see sibling implementation\n"
+                        out += f'- **Also run**: `provider_type_map("{secondary}", "{method}", "fields")`\n'
+                    out += f'- **Then search**: `search("{primary} {method} {fpath.split("/")[-1]}")` — see sibling implementation\n'
                 else:
-                    out += f"- **Run now**: `provider_type_map(\"{primary}\", \"\", \"overview\")` — see sibling methods\n"
-                    out += f"- **Then search**: `search(\"{primary} {fpath.split('/')[-1]}\")` — see sibling file\n"
+                    out += f'- **Run now**: `provider_type_map("{primary}", "", "overview")` — see sibling methods\n'
+                    out += f'- **Then search**: `search("{primary} {fpath.split("/")[-1]}")` — see sibling file\n'
         out += "\n"
     if not brief:
-        out += "**Do NOT ship until each sibling has been compared.** Generic review conventions like \"run linter\" do not catch cross-provider regressions — only explicit sibling comparison does.\n\n"
+        out += '**Do NOT ship until each sibling has been compared.** Generic review conventions like "run linter" do not catch cross-provider regressions — only explicit sibling comparison does.\n\n'
     return out
 
 
 _REVIEW_KEYWORDS = (
-    "review", "check", "audit", "investigate",
-    "глянь", "перевір", "зламали", "досліди", "аудит", "ревʼю",
-    "did we break", "did i break", "чи нічого не",
+    "review",
+    "check",
+    "audit",
+    "investigate",
+    "глянь",
+    "перевір",
+    "зламали",
+    "досліди",
+    "аудит",
+    "ревʼю",
+    "did we break",
+    "did i break",
+    "чи нічого не",
 )
 
 
@@ -376,9 +441,9 @@ def _render_review_mode_reminder(provider: str, brief: bool = False) -> str:
             out += f"- `{pattern}` — {risk_short}\n"
     if not brief:
         out += "\n**Example first calls** (replace with your actual target):\n"
-        out += f"- `provider_type_map(\"paysafe\", \"payout\", \"fields\")`\n"
-        out += f"- `search(\"paysafe interac payout validation\")`\n"
-        out += f"- `search(\"other APM providers methods/payout.js paymentMethod\")`\n\n"
+        out += '- `provider_type_map("paysafe", "payout", "fields")`\n'
+        out += '- `search("paysafe interac payout validation")`\n'
+        out += '- `search("other APM providers methods/payout.js paymentMethod")`\n\n'
         out += "**Do not rely on task_history alone** — for in-progress reviews, files_changed may be stale (historical merged PR data, not current open PR). Always verify with live `git diff`.\n\n"
     else:
         out += "\n"
@@ -482,8 +547,8 @@ def section_existing_tasks(ctx: AnalysisContext) -> str:
     _excl_variants: list[str] = []
     if ctx.exclude_task_id:
         _eid = extract_task_id(ctx.exclude_task_id) or ctx.exclude_task_id.lower()
-        _excl_variants.append(_eid)                    # e.g. "pi-60"
-        _excl_variants.append(_eid.replace("-", "_"))   # e.g. "pi_60"
+        _excl_variants.append(_eid)  # e.g. "pi-60"
+        _excl_variants.append(_eid.replace("-", "_"))  # e.g. "pi_60"
 
     for q in queries:
         try:

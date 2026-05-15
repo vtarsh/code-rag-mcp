@@ -10,6 +10,7 @@ No LLM. Safe to run in daytime (skip-vectors) mode.
 Output is JSON only — NOT indexed by FTS5 (to avoid polluting base recall).
 Sessions can read directly via Read tool, or downstream tools can parse it.
 """
+
 import json
 import os
 import re
@@ -69,7 +70,9 @@ def git_last_commit(repo: Path) -> dict | None:
     try:
         out = subprocess.run(
             ["git", "-C", str(repo), "log", "-1", "--format=%cI|%ct|%an|%s"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if out.returncode != 0 or not out.stdout.strip():
             return None
@@ -141,23 +144,21 @@ def parse_proto_files(repo: Path) -> list:
             brace_idx = svc.end() - 1
             body = _extract_balanced_body(text, brace_idx)
             rpcs = [
-                {"name": m.group(1), "input": m.group(2), "output": m.group(3)}
-                for m in PROTO_RPC_RE.finditer(body)
+                {"name": m.group(1), "input": m.group(2), "output": m.group(3)} for m in PROTO_RPC_RE.finditer(body)
             ]
-            services.append({
-                "file": str(proto.relative_to(repo)),
-                "service": svc.group(1),
-                "rpcs": rpcs,
-            })
+            services.append(
+                {
+                    "file": str(proto.relative_to(repo)),
+                    "service": svc.group(1),
+                    "rpcs": rpcs,
+                }
+            )
     return services
 
 
 def top_level(repo: Path) -> list:
     try:
-        return sorted(
-            p.name for p in repo.iterdir()
-            if not p.name.startswith(".") and p.name not in SKIP_DIRS
-        )
+        return sorted(p.name for p in repo.iterdir() if not p.name.startswith(".") and p.name not in SKIP_DIRS)
     except Exception:
         return []
 

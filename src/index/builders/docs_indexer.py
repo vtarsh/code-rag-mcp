@@ -429,12 +429,7 @@ def index_providers(conn: sqlite3.Connection) -> tuple[int, int]:
 
     total_files = 0
     total_chunks = 0
-    # Dedup scoped across the whole provider_doc file_type: 138 clusters of
-    # ~3 dup chunks each were observed (shared OpenAPI boilerplate "### Responses
-    # \n\nOK" etc.) Hash is body-only so [Provider A Docs: X] vs
-    # [Provider B Docs: X] with identical body collapse to one chunk — this is
-    # intentional for scraped OpenAPI boilerplate.
-    seen_hashes: set[str] = set()
+    total_skipped = 0
 
     for provider_dir in sorted(PROVIDERS_DIR.iterdir()):
         if not provider_dir.is_dir():
@@ -446,8 +441,14 @@ def index_providers(conn: sqlite3.Connection) -> tuple[int, int]:
         # Remove existing chunks for this provider (idempotent)
         conn.execute("DELETE FROM chunks WHERE repo_name = ?", (repo_name,))
 
+        # Per-provider dedup: collapse identical boilerplate (nav, copyright,
+        # method indexes) within one vendor's docs without affecting cross-provider
+        # chunks. Identical content in different providers stays separate so
+        # vendor-specific context is preserved.
+        seen_hashes: set[str] = set()
         files_count = 0
         chunks_count = 0
+        skipped_count = 0
 
         for md_file in sorted(provider_dir.glob("*.md")):
             try:
@@ -467,6 +468,7 @@ def index_providers(conn: sqlite3.Connection) -> tuple[int, int]:
                     chunk_content = f"[{provider_title} Docs: {slug}] {chunk_content}"
                 h = content_hash(chunk_content)
                 if h in seen_hashes:
+                    skipped_count += 1
                     continue
                 seen_hashes.add(h)
                 conn.execute(
@@ -480,8 +482,10 @@ def index_providers(conn: sqlite3.Connection) -> tuple[int, int]:
         if files_count > 0:
             total_files += files_count
             total_chunks += chunks_count
+            total_skipped += skipped_count
 
     if total_files:
-        print(f"  Provider docs: {total_files} files, {total_chunks} chunks")
+        suffix = f" ({total_skipped} dup chunks skipped)" if total_skipped else ""
+        print(f"  Provider docs: {total_files} files, {total_chunks} chunks{suffix}")
 
     return total_files, total_chunks

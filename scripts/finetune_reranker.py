@@ -57,6 +57,7 @@ log = logging.getLogger("finetune_reranker")
 
 DAEMON_PORT = 8742
 
+
 def pause_daemon(port: int = DAEMON_PORT, timeout: float = 5.0) -> bool:
     """Force-restart daemon (~1 GB resident models) to free RAM before training.
 
@@ -81,6 +82,7 @@ def pause_daemon(port: int = DAEMON_PORT, timeout: float = 5.0) -> bool:
     except Exception as e:
         log.info("daemon shutdown error: %s; continuing", e)
         return False
+
 
 class JsonlExampleStream(IterableDataset):
     """Yield `InputExample` rows from a JSONL file, line-by-line.
@@ -154,6 +156,7 @@ class JsonlExampleStream(IterableDataset):
         rng.shuffle(buf)
         yield from buf
 
+
 def count_jsonl_rows(path: Path) -> int:
     n = 0
     with path.open("r", encoding="utf-8") as f:
@@ -162,12 +165,14 @@ def count_jsonl_rows(path: Path) -> int:
                 n += 1
     return n
 
+
 def pick_device() -> str:
     if torch.backends.mps.is_available():
         return "mps"
     if torch.cuda.is_available():
         return "cuda"
     return "cpu"
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Fine-tune CrossEncoder reranker (streaming)")
@@ -249,6 +254,7 @@ def parse_args() -> argparse.Namespace:
     )
     return p.parse_args()
 
+
 def _latest_checkpoint(out_dir: Path) -> Path | None:
     """Find the highest-step ``checkpoint-*`` subdir under ``out_dir``.
 
@@ -268,13 +274,16 @@ def _latest_checkpoint(out_dir: Path) -> Path | None:
             best = (step, child)
     return best[1] if best else None
 
+
 def _use_new_trainer_path(args: argparse.Namespace) -> bool:
     """New HF Trainer path is enabled by any memory-opt flag."""
     return bool(args.bf16 or args.fp16 or args.gradient_checkpointing)
 
+
 # --------------------------------------------------------------------------
 # New CrossEncoderTrainer path (bf16 / fp16 / gradient_checkpointing)
 # --------------------------------------------------------------------------
+
 
 def detect_listwise_format(path: Path) -> bool:
     """Return True if the JSONL file has listwise rows (`docs` list).
@@ -298,6 +307,7 @@ def detect_listwise_format(path: Path) -> bool:
                 return False
             # Unknown schema — fall through to next line
     raise ValueError(f"could not detect data format from {path} (empty or malformed)")
+
 
 def _build_hf_dataset(path: Path, keep_indices: set[int], *, max_doc_chars: int = 1500):
     """Load the kept rows of a pointwise JSONL file into a `datasets.Dataset`.
@@ -337,6 +347,7 @@ def _build_hf_dataset(path: Path, keep_indices: set[int], *, max_doc_chars: int 
             )
     return Dataset.from_list(rows)
 
+
 def _build_hf_dataset_listwise(path: Path, keep_indices: set[int], *, max_doc_chars: int = 1500):
     """Load listwise rows ({query, docs, labels}) into a `datasets.Dataset`.
 
@@ -375,6 +386,7 @@ def _build_hf_dataset_listwise(path: Path, keep_indices: set[int], *, max_doc_ch
             )
     return Dataset.from_list(rows)
 
+
 class _MpsCacheHygieneCallback:
     """HF Trainer callback: flush MPS cache + gc every N steps.
 
@@ -382,6 +394,7 @@ class _MpsCacheHygieneCallback:
     import of `transformers.TrainerCallback` (keeps the legacy path import
     surface minimal).
     """
+
 
 def _run_new_trainer(
     args: argparse.Namespace,
@@ -669,9 +682,11 @@ def _run_new_trainer(
 
     return model, dur, final_val_loss, resumed_from
 
+
 # --------------------------------------------------------------------------
 # Legacy model.fit() path — unchanged behaviour
 # --------------------------------------------------------------------------
+
 
 def _run_legacy_fit(
     args: argparse.Namespace,
@@ -780,6 +795,7 @@ def _run_legacy_fit(
             log.info("final val loss (%s): %.4f (n=%d)", args.loss, final_val_loss, n)
 
     return model, dur, final_val_loss
+
 
 def main() -> int:
     args = parse_args()
@@ -941,6 +957,7 @@ def main() -> int:
         )
     )
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

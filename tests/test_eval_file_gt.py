@@ -14,6 +14,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 # scripts/ is not a package — mirror the import pattern used in test_eval_verdict.py.
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
@@ -25,7 +27,6 @@ from scripts.eval_finetune import (  # noqa: E402
     compute_file_recall,
     top_k_files,
 )
-
 
 # ---- compute_file_recall ----
 
@@ -66,9 +67,9 @@ def test_compute_file_recall_empty_expected():
 def test_compute_file_recall_partial():
     """2 of 5 expected files appear in the top-10 → recall = 0.4."""
     ranked = [
-        ("repoA", "src/a.py"),        # hit
+        ("repoA", "src/a.py"),  # hit
         ("repoA", "src/noise1.py"),
-        ("repoB", "src/b.py"),        # hit
+        ("repoB", "src/b.py"),  # hit
         ("repoB", "src/noise2.py"),
         ("repoC", "src/noise3.py"),
         ("repoC", "src/noise4.py"),
@@ -84,7 +85,7 @@ def test_compute_file_recall_partial():
         "src/missing2.py",
         "src/missing3.py",
     ]
-    assert compute_file_recall(ranked, expected, k=10) == 0.4
+    assert compute_file_recall(ranked, expected, k=10) == pytest.approx(0.4)
 
 
 def test_compute_file_recall_dedup():
@@ -102,11 +103,11 @@ def test_compute_file_recall_dedup():
 def test_compute_file_recall_respects_k():
     """k truncates ranked list before intersection."""
     ranked = [
-        ("repoA", "src/a.py"),   # top-1
-        ("repoA", "src/b.py"),   # top-2 — excluded when k=1
+        ("repoA", "src/a.py"),  # top-1
+        ("repoA", "src/b.py"),  # top-2 — excluded when k=1
     ]
     expected = ["src/a.py", "src/b.py"]
-    assert compute_file_recall(ranked, expected, k=1) == 0.5
+    assert compute_file_recall(ranked, expected, k=1) == pytest.approx(0.5)
     assert compute_file_recall(ranked, expected, k=10) == 1.0
 
 
@@ -136,9 +137,7 @@ def test_top_k_files_skips_missing_fields():
 
 def test_top_k_files_respects_k():
     """Stops at k unique entries even if more are available."""
-    ranked = [
-        {"repo_name": f"repo{i}", "file_path": f"src/{i}.py"} for i in range(20)
-    ]
+    ranked = [{"repo_name": f"repo{i}", "file_path": f"src/{i}.py"} for i in range(20)]
     out = top_k_files(ranked, k=5)
     assert len(out) == 5
     assert out[0] == ("repo0", "src/0.py")
@@ -427,8 +426,6 @@ def test_dispatcher_v2_unavailable_when_legacy_snapshot():
 import json as _json  # noqa: E402
 import subprocess  # noqa: E402
 
-import pytest  # noqa: E402
-
 from scripts.prepare_finetune_data import pick_test_tasks_stratified  # noqa: E402
 
 
@@ -461,7 +458,7 @@ def test_pick_test_tasks_stratified_per_bucket_min():
         tasks.append(_mk_task(f"PI-{i}", [f"repoA/file_{fid}.py"]))
         fid += 1
     # test_ratio=0.5 (high enough so target_test_n ≥ 40 = 20+20).
-    test_set, manifest = pick_test_tasks_stratified(tasks, test_ratio=0.45, seed=42)
+    _test_set, manifest = pick_test_tasks_stratified(tasks, test_ratio=0.45, seed=42)
     counts = manifest["per_project_counts"]
     assert counts.get("BO", 0) >= 20, f"BO underfilled: {counts}"
     assert counts.get("CORE", 0) >= 20, f"CORE underfilled: {counts}"
@@ -528,17 +525,12 @@ def test_pick_test_tasks_stratified_anti_leakage_retries():
             continue
         last_manifest = mf
         # Verify the contract on every successful sample.
-        assert mf["file_overlap_pct"] <= 0.05 + 1e-9, (
-            f"seed={s} returned manifest with overlap above threshold: {mf}"
-        )
+        assert mf["file_overlap_pct"] <= 0.05 + 1e-9, f"seed={s} returned manifest with overlap above threshold: {mf}"
         if mf["retry_count"] >= 1:
             saw_retry = True
             assert mf["seed_used"] == s + mf["retry_count"]
             break
-    assert saw_retry, (
-        f"no seed in 0..59 exercised retry path on this pool; "
-        f"last_manifest={last_manifest}"
-    )
+    assert saw_retry, f"no seed in 0..59 exercised retry path on this pool; last_manifest={last_manifest}"
 
 
 def test_pick_test_tasks_stratified_anti_leakage_gives_up():
@@ -602,14 +594,8 @@ def _write_full_snapshot(
 
     n_rows = len(base_r10)
     snap = {
-        "per_task_baseline": {
-            f"T-{i}": _row(base_r10[i], base_file[i], base_rank[i], n_gt[i])
-            for i in range(n_rows)
-        },
-        "per_task_ft_v1": {
-            f"T-{i}": _row(cand_r10[i], cand_file[i], cand_rank[i], n_gt[i])
-            for i in range(n_rows)
-        },
+        "per_task_baseline": {f"T-{i}": _row(base_r10[i], base_file[i], base_rank[i], n_gt[i]) for i in range(n_rows)},
+        "per_task_ft_v1": {f"T-{i}": _row(cand_r10[i], cand_file[i], cand_rank[i], n_gt[i]) for i in range(n_rows)},
     }
     path.write_text(_json.dumps(snap))
 
@@ -727,8 +713,7 @@ def test_sanity_v2_gate_flip_exit1(tmp_path):
         cwd=str(_REPO_ROOT),
     )
     assert proc.returncode == 1, (
-        f"expected flip→exit1, got rc={proc.returncode} "
-        f"stdout={proc.stdout!r} stderr={proc.stderr!r}"
+        f"expected flip→exit1, got rc={proc.returncode} stdout={proc.stdout!r} stderr={proc.stderr!r}"
     )
     assert "FAIL" in proc.stderr
     assert "flip" in proc.stderr

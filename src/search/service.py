@@ -5,6 +5,7 @@ Public MCP tool function registered with FastMCP.
 
 from __future__ import annotations
 
+import os
 import re
 
 from src.cache import cache_key, cache_or_compute
@@ -14,6 +15,13 @@ from src.formatting import strip_repo_tag
 from src.search.fts import expand_query
 from src.search.hybrid import hybrid_search
 from src.search.suggestions import format_no_results
+
+# 2026-04-27: env-gated `expand_query` — default OFF after meta-debate showed
+# the glossary expansion regresses jira hit@10 by -9.71pp (W2-curated bench)
+# and v2 hit@10 by -6.81pp (W2-curated bench), regardless of curation effort.
+# Set `CODE_RAG_USE_EXPAND_QUERY=1` to re-enable for A/B or future glossary
+# rebuild via Doc2Query. See `.claude/debug/current/meta-converged.md`.
+_USE_EXPAND_QUERY = os.getenv("CODE_RAG_USE_EXPAND_QUERY", "0") == "1"
 
 _HIGHLIGHT_RE = re.compile(r">>>|<<<")
 # FTS5 truncates the "[Repo: repo-name]" prefix via its ellipsis to leave a
@@ -65,7 +73,7 @@ def search_tool(
 
     limit = min(max(1, limit), 20)
 
-    expanded = expand_query(query)
+    expanded = expand_query(query) if _USE_EXPAND_QUERY else query
     ck = cache_key(
         "search",
         query=expanded,

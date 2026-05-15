@@ -259,12 +259,15 @@ def analyze_task(description: str, provider: str = "", exclude_task_id: str = ""
             description to reduce response size (~40-50%). Section headers and
             body content preserved. Default False preserves current verbose output.
     """
-    return _call_daemon("analyze_task", {
-        "description": description,
-        "provider": provider,
-        "exclude_task_id": exclude_task_id,
-        "brief": brief,
-    })
+    return _call_daemon(
+        "analyze_task",
+        {
+            "description": description,
+            "provider": provider,
+            "exclude_task_id": exclude_task_id,
+            "brief": brief,
+        },
+    )
 
 
 @mcp.tool()

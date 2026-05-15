@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import math
 import sys
 from pathlib import Path
@@ -11,8 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import eval_jidm as ej  # type: ignore[import-not-found]
-
+import eval_jidm as ej  # type: ignore[import-not-found]  # noqa: E402
 
 # -----------------------
 # query_intent
@@ -111,37 +109,28 @@ def test_im_ndcg_empty() -> None:
 
 def test_im_ndcg_perfect_code_query() -> None:
     # Code-intent + 10 unique code files => DCG == IDCG, diversity = 1.0
-    ranked = [
-        {"repo_name": "r", "file_path": f"src/{i}.ts", "file_type": "service"}
-        for i in range(10)
-    ]
+    ranked = [{"repo_name": "r", "file_path": f"src/{i}.ts", "file_type": "service"} for i in range(10)]
     score = ej.im_ndcg_at_k("charge_card function", ranked, k=10)
     assert math.isclose(score, 1.0, rel_tol=1e-9)
 
 
 def test_im_ndcg_perfect_doc_query() -> None:
-    ranked = [
-        {"repo_name": "r", "file_path": f"docs/{i}.md", "file_type": "gotchas"}
-        for i in range(10)
-    ]
+    ranked = [{"repo_name": "r", "file_path": f"docs/{i}.md", "file_type": "gotchas"} for i in range(10)]
     score = ej.im_ndcg_at_k("gotchas documentation", ranked, k=10)
     assert math.isclose(score, 1.0, rel_tol=1e-9)
 
 
 def test_im_ndcg_code_query_hit_by_ci_zero_relevance() -> None:
     # All CI yaml results on a code query -> REL["code"]["ci"] = 0 -> idcg=0 -> 0.0
-    ranked = [
-        {"repo_name": f"r{i}", "file_path": "ci/deploy.yaml", "file_type": "workflow"}
-        for i in range(10)
-    ]
+    ranked = [{"repo_name": f"r{i}", "file_path": "ci/deploy.yaml", "file_type": "workflow"} for i in range(10)]
     assert ej.im_ndcg_at_k("charge_card fn", ranked, k=10) == 0.0
 
 
 def test_im_ndcg_ranker_order_matters() -> None:
     # Same set, different orderings should produce different DCG.
     ranked_good = [
-        {"repo_name": "r", "file_path": "src/a.ts", "file_type": "service"},    # code, rel 1.0
-        {"repo_name": "r", "file_path": "README.md", "file_type": "docs"},      # doc, rel 0.3
+        {"repo_name": "r", "file_path": "src/a.ts", "file_type": "service"},  # code, rel 1.0
+        {"repo_name": "r", "file_path": "README.md", "file_type": "docs"},  # doc, rel 0.3
     ]
     ranked_bad = list(reversed(ranked_good))
     # Code intent => code=1.0, doc=0.3. Putting code first is better.
@@ -156,10 +145,7 @@ def test_im_ndcg_ranker_order_matters() -> None:
 
 
 def test_diversity_10_unique_equals_one() -> None:
-    ranked = [
-        {"repo_name": "r", "file_path": f"src/{i}.ts", "file_type": "service"}
-        for i in range(10)
-    ]
+    ranked = [{"repo_name": "r", "file_path": f"src/{i}.ts", "file_type": "service"} for i in range(10)]
     # 10 unique (repo,file) -> diversity=1.0; code-intent, all code -> DCG=IDCG
     assert ej.im_ndcg_at_k("charge_card fn", ranked, k=10) == 1.0
 
@@ -167,10 +153,7 @@ def test_diversity_10_unique_equals_one() -> None:
 def test_diversity_5_unique_out_of_10_equals_half() -> None:
     # 5 unique files, each duplicated once. All code -> rel_map each = 1.0.
     # DCG==IDCG so the ratio is 1.0, and diversity_multiplier = 5/10 = 0.5.
-    unique = [
-        {"repo_name": "r", "file_path": f"src/{i}.ts", "file_type": "service"}
-        for i in range(5)
-    ]
+    unique = [{"repo_name": "r", "file_path": f"src/{i}.ts", "file_type": "service"} for i in range(5)]
     ranked = []
     for u in unique:
         ranked.append(u)
@@ -220,24 +203,14 @@ def test_eval_snapshot_churn_replay_shape(tmp_path: Path) -> None:
             {
                 "query": "charge_card fn",
                 "base_top10": [
-                    {"repo_name": "r", "file_path": f"src/{i}.ts", "file_type": "service"}
-                    for i in range(10)
+                    {"repo_name": "r", "file_path": f"src/{i}.ts", "file_type": "service"} for i in range(10)
                 ],
-                "v8_top10": [
-                    {"repo_name": "r", "file_path": "README.md", "file_type": "docs"}
-                    for _ in range(10)
-                ],
+                "v8_top10": [{"repo_name": "r", "file_path": "README.md", "file_type": "docs"} for _ in range(10)],
             },
             {
                 "query": "how to docs readme",
-                "base_top10": [
-                    {"repo_name": "r", "file_path": "README.md", "file_type": "docs"}
-                    for _ in range(10)
-                ],
-                "v8_top10": [
-                    {"repo_name": "r", "file_path": f"src/{i}.ts", "file_type": "service"}
-                    for i in range(10)
-                ],
+                "base_top10": [{"repo_name": "r", "file_path": "README.md", "file_type": "docs"} for _ in range(10)],
+                "v8_top10": [{"repo_name": "r", "file_path": f"src/{i}.ts", "file_type": "service"} for i in range(10)],
             },
         ]
     }
@@ -274,10 +247,7 @@ def test_eval_snapshot_ci_path_reuses_prod_regex() -> None:
 
 def test_im_ndcg_mixed_intent_ci_partial_credit() -> None:
     # Mixed intent: ci gets 0.2 (nonzero). A pure-CI list should not be zero.
-    ranked = [
-        {"repo_name": f"r{i}", "file_path": "ci/deploy.yaml", "file_type": "workflow"}
-        for i in range(10)
-    ]
+    ranked = [{"repo_name": f"r{i}", "file_path": "ci/deploy.yaml", "file_type": "workflow"} for i in range(10)]
     # "additional delay timeout" -> mixed
     score = ej.im_ndcg_at_k("additional delay timeout", ranked, k=10)
     # All same rel => DCG==IDCG => ratio 1.0; but diversity=1/10 (same repo? no, r0..r9)

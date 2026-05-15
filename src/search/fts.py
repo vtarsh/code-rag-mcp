@@ -58,27 +58,67 @@ def expand_query(query: str) -> str:
 
 
 def _sanitize_fts_input(query: str) -> str:
-    """Remove FTS5 special operators from user input.
+    """Remove FTS5 special operators + syntax-breaking chars from user input.
 
     Uses word boundaries so leading/trailing operators (e.g. "AND foo" or
     "foo OR") are also stripped — the old ` {op} ` pattern missed them and
     the resulting FTS5 syntax error was silently swallowed, killing search.
+
+    Extra chars stripped (2026-04-27): `:` `,` `[` `]` `` ` `` `'`. These
+    caused `sqlite3.OperationalError` on 28.4% of jira eval queries (e.g.
+    `API: Get By Token` → "no such column: API"; `Settlement Fixes - Days,
+    refresh, options` → "syntax error near ','"). The bare except in
+    `fts_search()` swallowed these silently, returning [] and forcing
+    vector-only fallback (which heavily biases toward provider docs).
+    `/` is replaced with space (not stripped) so token boundaries inside
+    paths like `applepay/googlepay` survive as two tokens.
     """
     for op in ("AND", "OR", "NOT", "NEAR"):
         query = re.sub(rf"\b{op}\b", " ", query)
-    # Remove special characters
-    query = re.sub(r'[*"()]', "", query)
+    # Strip FTS5 operators + syntax-breaking chars
+    query = re.sub(r"[*\":,()\[\]`']", "", query)
+    # Replace path separator with space (preserves multi-word tokens)
+    query = query.replace("/", " ")
     # Collapse whitespace
     return re.sub(r"\s+", " ", query).strip()
 
 
 _STOP_WORDS = frozenset(
     {
-        "add", "get", "set", "use", "new", "the", "for", "and", "with", "from",
-        "how", "does", "what", "this", "that", "into", "make", "call",
-        "need", "want", "help", "show", "find", "look", "check", "support",
-        "change", "update", "create", "delete", "remove", "implement",
-        "about", "where",
+        "add",
+        "get",
+        "set",
+        "use",
+        "new",
+        "the",
+        "for",
+        "and",
+        "with",
+        "from",
+        "how",
+        "does",
+        "what",
+        "this",
+        "that",
+        "into",
+        "make",
+        "call",
+        "need",
+        "want",
+        "help",
+        "show",
+        "find",
+        "look",
+        "check",
+        "support",
+        "change",
+        "update",
+        "create",
+        "delete",
+        "remove",
+        "implement",
+        "about",
+        "where",
     }
 )
 

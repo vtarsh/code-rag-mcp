@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+
 @pytest.fixture(autouse=True)
 def _reset_provider_state():
     """Reset embedding provider + container lance-table caches between tests."""
@@ -30,6 +31,7 @@ def _reset_provider_state():
     embedding_provider._reranker_provider = None
     container._lance_tables = {}
     container._lance_table = None
+
 
 class TestModelsRegistry:
     def test_docs_key_registered(self):
@@ -66,6 +68,7 @@ class TestModelsRegistry:
         assert DEFAULT_MODEL == "coderank"
         assert get_model_config(None).key == "coderank"
         assert get_model_config("nonexistent").key == "coderank"
+
 
 class TestEmbeddingProviderPerKey:
     def test_per_key_singletons_are_distinct(self):
@@ -104,6 +107,7 @@ class TestEmbeddingProviderPerKey:
         assert embedding_provider._embedding_provider is docs_provider
         assert code_provider is not docs_provider
 
+
 class TestDocumentPrefixRouting:
     def test_query_prefix_applied_for_query_task(self):
         from src.embedding_provider import LocalEmbeddingProvider
@@ -140,6 +144,7 @@ class TestDocumentPrefixRouting:
         (called_texts,), _ = fake_model.encode.call_args
         assert called_texts == ["def foo(): pass"]
 
+
 class TestLoadedProviderNames:
     def test_empty_when_no_models_loaded(self):
         from src.embedding_provider import loaded_provider_names
@@ -159,6 +164,7 @@ class TestLoadedProviderNames:
         names = loaded_provider_names()
         assert names == ["local:docs"]
 
+
 class TestResetProviders:
     def test_reset_clears_all_keys(self):
         from src import embedding_provider as ep_mod
@@ -175,6 +181,7 @@ class TestResetProviders:
         assert ep_mod._embedding_provider is None
         assert ep_mod._reranker_provider is None
 
+
 class TestIsModelLoaded:
     def test_false_before_any_provider(self):
         from src.container import is_model_loaded
@@ -187,6 +194,7 @@ class TestIsModelLoaded:
 
         get_embedding_provider("docs")
         assert is_model_loaded() is True
+
 
 class TestVectorSearchPerKey:
     def test_docs_key_points_at_docs_lance_dir(self, tmp_path, monkeypatch):

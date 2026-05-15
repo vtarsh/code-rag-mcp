@@ -61,9 +61,7 @@ def test_intent_repo_must_be_short():
     # Hyphenated multi-word stays 1 whitespace-token — still repo.
     assert sbv2.classify_intent("grpc-apm-trustly", repos) == "repo"
     # But adding context tokens pushes past the 3-token cap.
-    assert sbv2.classify_intent(
-        "grpc-apm-trustly webhook callback status handler", repos
-    ) != "repo"
+    assert sbv2.classify_intent("grpc-apm-trustly webhook callback status handler", repos) != "repo"
 
 
 def test_intent_code_camel_case():
@@ -94,13 +92,13 @@ def test_intent_doc_beats_code():
 
 
 def test_length_short_boundary():
-    assert sbv2.length_bucket("a b c") == "short"       # 3 tokens -> short
-    assert sbv2.length_bucket("a b c d") == "medium"    # 4 tokens -> medium
+    assert sbv2.length_bucket("a b c") == "short"  # 3 tokens -> short
+    assert sbv2.length_bucket("a b c d") == "medium"  # 4 tokens -> medium
 
 
 def test_length_medium_boundary():
-    assert sbv2.length_bucket("a b c d e f g") == "medium"   # 7 -> medium
-    assert sbv2.length_bucket("a b c d e f g h") == "long"   # 8 -> long
+    assert sbv2.length_bucket("a b c d e f g") == "medium"  # 7 -> medium
+    assert sbv2.length_bucket("a b c d e f g h") == "long"  # 8 -> long
 
 
 def test_length_long_boundary():
@@ -145,37 +143,52 @@ def _write_sampled_jsonl(tmp_path: Path, queries: list[str]) -> Path:
 def test_sampler_smoke_no_db(tmp_path: Path):
     # Mix of intents & lengths — enough pool diversity that all strata can progress.
     queries = [
-        "trustly payout flow",                                # short / code-ish? camelCase absent -> concept
-        "payper initialize smart_token",                      # snake_case -> code
-        "CLAUDE rules overview",                              # doc
-        "nuvei verification retry",                           # short / concept
-        "interac redirect_url webhook handler status",        # code (snake_case)
-        "worldpay payout MAX_RETRIES constant",               # code (snake_case? no. SCREAMING but classifier treats as concept)
-        "paynearme initialize.js setup create_order redirect",# code (ext + snake)
-        "rules instructions",                                 # doc / short
-        "architecture overview payments end to end",          # concept
-        "cashapp smartToken helper",                          # code (camel)
+        "trustly payout flow",  # short / code-ish? camelCase absent -> concept
+        "payper initialize smart_token",  # snake_case -> code
+        "CLAUDE rules overview",  # doc
+        "nuvei verification retry",  # short / concept
+        "interac redirect_url webhook handler status",  # code (snake_case)
+        "worldpay payout MAX_RETRIES constant",  # code (snake_case? no. SCREAMING but classifier treats as concept)
+        "paynearme initialize.js setup create_order redirect",  # code (ext + snake)
+        "rules instructions",  # doc / short
+        "architecture overview payments end to end",  # concept
+        "cashapp smartToken helper",  # code (camel)
     ] * 5  # 50 rows
     inp = _write_sampled_jsonl(tmp_path, queries)
     out = tmp_path / "bench_v2.yaml"
     # db path that doesn't exist — repo intent skipped.
-    rc = sbv2.main([
-        "--input", str(inp),
-        "--out", str(out),
-        "--db", str(tmp_path / "nope.db"),
-        "-n", "20",
-        "--seed", "42",
-    ])
+    rc = sbv2.main(
+        [
+            "--input",
+            str(inp),
+            "--out",
+            str(out),
+            "--db",
+            str(tmp_path / "nope.db"),
+            "-n",
+            "20",
+            "--seed",
+            "42",
+        ]
+    )
     assert rc == 0
     import yaml
+
     data = yaml.safe_load(out.read_text())
     assert data["version"] == 2
     assert len(data["queries"]) == 20
     # Every row has required keys and unlabeled fields left null/empty.
     for row in data["queries"]:
         assert set(row.keys()) >= {
-            "id", "query", "answerable", "intent",
-            "length_bucket", "provider", "gt_files", "gt_symbols", "notes",
+            "id",
+            "query",
+            "answerable",
+            "intent",
+            "length_bucket",
+            "provider",
+            "gt_files",
+            "gt_symbols",
+            "notes",
         }
         assert row["answerable"] is None
         assert row["gt_files"] == []
@@ -239,13 +252,18 @@ def test_gate_accept_regression_override(tmp_path: Path):
     tracker = tmp_path / "TRACKER.md"
     bp.write_text(json.dumps(baseline))
     cp.write_text(json.dumps(current))
-    rc = gate.main([
-        "--current", str(cp),
-        "--baseline", str(bp),
-        "--tracker", str(tracker),
-        "--accept-regression",
-        "--reason=explicit promotion — P3 tracked in ROADMAP",
-    ])
+    rc = gate.main(
+        [
+            "--current",
+            str(cp),
+            "--baseline",
+            str(bp),
+            "--tracker",
+            str(tracker),
+            "--accept-regression",
+            "--reason=explicit promotion — P3 tracked in ROADMAP",
+        ]
+    )
     assert rc == 0
     body = tracker.read_text()
     assert "bench_v2 accepted regression" in body
@@ -260,10 +278,16 @@ def test_gate_hygiene_cannot_be_overridden(tmp_path: Path):
     bp.write_text(json.dumps(baseline))
     cp.write_text(json.dumps(current))
     # Even with override flag, hygiene should block.
-    rc = gate.main([
-        "--current", str(cp), "--baseline", str(bp),
-        "--accept-regression", "--reason=try",
-    ])
+    rc = gate.main(
+        [
+            "--current",
+            str(cp),
+            "--baseline",
+            str(bp),
+            "--accept-regression",
+            "--reason=try",
+        ]
+    )
     assert rc == 1
 
 
@@ -339,13 +363,21 @@ def test_keyword_recall_counts_snippet_hits():
 def test_aggregate_skips_empty_gt():
     per_query = [
         {
-            "id": "BV2-1", "file_recall@10": 0.5, "file_hit@5": 1,
-            "file_mrr": 0.5, "keyword_recall": 1.0, "counts": True,
+            "id": "BV2-1",
+            "file_recall@10": 0.5,
+            "file_hit@5": 1,
+            "file_mrr": 0.5,
+            "keyword_recall": 1.0,
+            "counts": True,
             "strata": ["intent:code", "length:short", "provider:none"],
         },
         {
-            "id": "BV2-2", "file_recall@10": 0.0, "file_hit@5": 0,
-            "file_mrr": 0.0, "keyword_recall": 1.0, "counts": False,  # no gt_files
+            "id": "BV2-2",
+            "file_recall@10": 0.0,
+            "file_hit@5": 0,
+            "file_mrr": 0.0,
+            "keyword_recall": 1.0,
+            "counts": False,  # no gt_files
             "strata": ["intent:doc", "length:medium", "provider:none"],
         },
     ]

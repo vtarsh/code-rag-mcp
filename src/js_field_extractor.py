@@ -49,7 +49,9 @@ _NESTED_DESTRUCTURE_RE = re.compile(
 # Simple field in a destructure list (handles renamed: `status: providerStatus`)
 _FIELD_NAME_RE = re.compile(r"(\w+)(?:\s*:\s*\w+)?")
 
-_SKIP_KEYWORDS = frozenset({"const", "let", "var", "async", "await", "function", "class", "new", "return", "if", "else"})
+_SKIP_KEYWORDS = frozenset(
+    {"const", "let", "var", "async", "await", "function", "class", "new", "return", "if", "else"}
+)
 
 
 def _find_destructure_block(content: str, start: int) -> str:
@@ -84,10 +86,8 @@ def _extract_destructuring(content: str, file_path: str) -> list[FieldUsage]:
         except ValueError:
             continue
 
-        # Find source object after the closing }
-        block_end = m.start() + len("const {") + len(fields_block) + 1  # approximate
         # Search for = source after the block in the original content
-        remaining = content[m.start():]
+        remaining = content[m.start() :]
         # Find matching closing brace position
         brace_start = remaining.index("{")
         depth = 0
@@ -116,12 +116,14 @@ def _extract_destructuring(content: str, file_path: str) -> list[FieldUsage]:
                 field = fm.group(1)
                 if field in _SKIP_KEYWORDS:
                     continue
-                usages.append(FieldUsage(
-                    field_name=field,
-                    file_path=file_path,
-                    usage_type="destructure",
-                    source_field=f"{source_obj}.{parent_field}.{field}",
-                ))
+                usages.append(
+                    FieldUsage(
+                        field_name=field,
+                        file_path=file_path,
+                        usage_type="destructure",
+                        source_field=f"{source_obj}.{parent_field}.{field}",
+                    )
+                )
 
         # Top-level fields (skip the nested parts)
         cleaned = _NESTED_DESTRUCTURE_RE.sub("", fields_block)
@@ -129,12 +131,14 @@ def _extract_destructuring(content: str, file_path: str) -> list[FieldUsage]:
             field = fm.group(1)
             if field in _SKIP_KEYWORDS or not field:
                 continue
-            usages.append(FieldUsage(
-                field_name=field,
-                file_path=file_path,
-                usage_type="destructure",
-                source_field=f"{source_obj}.{field}",
-            ))
+            usages.append(
+                FieldUsage(
+                    field_name=field,
+                    file_path=file_path,
+                    usage_type="destructure",
+                    source_field=f"{source_obj}.{field}",
+                )
+            )
     return usages
 
 
@@ -160,12 +164,14 @@ def _extract_payload_builds(content: str, file_path: str) -> list[FieldUsage]:
             key = kv.group(1)
             if key in ("const", "let", "var", "if", "else", "return", "async", "await"):
                 continue
-            usages.append(FieldUsage(
-                field_name=key,
-                file_path=file_path,
-                usage_type="payload_build",
-                target_field=key,
-            ))
+            usages.append(
+                FieldUsage(
+                    field_name=key,
+                    file_path=file_path,
+                    usage_type="payload_build",
+                    target_field=key,
+                )
+            )
     return usages
 
 
@@ -188,12 +194,14 @@ def _extract_response_maps(content: str, file_path: str) -> list[FieldUsage]:
             key = kv.group(1)
             if key in ("const", "let", "var", "if", "else", "return", "async", "await"):
                 continue
-            usages.append(FieldUsage(
-                field_name=key,
-                file_path=file_path,
-                usage_type="response_map",
-                target_field=key,
-            ))
+            usages.append(
+                FieldUsage(
+                    field_name=key,
+                    file_path=file_path,
+                    usage_type="response_map",
+                    target_field=key,
+                )
+            )
     return usages
 
 
@@ -214,12 +222,14 @@ def _extract_conditional_fields(content: str, file_path: str) -> list[FieldUsage
     for m in _CONDITIONAL_RE.finditer(content):
         condition = m.group(1)
         key = m.group(2)
-        usages.append(FieldUsage(
-            field_name=key,
-            file_path=file_path,
-            usage_type="conditional",
-            source_field=condition,
-            target_field=key,
-            is_optional=True,
-        ))
+        usages.append(
+            FieldUsage(
+                field_name=key,
+                file_path=file_path,
+                usage_type="conditional",
+                source_field=condition,
+                target_field=key,
+                is_optional=True,
+            )
+        )
     return usages

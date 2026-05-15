@@ -295,8 +295,8 @@ def pick_test_tasks(
 # falls into the "OTHER" pool — keeps long-tail prefixes visible without
 # inflating the per-bucket guarantee.
 _STRATIFIED_KNOWN_PREFIXES = ("PI", "BO", "CORE", "HS")
-_STRATIFIED_PER_BUCKET_MIN = 20          # eligible threshold + min contribution
-_STRATIFIED_MAX_TICKET_SHARE = 0.10      # cap any single ticket at 10% of GT
+_STRATIFIED_PER_BUCKET_MIN = 20  # eligible threshold + min contribution
+_STRATIFIED_MAX_TICKET_SHARE = 0.10  # cap any single ticket at 10% of GT
 _STRATIFIED_FILE_OVERLAP_THRESHOLD = 0.05  # ≤5% intersection allowed
 _STRATIFIED_MAX_RETRIES = 10
 
@@ -334,15 +334,12 @@ def pick_test_tasks_stratified(
     if not tasks:
         raise ValueError("pick_test_tasks_stratified: tasks list is empty")
     if not (0 < test_ratio < 0.5):
-        raise ValueError(
-            f"pick_test_tasks_stratified: test_ratio must be in (0, 0.5); got {test_ratio}"
-        )
+        raise ValueError(f"pick_test_tasks_stratified: test_ratio must be in (0, 0.5); got {test_ratio}")
 
     target_test_n = int(test_ratio * len(tasks))
     if target_test_n <= 0:
         raise ValueError(
-            f"pick_test_tasks_stratified: test_ratio={test_ratio} on "
-            f"{len(tasks)} tasks yields zero test tickets"
+            f"pick_test_tasks_stratified: test_ratio={test_ratio} on {len(tasks)} tasks yields zero test tickets"
         )
 
     # Bucket — known prefixes split out; everything else goes to OTHER.
@@ -370,23 +367,25 @@ def pick_test_tasks_stratified(
         test_id_set: set[str] = set()
         running_positive = 0  # sum of len(files_changed) added so far
 
+        # _try_add is redefined and fully consumed within this same loop iteration,
+        # so the closure correctly binds the current `test` / `test_id_set` — B023 noqa.
         def _try_add(t: dict) -> bool:
             """Add t to the test set unless it pushes the share cap over."""
             nonlocal running_positive
-            if t["ticket_id"] in test_id_set:
+            if t["ticket_id"] in test_id_set:  # noqa: B023
                 return False
             weight = max(1, len(t.get("files_changed") or []))
             if weight > max_share_count:
                 # Single ticket alone exceeds the cap — skip.
                 return False
-            test.append(t)
-            test_id_set.add(t["ticket_id"])
+            test.append(t)  # noqa: B023
+            test_id_set.add(t["ticket_id"])  # noqa: B023
             running_positive += weight
             return True
 
         # 1. Per-bucket guarantee: any bucket with ≥ _STRATIFIED_PER_BUCKET_MIN
         #    eligible contributes that many.
-        for bucket, pool in shuffled.items():
+        for _bucket, pool in shuffled.items():
             if len(pool) < _STRATIFIED_PER_BUCKET_MIN:
                 continue
             added_from_bucket = 0
@@ -450,14 +449,7 @@ def pick_test_tasks_stratified(
             prefix = t["ticket_id"].split("-", 1)[0].upper()
             key = prefix if prefix in _STRATIFIED_KNOWN_PREFIXES else "OTHER"
             per_project_counts[key] = per_project_counts.get(key, 0) + 1
-        max_share = (
-            max(
-                max(1, len(t.get("files_changed") or [])) / total_positive_gt
-                for t in test
-            )
-            if test
-            else 0.0
-        )
+        max_share = max(max(1, len(t.get("files_changed") or [])) / total_positive_gt for t in test) if test else 0.0
         manifest = {
             "test_tickets": sorted(t["ticket_id"] for t in test),
             "per_project_counts": per_project_counts,
@@ -1040,8 +1032,7 @@ def verify_no_query_leakage(
             jac = len(t_toks & h_toks) / len(t_toks | h_toks)
             if jac >= threshold:
                 raise ValueError(
-                    f"query-leakage detected: train[{i}] ∩ holdout[{j}] "
-                    f"jaccard={jac:.1f} (threshold={threshold})"
+                    f"query-leakage detected: train[{i}] ∩ holdout[{j}] jaccard={jac:.1f} (threshold={threshold})"
                 )
 
 

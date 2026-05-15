@@ -432,6 +432,31 @@ def _detect_stratum(query: str) -> str | None:
     return None
 
 
+def _merge_two_towers(
+    code_results: list[dict],
+    docs_results: list[dict],
+    code_err: str | None,
+    docs_err: str | None,
+) -> tuple[list[dict], str | None]:
+    """Merge code-tower + docs-tower vector results, deduping by rowid.
+
+    Code tower comes first so its ranking wins on collisions (chunks live in
+    the same SQLite `chunks` table; only the embeddings differ between
+    towers). Keeping the first occurrence preserves the better-ranked
+    position from whichever tower surfaced the chunk first, matching the
+    `if key not in scores` behaviour in the RRF loop downstream.
+    """
+    seen_rowids: set = set()
+    merged: list[dict] = []
+    for vrow in list(code_results) + list(docs_results):
+        rid = vrow.get("rowid")
+        if rid in seen_rowids:
+            continue
+        seen_rowids.add(rid)
+        merged.append(vrow)
+    return merged, (code_err or docs_err)
+
+
 def _should_skip_rerank(query: str, is_doc_intent: bool) -> bool:
     """Stratum-gated rerank-skip decision.
 
@@ -725,18 +750,7 @@ def hybrid_search(
             docs_results, docs_err = vector_search(
                 query, repo, file_type, exclude_file_types, limit=50, model_key="docs"
             )
-            # Dedupe by rowid keeping first occurrence (code tower first → its
-            # ranking wins on collisions; rationale in block comment above).
-            seen_rowids: set = set()
-            merged: list[dict] = []
-            for vrow in list(code_results) + list(docs_results):
-                rid = vrow.get("rowid")
-                if rid in seen_rowids:
-                    continue
-                seen_rowids.add(rid)
-                merged.append(vrow)
-            vector_results = merged
-            vec_err = code_err or docs_err
+            vector_results, vec_err = _merge_two_towers(code_results, docs_results, code_err, docs_err)
 
     # 3. RRF fusion
     #

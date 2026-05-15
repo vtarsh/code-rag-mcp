@@ -10,9 +10,7 @@ import pytest
 @pytest.fixture
 def mock_conn():
     conn = sqlite3.connect(":memory:")
-    conn.execute(
-        "CREATE TABLE task_history (ticket_id TEXT PRIMARY KEY, files_changed TEXT)"
-    )
+    conn.execute("CREATE TABLE task_history (ticket_id TEXT PRIMARY KEY, files_changed TEXT)")
     return conn
 
 
@@ -135,9 +133,7 @@ class TestSharedFilesWarning:
             assert 'provider_type_map("paysafe"' in result
             assert 'provider_type_map("payper"' not in result
 
-    def test_sibling_tool_calls_use_fallback_for_semantic_markers(
-        self, mock_conn, fake_shared_files
-    ):
+    def test_sibling_tool_calls_use_fallback_for_semantic_markers(self, mock_conn, fake_shared_files):
         """used_by with semantic markers (all_apm_providers_*) → fall back to hardcoded APM list."""
         from src.tools.analyze.shared_sections import section_shared_files_warning
 
@@ -155,9 +151,7 @@ class TestSharedFilesWarning:
             # Method should be inferred from file name
             assert '"payout"' in result
 
-    def test_exclude_task_id_skips_own_task_in_blind_eval(
-        self, mock_conn, fake_shared_files
-    ):
+    def test_exclude_task_id_skips_own_task_in_blind_eval(self, mock_conn, fake_shared_files):
         """exclude_task_id (LOO mode) must skip task_history lookup for the excluded task."""
         from src.tools.analyze.base import AnalysisContext
         from src.tools.analyze.shared_sections import section_shared_files_warning

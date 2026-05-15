@@ -1,0 +1,5 @@
+{
+  "model_key": "docs-mxbai-ft-run1",
+  "skipped_reason": "no_table",
+  "detail": "/workspace/code-rag-mcp/db/vectors.lance.docs.docs-mxbai-ft-run1 has no 'chunks' table"
+}
