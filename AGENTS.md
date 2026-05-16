@@ -213,35 +213,7 @@ scripts/scrape/extract_artifacts.py → scripts/build/build_index.py → scripts
 
 ---
 
-## Dead / Legacy
-
-Files deleted in the 2026-05-16 cleanup:
-
-| File | Status |
-|------|--------|
-| `ab_test_baseline.json` | ✅ deleted |
-| `eval_baseline.json` | ✅ deleted |
-| `benchmark_results.json` | ✅ deleted |
-| `graph-grpc-apm-payper.html` | ✅ deleted |
-| `scripts/maint/audit_index_gaps.py` | ✅ deleted |
-| `scripts/bench/bench_routing_e2e.py` | ✅ deleted |
-| `scripts/build/build_eval_rebuild_bundle.py` | ✅ deleted |
-| `scripts/build/build_eval_v2_llm_calibrated.py` | ✅ deleted |
-| `scripts/data/rescore_against_clean.py` | ✅ deleted |
-| `scripts/analysis/analyze_change_impact.py` (symlink) | ✅ deleted |
-| `scripts/analysis/analyze_developer_patterns.py` (symlink) | ✅ deleted |
-| `scripts/analysis/analyze_file_patterns.py` (symlink) | ✅ deleted |
-| `profiles/pay-com/scripts/analyze_change_impact.py` | ✅ deleted |
-| `profiles/pay-com/scripts/analyze_developer_patterns.py` | ✅ deleted |
-| `profiles/pay-com/scripts/analyze_file_patterns.py` | ✅ deleted |
-
-Still alive but note:
-- `scripts/maint/generate_housekeeping_report.py` — called by `docs_validate_all.sh`
-- `scripts/analysis/analyze_gaps.py` — symlink; imported by `auto_collect.py`
-- `config.json` (root) — legacy; used by `setup_wizard.py`, `src/config.py`
-- `patterns-export.json` — referenced by profile scripts
-
----
+## Open Questions
 
 ## Open Questions
 
