@@ -26,7 +26,7 @@ sys.path.insert(0, str(REPO_ROOT))
 import importlib.util  # noqa: E402
 
 _SPEC = importlib.util.spec_from_file_location(
-    "build_train_pairs_v2", REPO_ROOT / "scripts" / "build_train_pairs_v2.py"
+    "build_train_pairs_v2", REPO_ROOT / "scripts" / "build" / "build_train_pairs_v2.py"
 )
 assert _SPEC and _SPEC.loader
 btp = importlib.util.module_from_spec(_SPEC)

@@ -31,7 +31,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.eval_verdict import verdict_from_snapshot_dual  # noqa: E402
+from scripts.eval.eval_verdict import verdict_from_snapshot_dual  # noqa: E402
 
 _DEFAULT_SNAPSHOTS = (
     ("gte_v8_fallback", _REPO_ROOT / "profiles/pay-com/finetune_history/gte_v8_fallback.json"),

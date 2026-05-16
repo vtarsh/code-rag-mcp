@@ -12,7 +12,7 @@ import importlib.util
 import json
 from pathlib import Path
 
-_SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+_SCRIPTS = Path(__file__).resolve().parents[1] / "scripts" / "bench"
 
 
 def _load(name: str):

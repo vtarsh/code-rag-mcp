@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import eval_jidm as ej  # type: ignore[import-not-found]  # noqa: E402
+import scripts.eval.eval_jidm as ej  # type: ignore[import-not-found]  # noqa: E402
 
 # -----------------------
 # query_intent

@@ -17,7 +17,7 @@ import pytest
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.eval_verdict import (  # noqa: E402
+from scripts.eval.eval_verdict import (  # noqa: E402
     DELTA_HIT5_THRESHOLD,
     DELTA_R10_THRESHOLD,
     MIN_NET_IMPROVED,
@@ -78,8 +78,8 @@ class TestBuildDeltaNoneHandling:
 
     def _run_both(self, base, ft):
         """Both scripts' build_delta must now produce identical output."""
-        from scripts.eval_finetune import build_delta as ef_bd
-        from scripts.merge_eval_shards import build_delta as me_bd
+        from scripts.data.merge_eval_shards import build_delta as me_bd
+        from scripts.eval.eval_finetune import build_delta as ef_bd
 
         return ef_bd(base, ft), me_bd(base, ft)
 

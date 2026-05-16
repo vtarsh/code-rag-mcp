@@ -18,7 +18,7 @@ def labeler_module():
     """Import the script as a module for direct unit testing."""
     spec = importlib.util.spec_from_file_location(
         "label_v12_candidates_minilm",
-        REPO_ROOT / "scripts" / "label_v12_candidates_minilm.py",
+        REPO_ROOT / "scripts" / "data" / "label_v12_candidates_minilm.py",
     )
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)

@@ -27,7 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 _SPEC = importlib.util.spec_from_file_location(
-    "validate_provider_paths", REPO_ROOT / "scripts" / "validate_provider_paths.py"
+    "validate_provider_paths", REPO_ROOT / "scripts" / "maint" / "validate_provider_paths.py"
 )
 assert _SPEC and _SPEC.loader
 vpp = importlib.util.module_from_spec(_SPEC)

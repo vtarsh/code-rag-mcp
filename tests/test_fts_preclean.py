@@ -14,7 +14,7 @@ import sqlite3
 
 import pytest
 
-from scripts.prepare_finetune_data import preclean_for_fts
+from scripts.data.prepare_finetune_data import preclean_for_fts
 from src.search.fts import sanitize_fts_query
 
 

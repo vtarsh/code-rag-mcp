@@ -11,7 +11,7 @@ import re
 
 import pytest
 
-from scripts.prepare_finetune_data import (
+from scripts.data.prepare_finetune_data import (
     _default_query_tokens,
     verify_no_query_leakage,
 )

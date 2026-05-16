@@ -36,7 +36,7 @@ REQUIRED_FIELDS = ("query", "doc_path", "doc_text", "label", "query_id", "stratu
 def _load_builder():
     spec = importlib.util.spec_from_file_location(
         "build_rerank_pointwise_eval",
-        REPO_ROOT / "scripts" / "build_rerank_pointwise_eval.py",
+        REPO_ROOT / "scripts" / "build" / "build_rerank_pointwise_eval.py",
     )
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)

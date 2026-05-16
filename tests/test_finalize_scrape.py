@@ -21,14 +21,16 @@ sys.path.insert(0, str(REPO_ROOT))
 
 # Load the validator first so finalize_scrape's `vpp` reference resolves.
 _VPP_SPEC = importlib.util.spec_from_file_location(
-    "validate_provider_paths", REPO_ROOT / "scripts" / "validate_provider_paths.py"
+    "validate_provider_paths", REPO_ROOT / "scripts" / "maint" / "validate_provider_paths.py"
 )
 assert _VPP_SPEC and _VPP_SPEC.loader
 vpp_mod = importlib.util.module_from_spec(_VPP_SPEC)
 sys.modules["validate_provider_paths"] = vpp_mod
 _VPP_SPEC.loader.exec_module(vpp_mod)
 
-_FS_SPEC = importlib.util.spec_from_file_location("finalize_scrape", REPO_ROOT / "scripts" / "finalize_scrape.py")
+_FS_SPEC = importlib.util.spec_from_file_location(
+    "finalize_scrape", REPO_ROOT / "scripts" / "scrape" / "finalize_scrape.py"
+)
 assert _FS_SPEC and _FS_SPEC.loader
 fs = importlib.util.module_from_spec(_FS_SPEC)
 sys.modules["finalize_scrape"] = fs

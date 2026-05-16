@@ -12,7 +12,7 @@ import pytest
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.finetune_reranker import detect_listwise_format  # noqa: E402
+from scripts.data.finetune_reranker import detect_listwise_format  # noqa: E402
 
 
 class TestDetectListwiseFormat:
@@ -54,7 +54,7 @@ class TestDetectListwiseFormat:
 class TestConvertToListwiseScript:
     """End-to-end check that converter runs and produces sane listwise output."""
 
-    _SCRIPT = _REPO_ROOT / "scripts" / "convert_to_listwise.py"
+    _SCRIPT = _REPO_ROOT / "scripts" / "data" / "convert_to_listwise.py"
 
     def _make_pointwise(self, path: Path) -> None:
         rows = [

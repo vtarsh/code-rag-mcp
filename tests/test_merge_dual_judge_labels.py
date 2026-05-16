@@ -17,7 +17,7 @@ def merger_module():
     """Import the script as a module for direct unit testing."""
     spec = importlib.util.spec_from_file_location(
         "merge_dual_judge_labels",
-        REPO_ROOT / "scripts" / "merge_dual_judge_labels.py",
+        REPO_ROOT / "scripts" / "data" / "merge_dual_judge_labels.py",
     )
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)

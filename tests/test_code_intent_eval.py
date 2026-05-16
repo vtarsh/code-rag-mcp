@@ -30,7 +30,7 @@ REQUIRED_FIELDS = ("query", "query_id", "expected_paths", "stratum")
 def _load_builder():
     spec = importlib.util.spec_from_file_location(
         "build_code_eval",
-        REPO_ROOT / "scripts" / "build_code_eval.py",
+        REPO_ROOT / "scripts" / "build" / "build_code_eval.py",
     )
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)

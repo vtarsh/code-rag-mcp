@@ -17,7 +17,7 @@ def judge_module():
     import importlib.util
 
     spec = importlib.util.spec_from_file_location(
-        "churn_reranker_judge", REPO_ROOT / "scripts" / "churn_reranker_judge.py"
+        "churn_reranker_judge", REPO_ROOT / "scripts" / "analysis" / "churn_reranker_judge.py"
     )
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)

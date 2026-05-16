@@ -274,7 +274,7 @@ class HealthChecker:
         actual = len(
             [f for f in (REPO_ROOT / "profiles/pay-com/scripts").iterdir() if f.is_file() and f.suffix == ".py"]
         )
-        self._assert_count("profile scripts", 25, actual, line=448)
+        self._assert_count("profile scripts", 22, actual, line=448)
 
         # Profile: 4,087 docs files  (line 102)
         actual = self._count_files("profiles/pay-com/docs")

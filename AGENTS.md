@@ -102,7 +102,7 @@ The runtime is split into two processes: [`daemon.py`](daemon.py) is a persisten
 │   ├── index/                index builders
 │   │   └── builders/         chunkers, indexers, orchestrator, memguard (18 modules; see appendix below)
 │   └── tools/                MCP tools
-│       ├── analyze/          analyze_task package (13 modules)
+│       ├── analyze/          analyze_task package (11 modules)
 │       ├── context.py        context_builder tool
 │       ├── fields.py         trace_field tool
 │       ├── service.py        utility tools (repo_overview, list_repos, …)
@@ -151,7 +151,7 @@ The runtime is split into two processes: [`daemon.py`](daemon.py) is a persisten
 ├── extracted/                generated — extracted chunks / configs (gitignored)
 ├── logs/                     generated — daemon.log, tool_calls.jsonl (gitignored)
 ├── bench_runs/               generated — benchmark JSON dumps (gitignored, few baselines tracked)
-├── models/                   generated — fine-tuned reranker artifacts (mostly gitignored)
+├── models/                   ~~generated — fine-tuned reranker artifacts~~ (directory absent; artifacts live in profiles/pay-com/models/)
 ├── .secrets/                 gitignored — API keys, tokens
 ├── .ruff_cache/              generated lint cache
 ├── .pytest_cache/            generated test cache
@@ -163,7 +163,8 @@ The runtime is split into two processes: [`daemon.py`](daemon.py) is a persisten
     ├── debug/                ephemeral debug artifacts (git-tracked but ruff-excluded)
     ├── fix/                  historical fixed-issue records
     ├── worktrees/            ephemeral per-session branches (gitignored)
-    └── plans/                planning docs (untracked)
+    ├── plans/                planning docs (tracked — agents-md-rollout.md)
+    └── research/             research shards for AGENTS.md rollout
 ```
 
 ---
@@ -193,10 +194,10 @@ Every top-level item is classified so agents know what is safe to edit versus wh
 | `.secrets/` | **gitignored** | API keys, tokens, credentials |
 | `.ruff_cache/`, `.pytest_cache/` | **gitignored generated** | lint / test caches |
 | `.claude/rules/`, `.claude/docs/`, `.claude/agents/`, `.claude/skills/` | **git** | agent infrastructure |
-| `.claude/debug/` | **git** (ruff-excluded) | ephemeral debug artifacts (167 tracked files) |
+| `.claude/debug/` | **git** (ruff-excluded) | ephemeral debug artifacts (149 tracked files) |
 | `.claude/fix/` | **git** | historical fixed-issue records |
 | `.claude/worktrees/` | **gitignored** | ephemeral per-session branches |
-| `.claude/plans/` | **untracked** | planning docs (not committed, not ignored) |
+| `.claude/plans/` | **git** | planning docs (agents-md-rollout.md tracked) |
 | `config.json` (root) | **gitignored** | legacy root config (migrated to profile) |
 | `.active_profile` | **gitignored** | runtime state file |
 | `repo_state.json`, `clone_log.json`, `extract_log.json` | **gitignored** | runtime state |
@@ -333,14 +334,14 @@ Other profiles:
 
 | Script | Description |
 |--------|-------------|
-| [`scripts/build_index.py`](scripts/build_index.py) | Thin entry → `src.index.builders.build_index()` |
+| [`scripts/build/build_index.py`](scripts/build/build_index.py) | Thin entry → `src.index.builders.build_index()` |
 | [`scripts/build_vectors.py`](scripts/build_vectors.py) | Code-tower vectors (CodeRankEmbed / MiniLM) in LanceDB |
-| [`scripts/build_docs_vectors.py`](scripts/build_docs_vectors.py) | Docs-tower vectors (nomic-embed-text-v1.5) |
-| [`scripts/build_graph.py`](scripts/build_graph.py) | Dependency graph into `knowledge.db` |
-| [`scripts/embed_missing_vectors.py`](scripts/embed_missing_vectors.py) | Incremental backfill of missing chunk vectors |
-| [`scripts/extract_artifacts.py`](scripts/extract_artifacts.py) | Phase-1 artifact extractor (proto, docs, config, env, k8s, workflows, webhooks, CI) |
-| [`scripts/build_env_index.py`](scripts/build_env_index.py) | Parse `.env.example` / `consts.js` into `env_vars` table |
-| [`scripts/build_internal_traces.py`](scripts/build_internal_traces.py) | Parse CommonJS `require()` chains into `internal_traces` |
+| [`scripts/build/build_docs_vectors.py`](scripts/build/build_docs_vectors.py) | Docs-tower vectors (nomic-embed-text-v1.5) |
+| [`scripts/build/build_graph.py`](scripts/build/build_graph.py) | Dependency graph into `knowledge.db` |
+| [`scripts/data/embed_missing_vectors.py`](scripts/data/embed_missing_vectors.py) | Incremental backfill of missing chunk vectors |
+| [`scripts/scrape/extract_artifacts.py`](scripts/scrape/extract_artifacts.py) | Phase-1 artifact extractor (proto, docs, config, env, k8s, workflows, webhooks, CI) |
+| [`scripts/build/build_env_index.py`](scripts/build/build_env_index.py) | Parse `.env.example` / `consts.js` into `env_vars` table |
+| [`scripts/build/build_internal_traces.py`](scripts/build/build_internal_traces.py) | Parse CommonJS `require()` chains into `internal_traces` |
 | [`scripts/full_update.sh`](scripts/full_update.sh) | Master pipeline: lockfile → clone → extract → index → graph → vectors → docs vectors → blind-spot detection |
 | [`scripts/clone_repos.sh`](scripts/clone_repos.sh) | Shallow-clone all repos from a GitHub org |
 | [`scripts/run_with_timeout.sh`](scripts/run_with_timeout.sh) | Portable `timeout` for macOS (called by `full_update.sh`) |
@@ -350,45 +351,45 @@ Other profiles:
 
 | Script | Description |
 |--------|-------------|
-| [`scripts/benchmark_bench_v2.py`](scripts/benchmark_bench_v2.py) | Run `bench_v2` eval and emit metrics JSON |
-| [`scripts/bench_v2_gate.py`](scripts/bench_v2_gate.py) | Regression gate: exits 1 on >2pp regression |
-| [`scripts/sample_bench_v2.py`](scripts/sample_bench_v2.py) | Stratified sampler from real MCP traffic |
-| [`scripts/bootstrap_eval_ci.py`](scripts/bootstrap_eval_ci.py) | Paired bootstrap 95% CI for reranker deltas |
-| [`scripts/benchmark_flows.py`](scripts/benchmark_flows.py) | Flow-based query benchmark |
-| [`scripts/benchmark_queries.py`](scripts/benchmark_queries.py) | Conceptual query benchmark |
-| [`scripts/benchmark_realworld.py`](scripts/benchmark_realworld.py) | Real-world scenario benchmark |
-| [`scripts/benchmark_recall.py`](scripts/benchmark_recall.py) | Recall-focused benchmark |
-| [`scripts/benchmark_file_recall.py`](scripts/benchmark_file_recall.py) | File-level recall benchmark |
-| [`scripts/autoresearch_eval.py`](scripts/autoresearch_eval.py) | Rank-sensitive MRR eval for autoresearch loop |
-| [`scripts/autoresearch_loop.py`](scripts/autoresearch_loop.py) | Karpathy-style RAG scalar tuning loop |
-| [`scripts/detect_blind_spots.py`](scripts/detect_blind_spots.py) | Detect structurally important but search-invisible repos |
-| [`scripts/eval_verdict.py`](scripts/eval_verdict.py) | **SSOT** for reranker eval verdict logic |
-| [`scripts/eval_finetune.py`](scripts/eval_finetune.py) | Full fine-tune evaluation with shard support |
-| [`scripts/merge_eval_shards.py`](scripts/merge_eval_shards.py) | Merge N shard JSONs into one snapshot |
-| [`scripts/eval_jidm.py`](scripts/eval_jidm.py) | IM-NDCG judge-free direction metric |
-| [`scripts/eval_harness.py`](scripts/eval_harness.py) | Blind eval harness for `analyze_task` |
-| [`scripts/ab_lost_tickets.py`](scripts/ab_lost_tickets.py) | A/B analysis on lost tickets |
-| [`scripts/proactivity_eval.py`](scripts/proactivity_eval.py) | Does `analyze_task` flag known reviewer bugs? |
+| [`scripts/bench/benchmark_bench_v2.py`](scripts/bench/benchmark_bench_v2.py) | Run `bench_v2` eval and emit metrics JSON |
+| [`scripts/bench/bench_v2_gate.py`](scripts/bench/bench_v2_gate.py) | Regression gate: exits 1 on >2pp regression |
+| [`scripts/bench/sample_bench_v2.py`](scripts/bench/sample_bench_v2.py) | Stratified sampler from real MCP traffic |
+| [`scripts/eval/bootstrap_eval_ci.py`](scripts/eval/bootstrap_eval_ci.py) | Paired bootstrap 95% CI for reranker deltas |
+| [`scripts/bench/benchmark_flows.py`](scripts/bench/benchmark_flows.py) | Flow-based query benchmark |
+| [`scripts/bench/benchmark_queries.py`](scripts/bench/benchmark_queries.py) | Conceptual query benchmark |
+| [`scripts/bench/benchmark_realworld.py`](scripts/bench/benchmark_realworld.py) | Real-world scenario benchmark |
+| [`scripts/bench/benchmark_recall.py`](scripts/bench/benchmark_recall.py) | Recall-focused benchmark |
+| [`scripts/bench/benchmark_file_recall.py`](scripts/bench/benchmark_file_recall.py) | File-level recall benchmark |
+| [`scripts/analysis/autoresearch_eval.py`](scripts/analysis/autoresearch_eval.py) | Rank-sensitive MRR eval for autoresearch loop |
+| [`scripts/analysis/autoresearch_loop.py`](scripts/analysis/autoresearch_loop.py) | Karpathy-style RAG scalar tuning loop |
+| [`scripts/analysis/detect_blind_spots.py`](scripts/analysis/detect_blind_spots.py) | Detect structurally important but search-invisible repos |
+| [`scripts/eval/eval_verdict.py`](scripts/eval/eval_verdict.py) | **SSOT** for reranker eval verdict logic |
+| [`scripts/eval/eval_finetune.py`](scripts/eval/eval_finetune.py) | Full fine-tune evaluation with shard support |
+| [`scripts/data/merge_eval_shards.py`](scripts/data/merge_eval_shards.py) | Merge N shard JSONs into one snapshot |
+| [`scripts/eval/eval_jidm.py`](scripts/eval/eval_jidm.py) | IM-NDCG judge-free direction metric |
+| [`scripts/eval/eval_harness.py`](scripts/eval/eval_harness.py) | Blind eval harness for `analyze_task` |
+| [`scripts/analysis/ab_lost_tickets.py`](scripts/analysis/ab_lost_tickets.py) | A/B analysis on lost tickets |
+| [`scripts/analysis/proactivity_eval.py`](scripts/analysis/proactivity_eval.py) | Does `analyze_task` flag known reviewer bugs? |
 | [`scripts/sanity_v2_gate.py`](scripts/sanity_v2_gate.py) | Sanity-check v1 vs v2 verdict flips |
 
 ### Analysis / Auditing
 
 | Script | Description |
 |--------|-------------|
-| [`scripts/analyze_calls.py`](scripts/analyze_calls.py) | MCP call log analysis: usage, frequency, timing, sessions |
-| [`scripts/analyze_churn.py`](scripts/analyze_churn.py) | Post-process churn replay: slice metrics, export diff-pairs |
-| [`scripts/churn_replay.py`](scripts/churn_replay.py) | Top-K churn replay between two rerankers |
-| [`scripts/churn_reranker_judge.py`](scripts/churn_reranker_judge.py) | Neutral MiniLM judge for churn diff pairs (zero API cost) |
-| [`scripts/churn_p1c_validate.py`](scripts/churn_p1c_validate.py) | Re-run v8 with P1c pipeline; measure ranking flips |
-| [`scripts/analyze_feedback.py`](scripts/analyze_feedback.py) | Search feedback log analysis |
-| [`scripts/analyze_session_quality.py`](scripts/analyze_session_quality.py) | Session quality from `tool_calls.jsonl` |
-| [`scripts/validate_recipe.py`](scripts/validate_recipe.py) | Validate recipe repo predictions against ground truth |
-| [`scripts/detect_doc_staleness.py`](scripts/detect_doc_staleness.py) | Flag curated docs with newer upstream commits |
-| [`scripts/generate_housekeeping_report.py`](scripts/generate_housekeeping_report.py) | Docs housekeeping report (duplicates, divergences, reciprocity) |
-| [`scripts/finalize_scrape.py`](scripts/finalize_scrape.py) | Post-`/scrape-docs` validator / auto-injector |
-| [`scripts/build_audit_context.py`](scripts/build_audit_context.py) | Structured markdown context for audit agent prompts |
+| [`scripts/analysis/analyze_calls.py`](scripts/analysis/analyze_calls.py) | MCP call log analysis: usage, frequency, timing, sessions |
+| [`scripts/analysis/analyze_churn.py`](scripts/analysis/analyze_churn.py) | Post-process churn replay: slice metrics, export diff-pairs |
+| [`scripts/analysis/churn_replay.py`](scripts/analysis/churn_replay.py) | Top-K churn replay between two rerankers |
+| [`scripts/analysis/churn_reranker_judge.py`](scripts/analysis/churn_reranker_judge.py) | Neutral MiniLM judge for churn diff pairs (zero API cost) |
+| [`scripts/analysis/churn_p1c_validate.py`](scripts/analysis/churn_p1c_validate.py) | Re-run v8 with P1c pipeline; measure ranking flips |
+| [`scripts/analysis/analyze_feedback.py`](scripts/analysis/analyze_feedback.py) | Search feedback log analysis |
+| [`scripts/analysis/analyze_session_quality.py`](scripts/analysis/analyze_session_quality.py) | Session quality from `tool_calls.jsonl` |
+| [`scripts/maint/validate_recipe.py`](scripts/maint/validate_recipe.py) | Validate recipe repo predictions against ground truth |
+| [`scripts/analysis/detect_doc_staleness.py`](scripts/analysis/detect_doc_staleness.py) | Flag curated docs with newer upstream commits |
+| [`scripts/maint/generate_housekeeping_report.py`](scripts/maint/generate_housekeeping_report.py) | Docs housekeeping report (duplicates, divergences, reciprocity) |
+| [`scripts/scrape/finalize_scrape.py`](scripts/scrape/finalize_scrape.py) | Post-`/scrape-docs` validator / auto-injector |
+| [`scripts/build/build_audit_context.py`](scripts/build/build_audit_context.py) | Structured markdown context for audit agent prompts |
 
-> **MCP Call Tracker:** Every tool call is logged to `logs/tool_calls.jsonl` by the daemon (tool name, args, duration, result preview, source). Use `scripts/analyze_calls.py` for usage summaries, `scripts/analyze_calls.py --last 20` for recent calls, and `scripts/analyze_calls.py --sessions` for per-session breakdown.
+> **MCP Call Tracker:** Every tool call is logged to `logs/tool_calls.jsonl` by the daemon (tool name, args, duration, result preview, source). Use `scripts/analysis/analyze_calls.py` for usage summaries, `scripts/analysis/analyze_calls.py --last 20` for recent calls, and `scripts/analysis/analyze_calls.py --sessions` for per-session breakdown.
 
 ### Data Collection (Jira, CI, tasks)
 
@@ -396,19 +397,19 @@ Most are **symlinks** to `profiles/pay-com/scripts/` (gitignored). Non-symlink:
 
 | Script | Description |
 |--------|-------------|
-| [`scripts/build_audit_context.py`](scripts/build_audit_context.py) | Structured audit context from `knowledge.db` + flow YAMLs |
+| [`scripts/build/build_audit_context.py`](scripts/build/build_audit_context.py) | Structured audit context from `knowledge.db` + flow YAMLs |
 
 ### Fine-Tuning / ML
 
 | Script | Description |
 |--------|-------------|
-| [`scripts/prepare_finetune_data.py`](scripts/prepare_finetune_data.py) | CrossEncoder fine-tune data from Jira GT |
-| [`scripts/finetune_reranker.py`](scripts/finetune_reranker.py) | Fine-tune CrossEncoder (streaming, low-memory, MPS hygiene) |
-| [`scripts/build_combined_train.py`](scripts/build_combined_train.py) | Combine code + docs training sources |
-| [`scripts/build_shadow_types.py`](scripts/build_shadow_types.py) | Per-provider shadow-type YAML |
-| [`scripts/label_v12_candidates_minilm.py`](scripts/v12_candidates.py) | Local MiniLM judge for candidate labeling |
-| [`scripts/v12_candidates.py`](scripts/v12_candidates.py) | Gold-label candidate queue from real MCP queries |
-| [`scripts/convert_to_listwise.py`](scripts/convert_to_listwise.py) | Pointwise → listwise format conversion |
+| [`scripts/data/prepare_finetune_data.py`](scripts/data/prepare_finetune_data.py) | CrossEncoder fine-tune data from Jira GT |
+| [`scripts/data/finetune_reranker.py`](scripts/data/finetune_reranker.py) | Fine-tune CrossEncoder (streaming, low-memory, MPS hygiene) |
+| [`scripts/build/build_combined_train.py`](scripts/build/build_combined_train.py) | Combine code + docs training sources |
+| [`scripts/build/build_shadow_types.py`](scripts/build/build_shadow_types.py) | Per-provider shadow-type YAML |
+| [`scripts/data/label_v12_candidates_minilm.py`](scripts/data/v12_candidates.py) | Local MiniLM judge for candidate labeling |
+| [`scripts/data/v12_candidates.py`](scripts/data/v12_candidates.py) | Gold-label candidate queue from real MCP queries |
+| [`scripts/data/convert_to_listwise.py`](scripts/data/convert_to_listwise.py) | Pointwise → listwise format conversion |
 | [`scripts/runpod/full_pipeline.py`](scripts/runpod/full_pipeline.py) | End-to-end RunPod pipeline (spawn → smoke → train → bench → push → stop) |
 | [`scripts/runpod/oneshot_docs.py`](scripts/runpod/oneshot_docs.py) | One-shot docs-tower orchestrator |
 | [`scripts/runpod/oneshot_rerank.py`](scripts/runpod/oneshot_rerank.py) | One-shot reranker orchestrator |
@@ -421,12 +422,13 @@ Most are **symlinks** to `profiles/pay-com/scripts/` (gitignored). Non-symlink:
 | Script | Description |
 |--------|-------------|
 | [`scripts/_common.py`](scripts/_common.py) | Shared boilerplate: `setup_paths()`, `daemon_post()` |
-| [`scripts/bench_utils.py`](scripts/bench_utils.py) | Shared benchmark utilities (imported by many bench scripts) |
+| [`scripts/bench/bench_utils.py`](scripts/bench/bench_utils.py) | Shared benchmark utilities (imported by many bench scripts) |
 | [`scripts/visualize_graph.py`](scripts/visualize_graph.py) | Generate `graph.html` from `knowledge.db` |
 | [`scripts/graph_template.html`](scripts/graph_template.html) | Sigma.js WebGL template for graph viz |
 | [`scripts/parse_jaeger_trace.py`](scripts/parse_jaeger_trace.py) | Parse Jaeger traces into compact summaries |
-| [`scripts/sample_real_queries.py`](scripts/sample_real_queries.py) | Sample real MCP queries for eval labeling |
-| [`scripts/mine_co_changes.py`](scripts/mine_co_changes.py) | Mine co-change rules from `task_history` |
+| [`scripts/data/sample_real_queries.py`](scripts/data/sample_real_queries.py) | Sample real MCP queries for eval labeling |
+| [`scripts/analysis/mine_co_changes.py`](scripts/analysis/mine_co_changes.py) | Mine co-change rules from `task_history` |
+| [`scripts/health_check_agents_md.py`](scripts/health_check_agents_md.py) | Validate AGENTS.md links, counts, storage, orphans |
 
 ### Additional Scripts Present on Disk
 
@@ -434,31 +436,31 @@ The following scripts exist but are not catalogued in detail above (some are git
 
 | Script | Category |
 |--------|----------|
-| [`scripts/benchmark_doc_indexing_ab.py`](scripts/benchmark_doc_indexing_ab.py) | Benchmark |
-| [`scripts/benchmark_doc_intent.py`](scripts/benchmark_doc_intent.py) | Benchmark |
-| [`scripts/benchmark_rerank_ab.py`](scripts/benchmark_rerank_ab.py) | Benchmark |
-| [`scripts/build_clean_jira_eval.py`](scripts/build_clean_jira_eval.py) | Build |
-| [`scripts/build_code_eval.py`](scripts/build_code_eval.py) | Build |
-| [`scripts/build_rerank_pointwise_eval.py`](scripts/build_rerank_pointwise_eval.py) | Build |
-| [`scripts/build_train_pairs_v2.py`](scripts/build_train_pairs_v2.py) | Build |
-| [`scripts/dedup_docs_lance.py`](scripts/dedup_docs_lance.py) | Index |
+| [`scripts/bench/benchmark_doc_indexing_ab.py`](scripts/bench/benchmark_doc_indexing_ab.py) | Benchmark |
+| [`scripts/bench/benchmark_doc_intent.py`](scripts/bench/benchmark_doc_intent.py) | Benchmark |
+| [`scripts/bench/benchmark_rerank_ab.py`](scripts/bench/benchmark_rerank_ab.py) | Benchmark |
+| [`scripts/build/build_clean_jira_eval.py`](scripts/build/build_clean_jira_eval.py) | Build |
+| [`scripts/build/build_code_eval.py`](scripts/build/build_code_eval.py) | Build |
+| [`scripts/build/build_rerank_pointwise_eval.py`](scripts/build/build_rerank_pointwise_eval.py) | Build |
+| [`scripts/build/build_train_pairs_v2.py`](scripts/build/build_train_pairs_v2.py) | Build |
+| [`scripts/data/dedup_docs_lance.py`](scripts/data/dedup_docs_lance.py) | Index |
 | [`scripts/docs_validate_all.sh`](scripts/docs_validate_all.sh) | Validation (launchd daily) |
 | [`scripts/eval_parallel.sh`](scripts/eval_parallel.sh) | Evaluation |
-| [`scripts/local_code_bench.py`](scripts/local_code_bench.py) | Benchmark |
-| [`scripts/local_smoke_candidates.py`](scripts/local_smoke_candidates.py) | Benchmark |
-| [`scripts/merge_dual_judge_labels.py`](scripts/merge_dual_judge_labels.py) | Evaluation |
+| [`scripts/bench/local_code_bench.py`](scripts/bench/local_code_bench.py) | Benchmark |
+| [`scripts/data/local_smoke_candidates.py`](scripts/data/local_smoke_candidates.py) | Benchmark |
+| [`scripts/data/merge_dual_judge_labels.py`](scripts/data/merge_dual_judge_labels.py) | Evaluation |
 | [`scripts/runpod/bench_large_models.py`](scripts/runpod/bench_large_models.py) | ML / RunPod |
 | [`scripts/runpod/cost_guard.py`](scripts/runpod/cost_guard.py) | ML / RunPod |
 | [`scripts/runpod/pod_watcher.py`](scripts/runpod/pod_watcher.py) | ML / RunPod |
 | [`scripts/runpod/setup_env.sh`](scripts/runpod/setup_env.sh) | ML / RunPod |
-| [`scripts/v12_candidates_regen_doc.py`](scripts/v12_candidates_regen_doc.py) | ML |
-| [`scripts/validate_doc_anchors.py`](scripts/validate_doc_anchors.py) | Validation |
-| [`scripts/validate_doc_file_line_refs.py`](scripts/validate_doc_file_line_refs.py) | Validation |
-| [`scripts/validate_doc_frontmatter.py`](scripts/validate_doc_frontmatter.py) | Validation |
-| [`scripts/validate_doc_related_repos.py`](scripts/validate_doc_related_repos.py) | Validation |
-| [`scripts/validate_doc_size.py`](scripts/validate_doc_size.py) | Validation |
-| [`scripts/validate_overlay_vs_proto.py`](scripts/validate_overlay_vs_proto.py) | Validation |
-| [`scripts/validate_provider_paths.py`](scripts/validate_provider_paths.py) | Validation |
+| [`scripts/data/v12_candidates_regen_doc.py`](scripts/data/v12_candidates_regen_doc.py) | ML |
+| [`scripts/maint/validate_doc_anchors.py`](scripts/maint/validate_doc_anchors.py) | Validation |
+| [`scripts/maint/validate_doc_file_line_refs.py`](scripts/maint/validate_doc_file_line_refs.py) | Validation |
+| [`scripts/maint/validate_doc_frontmatter.py`](scripts/maint/validate_doc_frontmatter.py) | Validation |
+| [`scripts/maint/validate_doc_related_repos.py`](scripts/maint/validate_doc_related_repos.py) | Validation |
+| [`scripts/maint/validate_doc_size.py`](scripts/maint/validate_doc_size.py) | Validation |
+| [`scripts/maint/validate_overlay_vs_proto.py`](scripts/maint/validate_overlay_vs_proto.py) | Validation |
+| [`scripts/maint/validate_provider_paths.py`](scripts/maint/validate_provider_paths.py) | Validation |
 
 ---
 
@@ -518,30 +520,30 @@ Items detected by cross-grep, git log, and Makefile analysis. Confidence levels:
 
 | Item | Evidence |
 |------|----------|
-| `ab_test_baseline.json` (root) | 125 B, 8+ weeks old, zero consumers |
-| `eval_baseline.json` (root) | 502 B, 8+ weeks old, zero consumers |
-| `patterns-export.json` (root) | 2.9 KB; pay-com scripts expect it in `~/.pay-knowledge/`, not repo root |
-| `config.json` (root) | Legacy root config; `.gitignore` says "migrated to profile" |
-| `profiles/pay-com/.archive/2026-04-17-cleanup/` | 18 gitignored files; only referenced by deprecated scan report |
-| `.claude/fix/` (`F1_done.md`, `F2_done.md`, `F3_done.md`, `summary.md`) | Completed todo list; not referenced by active code |
 
 ### SUSPECTED Dead
 
 | Item | Evidence |
 |------|----------|
-| `scripts/analyze_change_impact.py` | 719 LOC, zero imports, 8+ weeks old, exists but likely unused |
-| `scripts/audit_index_gaps.py` | 370 LOC, never committed, no imports, exists but likely unused |
-| `scripts/bench_routing_e2e.py` | Untracked, never committed, no imports, exists but likely unused |
-| `scripts/build_eval_rebuild_bundle.py` | Untracked, never committed, no imports, exists but likely unused |
-| `scripts/build_eval_v2_llm_calibrated.py` | Untracked, never committed, no imports, exists but likely unused |
-| `scripts/rescore_against_clean.py` | Untracked, never committed, no imports (may be one-off CLI) |
-| `scripts/generate_housekeeping_report.py` | Untracked; only caller is `docs_validate_all.sh`, which itself lacks active CI hook evidence |
-| `scripts/ab_lost_tickets.py` | Tracked, 3 weeks old, 1 reference only |
-| `scripts/analyze_calls.py` | Tracked, 3 weeks old, 1 reference only |
-| `scripts/analyze_session_quality.py` | Tracked, 5 weeks old, 1 reference only |
-| `scripts/autoresearch_eval.py` | Tracked, 5 weeks old, 1 reference only |
-| `scripts/benchmark_file_recall.py` | Tracked, 4 weeks old, 1 reference only |
+| `scripts/analysis/analyze_change_impact.py (DELETED)` | 719 LOC, zero imports, 8+ weeks old, exists but likely unused |
+| `scripts/maint/audit_index_gaps.py (DELETED)` | 370 LOC, never committed, no imports, exists but likely unused |
+| `scripts/bench/bench_routing_e2e.py (DELETED)` | Untracked, never committed, no imports, exists but likely unused |
+| `scripts/build/build_eval_rebuild_bundle.py (DELETED)` | Untracked, never committed, no imports, exists but likely unused |
+| `scripts/build/build_eval_v2_llm_calibrated.py (DELETED)` | Untracked, never committed, no imports, exists but likely unused |
+| `scripts/data/rescore_against_clean.py (DELETED)` | Untracked, never committed, no imports (may be one-off CLI) |
+| `scripts/maint/generate_housekeeping_report.py` | Untracked; only caller is `docs_validate_all.sh`, which itself lacks active CI hook evidence |
+| `scripts/analysis/ab_lost_tickets.py` | Tracked, 3 weeks old, 1 reference only |
+| `scripts/analysis/analyze_calls.py` | Tracked, 3 weeks old, 1 reference only |
+| `scripts/analysis/analyze_session_quality.py` | Tracked, 5 weeks old, 1 reference only |
+| `scripts/analysis/autoresearch_eval.py` | Tracked, 5 weeks old, 1 reference only |
+| `scripts/bench/benchmark_file_recall.py` | Tracked, 4 weeks old, 1 reference only |
 | `scripts/benchmark_investigation.py` | Tracked, 5 weeks old, 1 reference only |
+| `ab_test_baseline.json` (root) | 125 B, 8+ weeks old, zero consumers, exists on disk |
+| `eval_baseline.json` (root) | 502 B, 8+ weeks old, zero consumers, exists on disk |
+| `patterns-export.json` (root) | 2.9 KB; pay-com scripts expect it in `~/.pay-knowledge/`, not repo root; exists on disk |
+| `config.json` (root) | Legacy root config; `.gitignore` says "migrated to profile"; exists on disk |
+| `profiles/pay-com/.archive/2026-04-17-cleanup/` | 18 gitignored files; only referenced by deprecated scan report; exists on disk |
+| `.claude/fix/` (`F1_done.md`, `F2_done.md`, `F3_done.md`, `summary.md`) | Completed todo list; not referenced by active code; exists on disk |
 | `setup_wizard.py` | Tracked, 8+ weeks old; still wired into `Makefile` but may be superseded by manual onboarding |
 
 ### OUTDATED (but might revive)
@@ -604,7 +606,7 @@ Many `src/` modules are imported and used but lack dedicated unit tests. This is
 4. **Profile files unexpectedly untracked** — Some curated `profiles/pay-com/` config files are untracked despite being part of the private repo clone. Is this an expected `.gitignore` interaction or a sync gap?
 5. **Tests failing** — 20 collection errors are known from parallel sessions. These are acknowledged but not yet fixed. They do not block AGENTS.md work.
 6. **`setup_wizard.py` stale but wired** — Last touched 8+ weeks ago. Still referenced by `Makefile` (`make init`). May need refresh or deprecation.
-7. **`scripts/runpod/prepare_train_data.py` missing** — Referenced in tests and `NEXT_SESSION_PROMPT.md`, but the file does not exist in `scripts/runpod/`. Documented gap in `NEXT_SESSION_PROMPT.md`.
+7. **`scripts/runpod/prepare_train_data.py`** — Referenced in tests and `NEXT_SESSION_PROMPT.md`. File exists at `scripts/runpod/prepare_train_data.py`.
 8. **Doc validators not in git** — Six `validate_doc_*.py` scripts are actively used by `docs_validate_all.sh` but never committed. Should they be tracked or kept ephemeral?
 9. **`.claude/plans/` untracked** — Contains `agents-md-rollout.md`; not committed, not ignored. Intentional planning infrastructure or should it be tracked?
 

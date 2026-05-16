@@ -20,7 +20,7 @@ import pytest
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.eval_finetune import (  # noqa: E402
+from scripts.eval.eval_finetune import (  # noqa: E402
     DELTA_FILE_R10_THRESHOLD,
     GATE_VERSION_V1,
     GATE_VERSION_V2,
@@ -165,7 +165,7 @@ def test_delta_file_r10_threshold_value():
 # verify the file-level-GT gate, which is thematically owned by this module.
 # The existing test_eval_verdict.py tests continue to pin v1 behavior.
 
-from scripts.eval_verdict import (  # noqa: E402
+from scripts.eval.eval_verdict import (  # noqa: E402
     DELTA_FILE_R10_THRESHOLD_V2,
     DELTA_HIT5_THRESHOLD,
     DELTA_R10_THRESHOLD,
@@ -426,7 +426,7 @@ def test_dispatcher_v2_unavailable_when_legacy_snapshot():
 import json as _json  # noqa: E402
 import subprocess  # noqa: E402
 
-from scripts.prepare_finetune_data import pick_test_tasks_stratified  # noqa: E402
+from scripts.data.prepare_finetune_data import pick_test_tasks_stratified  # noqa: E402
 
 
 def _mk_task(tid: str, files: list[str]) -> dict:

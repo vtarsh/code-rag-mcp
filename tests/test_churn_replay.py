@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import churn_replay as cr  # type: ignore[import-not-found]  # noqa: E402
+import scripts.analysis.churn_replay as cr  # type: ignore[import-not-found]  # noqa: E402
 
 
 def _fake_result(repo: str, file_path: str) -> dict:

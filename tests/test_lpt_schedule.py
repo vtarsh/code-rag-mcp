@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.eval_finetune import _lpt_schedule
+from scripts.eval.eval_finetune import _lpt_schedule
 
 
 def _make_tasks(n: int, prefix: str = "T") -> list[dict]:

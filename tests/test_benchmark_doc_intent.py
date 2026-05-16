@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import benchmark_doc_intent as bdi  # noqa: E402
+import scripts.bench.benchmark_doc_intent as bdi  # noqa: E402
 
 # --- Synthetic reranker -----------------------------------------------------
 

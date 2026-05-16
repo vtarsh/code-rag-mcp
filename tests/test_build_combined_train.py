@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts import build_combined_train as bct
+from scripts.build import build_combined_train as bct
 
 # ----- fixtures --------------------------------------------------------------
 

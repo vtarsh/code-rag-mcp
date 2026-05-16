@@ -16,7 +16,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "sample_real_queries.py"
+_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "data" / "sample_real_queries.py"
 _SPEC = importlib.util.spec_from_file_location("sample_real_queries", _SCRIPT)
 assert _SPEC and _SPEC.loader
 sample_real_queries = importlib.util.module_from_spec(_SPEC)

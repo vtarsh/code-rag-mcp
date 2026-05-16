@@ -6,7 +6,7 @@ from pathlib import Path
 # Ensure scripts/ is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-from build_index import (
+from scripts.build.build_index import (
     MAX_CHUNK,
     MIN_CHUNK,
     chunk_code,

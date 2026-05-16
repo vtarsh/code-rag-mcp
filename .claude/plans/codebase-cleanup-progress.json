@@ -1,0 +1,2925 @@
+{
+  "session_id": "cleanup-2026-05-16",
+  "start_time": "2026-05-15T23:49:18.036562+00:00",
+  "end_time": null,
+  "status": "in_progress",
+  "repo": "~/.code-rag-mcp",
+  "branch": null,
+  "baseline": {
+    "pytest_collection_errors": 0,
+    "git_unstaged_count": 7,
+    "scripts_count": 100,
+    "health_check_passed": true
+  },
+  "phases": [
+    {
+      "name": "bootstrap",
+      "label": "Phase 0: Bootstrap",
+      "status": "done",
+      "depends_on": [],
+      "agents": [
+        {
+          "id": "B0",
+          "name": "Bootstrap",
+          "task": "Initialize progress file, record baselines, verify git status",
+          "status": "done",
+          "started_at": "2026-05-15T23:49:18.036713+00:00",
+          "finished_at": "2026-05-15T23:49:47.751711+00:00",
+          "result": {
+            "git_staged": 7,
+            "pytest_collected": 1049,
+            "pytest_errors": 0,
+            "scripts_count": 100,
+            "health_check": "PASS"
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "research",
+      "label": "Phase 1: Research",
+      "status": "done",
+      "depends_on": [
+        "bootstrap"
+      ],
+      "agents": [
+        {
+          "id": "R1",
+          "name": "Scripts-Usage",
+          "task": "Map every script to its consumers across src/, tests/, Makefile, pyproject.toml",
+          "status": "done",
+          "started_at": "2026-05-15T23:49:47.751711+00:00",
+          "finished_at": "2026-05-16T00:00:55.807475+00:00",
+          "result": {
+            "_common.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md",
+                "tests/test_scripts_common.py"
+              ],
+              "imported_by": [
+                "scripts/benchmark_investigation.py",
+                "scripts/churn_replay.py",
+                "scripts/validate_recipe.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "ab_lost_tickets.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/docs/_deprecated_scan_report.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "analyze_calls.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/bench/BENCH_REDESIGN_PROPOSAL.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "analyze_change_impact.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "analyze_churn.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/AGENTS.md",
+                "tests/test_analyze_churn.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "analyze_developer_patterns.py": {
+              "consumers": [
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/scripts/analyze_developer_patterns.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "analyze_feedback.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md",
+                "src/feedback.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "analyze_file_patterns.py": {
+              "consumers": [
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/scripts/analyze_file_patterns.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "analyze_gaps.py": {
+              "consumers": [
+                "TESTING.md",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/scripts/analyze_gaps.py",
+                "profiles/pay-com/scripts/auto_collect.py"
+              ],
+              "imported_by": [
+                "scripts/auto_collect.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "analyze_session_quality.py": {
+              "consumers": [
+                "AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "audit_index_gaps.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "auto_collect.py": {
+              "consumers": [
+                "TESTING.md",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/ROADMAP.md",
+                "profiles/pay-com/install.sh",
+                "profiles/pay-com/scripts/auto_collect.py",
+                "profiles/pay-com/scripts/ci-pattern-checker.py"
+              ],
+              "imported_by": [
+                "scripts/ci-pattern-checker.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "autoresearch_eval.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md"
+              ],
+              "imported_by": [
+                "scripts/autoresearch_loop.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "autoresearch_loop.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md"
+              ],
+              "imported_by": [
+                "scripts/churn_reranker_judge.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "bench_routing_e2e.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "bench_utils.py": {
+              "consumers": [
+                "AGENTS.md"
+              ],
+              "imported_by": [
+                "scripts/autoresearch_eval.py",
+                "scripts/benchmark_flows.py",
+                "scripts/benchmark_queries.py",
+                "scripts/benchmark_realworld.py",
+                "scripts/detect_blind_spots.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "bench_v2_gate.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/bench/BENCH_REDESIGN_PROPOSAL.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md"
+              ],
+              "imported_by": [
+                "scripts/benchmark_bench_v2.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "benchmark_bench_v2.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/bench/BENCH_REDESIGN_PROPOSAL.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md"
+              ],
+              "imported_by": [
+                "scripts/bench_v2_gate.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "benchmark_doc_indexing_ab.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md"
+              ],
+              "imported_by": [
+                "scripts/benchmark_doc_intent.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "benchmark_doc_intent.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md",
+                "profiles/pay-com/RECALL-TRACKER.md",
+                "tests/test_benchmark_doc_intent.py",
+                "tests/test_runpod_lifecycle.py"
+              ],
+              "imported_by": [
+                "scripts/bench_routing_e2e.py",
+                "scripts/build_code_eval.py",
+                "scripts/local_code_bench.py",
+                "scripts/runpod/bench_large_models.py",
+                "scripts/runpod/full_pipeline.py",
+                "scripts/runpod/oneshot_docs.py",
+                "scripts/runpod/oneshot_rerank.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "benchmark_file_recall.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/RECALL-TRACKER.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "benchmark_flows.py": {
+              "consumers": [
+                "AGENTS.md",
+                "TESTING.md",
+                "profiles/example/benchmarks.yaml",
+                "profiles/my-org/benchmarks.yaml",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/bench/BENCH_REDESIGN_PROPOSAL.md",
+                "profiles/pay-com/benchmarks.yaml"
+              ],
+              "imported_by": [
+                "scripts/bench_utils.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "benchmark_investigation.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/test_ground_truth.yaml"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "benchmark_queries.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md",
+                "TESTING.md",
+                "profiles/example/benchmarks.yaml",
+                "profiles/my-org/benchmarks.yaml",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/bench/BENCH_REDESIGN_PROPOSAL.md",
+                "profiles/pay-com/benchmarks.yaml",
+                "profiles/pay-com/docs/_deprecated_scan_report.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md",
+                "profiles/pay-com/finetune_history/rescore_2026-04-20.md",
+                "scripts/full_update.sh"
+              ],
+              "imported_by": [
+                "scripts/autoresearch_eval.py",
+                "scripts/autoresearch_loop.py",
+                "scripts/bench_utils.py",
+                "scripts/benchmark_flows.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "benchmark_realworld.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md",
+                "TESTING.md",
+                "profiles/example/benchmarks.yaml",
+                "profiles/my-org/benchmarks.yaml",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/bench/BENCH_REDESIGN_PROPOSAL.md",
+                "profiles/pay-com/benchmarks.yaml",
+                "profiles/pay-com/docs/_deprecated_scan_report.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md",
+                "profiles/pay-com/finetune_history/rescore_2026-04-20.md",
+                "scripts/full_update.sh"
+              ],
+              "imported_by": [
+                "scripts/autoresearch_loop.py",
+                "scripts/bench_utils.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "benchmark_recall.py": {
+              "consumers": [
+                "AGENTS.md",
+                "TESTING.md",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/RECALL-TRACKER.md",
+                "profiles/pay-com/docs/_deprecated_scan_report.md",
+                "src/tools/analyze/__init__.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "benchmark_rerank_ab.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/RECALL-TRACKER.md",
+                "profiles/pay-com/ROADMAP.md"
+              ],
+              "imported_by": [
+                "scripts/eval_finetune.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "bootstrap_eval_ci.py": {
+              "consumers": [
+                "AGENTS.md"
+              ],
+              "imported_by": [
+                "scripts/bench_routing_e2e.py",
+                "scripts/rescore_against_clean.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "build_audit_context.py": {
+              "consumers": [
+                "AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "build_clean_jira_eval.py": {
+              "consumers": [
+                "AGENTS.md",
+                "NEXT_SESSION_PROMPT.md",
+                "profiles/pay-com/RECALL-TRACKER.md"
+              ],
+              "imported_by": [
+                "scripts/audit_index_gaps.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "build_code_eval.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/AGENTS.md",
+                "tests/test_code_intent_eval.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "build_combined_train.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/AGENTS.md",
+                "tests/test_build_combined_train.py"
+              ],
+              "imported_by": [
+                "scripts/runpod/train_reranker_ce.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "build_docs_vectors.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md",
+                "profiles/pay-com/docs/providers/inpay/gotchas__validator-spa-drift.md",
+                "profiles/pay-com/docs/references/two-tower-migration.md",
+                "scripts/full_update.sh",
+                "src/index/builders/_memguard.py"
+              ],
+              "imported_by": [
+                "scripts/benchmark_doc_indexing_ab.py",
+                "scripts/runpod/full_pipeline.py",
+                "scripts/runpod/oneshot_docs.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "build_env_index.py": {
+              "consumers": [
+                "AGENTS.md",
+                "src/graph/builders/__init__.py",
+                "src/search/env_vars.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "build_eval_rebuild_bundle.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "build_eval_v2_llm_calibrated.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "build_graph.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ARCHITECTURE.md",
+                "profiles/pay-com/conventions.yaml",
+                "profiles/pay-com/docs/domain_registry.yaml",
+                "scripts/full_update.sh",
+                "src/graph/builders/__init__.py",
+                "src/index/builders/db.py",
+                "src/index/builders/orchestrator.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "build_index.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ARCHITECTURE.md",
+                "profiles/pay-com/ROADMAP.md",
+                "profiles/pay-com/docs/domain_registry.yaml",
+                "profiles/pay-com/provider_types/chain/AUDIT_4_COMPLETENESS.md",
+                "scripts/full_update.sh",
+                "src/container.py",
+                "src/index/builders/__init__.py",
+                "src/index/builders/_common.py",
+                "tests/test_analyze.py",
+                "tests/test_chunking.py",
+                "tests/test_index_builders.py",
+                "tests/test_integration.py",
+                "tests/test_search_service.py"
+              ],
+              "imported_by": [
+                "scripts/build_docs_vectors.py",
+                "scripts/embed_missing_vectors.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "build_internal_traces.py": {
+              "consumers": [
+                "AGENTS.md",
+                "src/tools/service.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "build_method_matrix.py": {
+              "consumers": [
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/scripts/build_method_matrix.py",
+                "profiles/pay-com/scripts/method_level_gaps.py"
+              ],
+              "imported_by": [
+                "scripts/method_level_gaps.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "build_rerank_pointwise_eval.py": {
+              "consumers": [
+                "AGENTS.md",
+                "tests/test_rerank_pointwise_eval.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "build_shadow_types.py": {
+              "consumers": [
+                "AGENTS.md",
+                "mcp_server.py",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/docs/_deprecated_scan_report.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md",
+                "profiles/pay-com/provider_types/IMPACT_AUDIT.md",
+                "profiles/pay-com/provider_types/PHILOSOPHY_AUDIT.md",
+                "scripts/full_update.sh"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "build_test_map.py": {
+              "consumers": [
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/scripts/build_test_map.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "build_train_pairs_v2.py": {
+              "consumers": [
+                "AGENTS.md",
+                "tests/test_build_train_pairs.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "build_vectors.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ARCHITECTURE.md",
+                "README.md",
+                "ROADMAP.md",
+                "profiles/pay-com/docs/_deprecated_scan_report.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md",
+                "scripts/full_update.sh",
+                "src/container.py",
+                "src/index/builders/_memguard.py",
+                "src/index/builders/docs_vector_indexer.py",
+                "tests/test_vector.py"
+              ],
+              "imported_by": [
+                "scripts/embed_missing_vectors.py"
+              ],
+              "makefile_refs": [
+                "line 52"
+              ],
+              "is_entrypoint": false
+            },
+            "check_pr_patterns.py": {
+              "consumers": [
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/scripts/check_pr_patterns.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "churn_p1c_validate.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "churn_replay.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md",
+                "tests/test_churn_replay.py"
+              ],
+              "imported_by": [
+                "scripts/analyze_churn.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "churn_reranker_judge.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md",
+                "tests/test_churn_reranker_judge.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "ci-pattern-checker.py": {
+              "consumers": [
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/install.sh",
+                "profiles/pay-com/scripts/ci-pattern-checker.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "collect_ci_runs.py": {
+              "consumers": [
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/install.sh",
+                "profiles/pay-com/scripts/collect_ci_runs.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "collect_task.py": {
+              "consumers": [
+                "TESTING.md",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/ROADMAP.md",
+                "profiles/pay-com/install.sh",
+                "profiles/pay-com/scripts/auto_collect.py",
+                "profiles/pay-com/scripts/collect_task.py"
+              ],
+              "imported_by": [
+                "scripts/auto_collect.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "convert_to_listwise.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/docs/_deprecated_scan_report.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md",
+                "tests/test_listwise_conversion.py"
+              ],
+              "imported_by": [
+                "scripts/finetune_reranker.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "cross_validate_task.py": {
+              "consumers": [
+                "TESTING.md",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/scripts/auto_collect.py",
+                "profiles/pay-com/scripts/cross_validate_task.py"
+              ],
+              "imported_by": [
+                "scripts/auto_collect.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "dedup_docs_lance.py": {
+              "consumers": [
+                "AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "detect_blind_spots.py": {
+              "consumers": [
+                "AGENTS.md",
+                "scripts/full_update.sh"
+              ],
+              "imported_by": [
+                "scripts/bench_utils.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "detect_doc_staleness.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/AGENTS.md",
+                "scripts/full_update.sh"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "embed_missing_vectors.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md",
+                "profiles/pay-com/ROADMAP.md",
+                "scripts/full_update.sh",
+                "src/index/builders/_memguard.py",
+                "src/index/builders/docs_vector_indexer.py"
+              ],
+              "imported_by": [
+                "scripts/build_vectors.py",
+                "scripts/eval_finetune.py",
+                "scripts/finetune_reranker.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "eval_finetune.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/ROADMAP.md",
+                "profiles/pay-com/docs/_deprecated_scan_report.md",
+                "scripts/eval_parallel.sh",
+                "src/search/hybrid.py",
+                "tests/test_eval_file_gt.py",
+                "tests/test_eval_verdict.py",
+                "tests/test_lpt_schedule.py"
+              ],
+              "imported_by": [
+                "scripts/ab_lost_tickets.py",
+                "scripts/churn_replay.py",
+                "scripts/eval_verdict.py",
+                "scripts/finetune_reranker.py",
+                "scripts/merge_eval_shards.py",
+                "scripts/sanity_v2_gate.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "eval_harness.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md",
+                "profiles/pay-com/docs/_deprecated_scan_report.md",
+                "profiles/pay-com/flows/_reports/archetype_integration_report.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "eval_jidm.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md",
+                "profiles/pay-com/AGENTS.md",
+                "tests/test_eval_jidm.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "eval_verdict.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md",
+                "profiles/pay-com/RECALL-TRACKER.md",
+                "profiles/pay-com/finetune_history/rescore_2026-04-20.md",
+                "tests/test_eval_file_gt.py",
+                "tests/test_eval_verdict.py"
+              ],
+              "imported_by": [
+                "scripts/eval_finetune.py",
+                "scripts/merge_eval_shards.py",
+                "scripts/sanity_v2_gate.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "export_patterns.py": {
+              "consumers": [
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/scripts/check_pr_patterns.py",
+                "profiles/pay-com/scripts/ci-pattern-checker.py"
+              ],
+              "imported_by": [
+                "scripts/check_pr_patterns.py",
+                "scripts/ci-pattern-checker.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "extract_artifacts.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ARCHITECTURE.md",
+                "NEXT_SESSION_PROMPT.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md",
+                "scripts/full_update.sh",
+                "src/index/builders/orchestrator.py",
+                "src/index/builders/repo_indexer.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "finalize_scrape.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/docs/providers/bankingcircle/index.md",
+                "tests/test_finalize_scrape.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "finetune_reranker.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/ROADMAP.md",
+                "profiles/pay-com/docs/_deprecated_scan_report.md",
+                "tests/test_listwise_conversion.py"
+              ],
+              "imported_by": [
+                "scripts/eval_finetune.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "gen_repo_facts.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/AGENTS.md",
+                "scripts/full_update.sh"
+              ],
+              "imported_by": [
+                "scripts/detect_doc_staleness.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "generate_housekeeping_report.py": {
+              "consumers": [
+                "AGENTS.md",
+                "scripts/docs_validate_all.sh"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "health_check_agents_md.py": {
+              "consumers": [
+                "AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "label_v12_candidates_minilm.py": {
+              "consumers": [
+                "AGENTS.md",
+                "tests/test_label_v12_candidates_minilm.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "local_code_bench.py": {
+              "consumers": [
+                "AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "local_smoke_candidates.py": {
+              "consumers": [
+                "AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "manage_ground_truth.py": {
+              "consumers": [
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/scripts/manage_ground_truth.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "merge_dual_judge_labels.py": {
+              "consumers": [
+                "AGENTS.md",
+                "tests/test_merge_dual_judge_labels.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "merge_eval_shards.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/docs/_deprecated_scan_report.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md",
+                "scripts/eval_parallel.sh",
+                "tests/test_eval_verdict.py"
+              ],
+              "imported_by": [
+                "scripts/eval_verdict.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "method_level_gaps.py": {
+              "consumers": [
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/scripts/method_level_gaps.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "mine_co_changes.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/provider_types/IMPACT_AUDIT.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "parse_jaeger_trace.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/docs/_deprecated_scan_report.md",
+                "profiles/pay-com/provider_types/PHILOSOPHY_AUDIT.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "predict_failures.py": {
+              "consumers": [
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/scripts/predict_failures.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "prepare_finetune_data.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/RECALL-TRACKER.md",
+                "profiles/pay-com/ROADMAP.md",
+                "profiles/pay-com/docs/_deprecated_scan_report.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md",
+                "tests/test_eval_file_gt.py",
+                "tests/test_fts_preclean.py",
+                "tests/test_prepare_finetune_data.py"
+              ],
+              "imported_by": [
+                "scripts/ab_lost_tickets.py",
+                "scripts/eval_finetune.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "proactivity_eval.py": {
+              "consumers": [
+                "AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "rescore_against_clean.py": {
+              "consumers": [
+                "AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "bench_large_models.py": {
+              "consumers": [
+                "AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "cost_guard.py": {
+              "consumers": [
+                "AGENTS.md",
+                "tests/test_runpod_lifecycle.py"
+              ],
+              "imported_by": [
+                "scripts/runpod/pod_lifecycle.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "full_pipeline.py": {
+              "consumers": [
+                "AGENTS.md",
+                "tests/test_runpod_lifecycle.py",
+                "tests/test_train_reranker_ce.py"
+              ],
+              "imported_by": [
+                "scripts/runpod/oneshot_rerank.py",
+                "scripts/runpod/train_reranker_ce.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "oneshot_docs.py": {
+              "consumers": [
+                "AGENTS.md",
+                "src/index/builders/docs_vector_indexer.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "oneshot_rerank.py": {
+              "consumers": [
+                "AGENTS.md"
+              ],
+              "imported_by": [
+                "scripts/runpod/oneshot_docs.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "pod_lifecycle.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/RECALL-TRACKER.md"
+              ],
+              "imported_by": [
+                "scripts/runpod/full_pipeline.py",
+                "scripts/runpod/oneshot_docs.py",
+                "scripts/runpod/oneshot_rerank.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "pod_watcher.py": {
+              "consumers": [
+                "AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "prepare_train_data.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/AGENTS.md",
+                "tests/test_prepare_train_data.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "train_docs_embedder.py": {
+              "consumers": [
+                "AGENTS.md",
+                "src/index/builders/docs_vector_indexer.py",
+                "tests/test_runpod_lifecycle.py",
+                "tests/test_train_docs_embedder.py",
+                "tests/test_train_reranker_ce.py"
+              ],
+              "imported_by": [
+                "scripts/local_smoke_candidates.py",
+                "scripts/runpod/full_pipeline.py",
+                "scripts/runpod/oneshot_docs.py",
+                "scripts/runpod/oneshot_rerank.py",
+                "scripts/runpod/train_reranker_ce.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "train_reranker_ce.py": {
+              "consumers": [
+                "AGENTS.md",
+                "tests/test_runpod_lifecycle.py",
+                "tests/test_train_reranker_ce.py"
+              ],
+              "imported_by": [
+                "scripts/runpod/full_pipeline.py",
+                "scripts/runpod/oneshot_rerank.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "sample_bench_v2.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/bench/BENCH_REDESIGN_PROPOSAL.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "sample_real_queries.py": {
+              "consumers": [
+                "AGENTS.md",
+                "tests/test_sample_real_queries.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "sanity_v2_gate.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md",
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/RECALL-TRACKER.md",
+                "profiles/pay-com/docs/_deprecated_scan_report.md",
+                "tests/test_eval_file_gt.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "semantic_gap_scorer.py": {
+              "consumers": [
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/scripts/semantic_gap_scorer.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "task_type_checklist.py": {
+              "consumers": [
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/scripts/task_type_checklist.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "tavily-docs-crawler.py": {
+              "consumers": [
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/docs/providers/bankingcircle/index.md",
+                "profiles/pay-com/scripts/tavily-docs-crawler.py",
+                "tests/test_scrape_link_rewrite.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "v12_candidates.py": {
+              "consumers": [
+                "AGENTS.md",
+                "ROADMAP.md",
+                "profiles/pay-com/docs/_deprecated_scan_report.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md"
+              ],
+              "imported_by": [
+                "scripts/v12_candidates_regen_doc.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "v12_candidates_regen_doc.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/docs/_deprecated_scan_report.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "validate_doc_anchors.py": {
+              "consumers": [
+                ".pre-commit-config.yaml",
+                "AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "validate_doc_file_line_refs.py": {
+              "consumers": [
+                ".pre-commit-config.yaml",
+                "AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "validate_doc_frontmatter.py": {
+              "consumers": [
+                ".pre-commit-config.yaml",
+                "AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "validate_doc_related_repos.py": {
+              "consumers": [
+                ".pre-commit-config.yaml",
+                "AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "validate_doc_size.py": {
+              "consumers": [
+                ".pre-commit-config.yaml",
+                "AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "validate_gaps.py": {
+              "consumers": [
+                "profiles/pay-com/AGENTS.md",
+                "profiles/pay-com/scripts/validate_gaps.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "validate_overlay_vs_proto.py": {
+              "consumers": [
+                ".pre-commit-config.yaml",
+                "AGENTS.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "validate_provider_paths.py": {
+              "consumers": [
+                "AGENTS.md",
+                "tests/test_finalize_scrape.py",
+                "tests/test_validate_provider_paths.py"
+              ],
+              "imported_by": [
+                "scripts/finalize_scrape.py"
+              ],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "validate_recipe.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/docs/_deprecated_scan_report.md"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            },
+            "visualize_graph.py": {
+              "consumers": [
+                "AGENTS.md",
+                "profiles/pay-com/docs/_scripts_scan_report.md",
+                "src/graph/service.py"
+              ],
+              "imported_by": [],
+              "makefile_refs": [],
+              "is_entrypoint": false
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "R2",
+          "name": "Tests-Refs",
+          "task": "Map every test file to the scripts it tests",
+          "status": "done",
+          "started_at": "2026-05-15T23:49:47.751711+00:00",
+          "finished_at": "2026-05-15T22:02:35.902725+00:00",
+          "result": {
+            "test_files_total": 62,
+            "test_files_testing_scripts": 28,
+            "scripts_covered": 25,
+            "mapping_file": ".claude/plans/r2_test_scripts_mapping.json",
+            "summary": {
+              "scripts/_common.py": [
+                "test_scripts_common.py"
+              ],
+              "scripts/analyze_churn.py": [
+                "test_analyze_churn.py"
+              ],
+              "scripts/benchmark_doc_intent.py": [
+                "test_benchmark_doc_intent.py",
+                "test_runpod_lifecycle.py"
+              ],
+              "scripts/bench_v2_gate.py": [
+                "test_bench_v2.py"
+              ],
+              "scripts/benchmark_bench_v2.py": [
+                "test_bench_v2.py"
+              ],
+              "scripts/build_code_eval.py": [
+                "test_code_intent_eval.py"
+              ],
+              "scripts/build_combined_train.py": [
+                "test_build_combined_train.py"
+              ],
+              "scripts/build_index.py": [
+                "test_chunking.py"
+              ],
+              "scripts/build_rerank_pointwise_eval.py": [
+                "test_rerank_pointwise_eval.py"
+              ],
+              "scripts/build_train_pairs_v2.py": [
+                "test_build_train_pairs.py"
+              ],
+              "scripts/churn_replay.py": [
+                "test_churn_replay.py"
+              ],
+              "scripts/churn_reranker_judge.py": [
+                "test_churn_reranker_judge.py"
+              ],
+              "scripts/eval_finetune.py": [
+                "test_eval_file_gt.py",
+                "test_eval_verdict.py",
+                "test_lpt_schedule.py"
+              ],
+              "scripts/eval_jidm.py": [
+                "test_eval_jidm.py"
+              ],
+              "scripts/eval_verdict.py": [
+                "test_eval_file_gt.py",
+                "test_eval_verdict.py"
+              ],
+              "scripts/finalize_scrape.py": [
+                "test_finalize_scrape.py"
+              ],
+              "scripts/finetune_reranker.py": [
+                "test_listwise_conversion.py"
+              ],
+              "scripts/label_v12_candidates_minilm.py": [
+                "test_label_v12_candidates_minilm.py"
+              ],
+              "scripts/merge_dual_judge_labels.py": [
+                "test_merge_dual_judge_labels.py"
+              ],
+              "scripts/merge_eval_shards.py": [
+                "test_eval_file_gt.py",
+                "test_eval_verdict.py"
+              ],
+              "scripts/prepare_finetune_data.py": [
+                "test_eval_file_gt.py",
+                "test_fts_preclean.py",
+                "test_prepare_finetune_data.py"
+              ],
+              "scripts/runpod/cost_guard.py": [
+                "test_runpod_lifecycle.py"
+              ],
+              "scripts/runpod/full_pipeline.py": [
+                "test_runpod_lifecycle.py"
+              ],
+              "scripts/runpod/pod_lifecycle.py": [
+                "test_runpod_lifecycle.py"
+              ],
+              "scripts/runpod/prepare_train_data.py": [
+                "test_prepare_train_data.py"
+              ],
+              "scripts/runpod/train_docs_embedder.py": [
+                "test_runpod_lifecycle.py",
+                "test_train_docs_embedder.py",
+                "test_train_reranker_ce.py"
+              ],
+              "scripts/runpod/train_reranker_ce.py": [
+                "test_runpod_lifecycle.py",
+                "test_train_reranker_ce.py"
+              ],
+              "scripts/sample_real_queries.py": [
+                "test_sample_real_queries.py"
+              ],
+              "scripts/sample_bench_v2.py": [
+                "test_bench_v2.py"
+              ],
+              "scripts/validate_provider_paths.py": [
+                "test_validate_provider_paths.py"
+              ],
+              "profiles/pay-com/scripts/tavily-docs-crawler.py": [
+                "test_scrape_link_rewrite.py"
+              ]
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "R3",
+          "name": "Dead-File-Confirmation",
+          "task": "Confirm dead files are truly unused via grep across entire repo",
+          "status": "done",
+          "started_at": "2026-05-15T23:49:47.751711+00:00",
+          "finished_at": "2026-05-16T00:03:20.896708+00:00",
+          "result": {
+            "ab_test_baseline.json": {
+              "confirmed_dead": true,
+              "references_found": [
+                "./AGENTS.md",
+                "./profiles/pay-com/AGENTS.md"
+              ]
+            },
+            "eval_baseline.json": {
+              "confirmed_dead": true,
+              "references_found": [
+                "./AGENTS.md",
+                "./profiles/pay-com/AGENTS.md"
+              ]
+            },
+            "patterns-export.json": {
+              "confirmed_dead": false,
+              "references_found": [
+                "./profiles/pay-com/scripts/ci-pattern-checker.py",
+                "./profiles/pay-com/scripts/export_patterns.py",
+                "./profiles/pay-com/scripts/check_pr_patterns.py",
+                "./AGENTS.md",
+                "./profiles/pay-com/AGENTS.md"
+              ]
+            },
+            "config.json": {
+              "confirmed_dead": false,
+              "references_found": [
+                "./setup_wizard.py",
+                "./src/config.py",
+                "./src/graph/builders/_common.py",
+                "./AGENTS.md",
+                "./profiles/pay-com/AGENTS.md"
+              ]
+            },
+            "scripts/audit_index_gaps.py": {
+              "confirmed_dead": true,
+              "references_found": [
+                "./AGENTS.md",
+                "./profiles/pay-com/AGENTS.md"
+              ]
+            },
+            "scripts/bench_routing_e2e.py": {
+              "confirmed_dead": true,
+              "references_found": [
+                "./AGENTS.md",
+                "./profiles/pay-com/AGENTS.md"
+              ]
+            },
+            "scripts/build_eval_rebuild_bundle.py": {
+              "confirmed_dead": true,
+              "references_found": [
+                "./AGENTS.md",
+                "./profiles/pay-com/AGENTS.md"
+              ]
+            },
+            "scripts/build_eval_v2_llm_calibrated.py": {
+              "confirmed_dead": true,
+              "references_found": [
+                "./AGENTS.md",
+                "./profiles/pay-com/AGENTS.md"
+              ]
+            },
+            "scripts/rescore_against_clean.py": {
+              "confirmed_dead": true,
+              "references_found": [
+                "./AGENTS.md"
+              ]
+            },
+            "scripts/generate_housekeeping_report.py": {
+              "confirmed_dead": false,
+              "references_found": [
+                "./scripts/docs_validate_all.sh",
+                "./scripts/generate_housekeeping_report.py",
+                "./AGENTS.md"
+              ]
+            },
+            "scripts/analyze_change_impact.py": {
+              "confirmed_dead": true,
+              "references_found": [
+                "./AGENTS.md",
+                "./profiles/pay-com/AGENTS.md"
+              ]
+            },
+            "scripts/analyze_developer_patterns.py": {
+              "confirmed_dead": true,
+              "references_found": [
+                "./profiles/pay-com/scripts/analyze_developer_patterns.py",
+                "./profiles/pay-com/AGENTS.md"
+              ]
+            },
+            "scripts/analyze_file_patterns.py": {
+              "confirmed_dead": true,
+              "references_found": [
+                "./profiles/pay-com/scripts/analyze_file_patterns.py",
+                "./profiles/pay-com/AGENTS.md"
+              ]
+            },
+            "scripts/analyze_gaps.py": {
+              "confirmed_dead": false,
+              "references_found": [
+                "./profiles/pay-com/scripts/auto_collect.py",
+                "./profiles/pay-com/AGENTS.md"
+              ]
+            },
+            "profiles/pay-com/scripts/analyze_change_impact.py": {
+              "confirmed_dead": true,
+              "references_found": []
+            },
+            "profiles/pay-com/scripts/analyze_gaps.py": {
+              "confirmed_dead": false,
+              "references_found": [
+                "./profiles/pay-com/scripts/auto_collect.py",
+                "./profiles/pay-com/scripts/method_level_gaps.py",
+                "./TESTING.md",
+                "./profiles/pay-com/AGENTS.md"
+              ]
+            },
+            "profiles/pay-com/scripts/analyze_file_patterns.py": {
+              "confirmed_dead": true,
+              "references_found": []
+            },
+            "profiles/pay-com/scripts/analyze_developer_patterns.py": {
+              "confirmed_dead": true,
+              "references_found": []
+            },
+            "graph-grpc-apm-payper.html": {
+              "confirmed_dead": true,
+              "references_found": []
+            },
+            "benchmark_results.json": {
+              "confirmed_dead": true,
+              "references_found": []
+            },
+            "benchmark_realworld_results.json": {
+              "confirmed_dead": false,
+              "references_found": [
+                "./scripts/benchmark_realworld.py",
+                "./profiles/pay-com/benchmarks/v6_2_realworld.json"
+              ]
+            },
+            "benchmark_flows_results.json": {
+              "confirmed_dead": false,
+              "references_found": [
+                "./scripts/benchmark_flows.py"
+              ]
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "R4",
+          "name": "Generated-Artifacts",
+          "task": "Analyze bench_runs/ and .claude/debug/ for git status and code references",
+          "status": "done",
+          "started_at": "2026-05-15T23:49:47.751711+00:00",
+          "finished_at": "2026-05-15T23:53:22.339706+00:00",
+          "result": {
+            "bench_runs/": {
+              "tracked": 47,
+              "total": 726,
+              "size": "144M",
+              "gitignored": false,
+              "code_refs": [
+                ".claude/plans/codebase-cleanup-autonomous.md",
+                ".claude/research/agents-md/R1.md",
+                ".claude/research/agents-md/R6.md",
+                ".claude/research/agents-md/V2.md",
+                "AGENTS.md",
+                "scripts/benchmark_doc_indexing_ab.py",
+                "scripts/benchmark_doc_intent.py",
+                "scripts/bootstrap_eval_ci.py",
+                "scripts/runpod/pod_watcher.py"
+              ]
+            },
+            ".claude/debug/": {
+              "tracked": 149,
+              "total": 149,
+              "size": "2.0M",
+              "gitignored": false,
+              "code_refs": [
+                ".claude/fix/F1_done.md",
+                ".claude/fix/summary.md",
+                ".claude/plans/agents-md-rollout.md",
+                ".claude/plans/codebase-cleanup-autonomous.md",
+                ".claude/research/agents-md/A1.md",
+                ".claude/research/agents-md/R5.md",
+                ".claude/research/agents-md/R6.md",
+                ".claude/rules/agents-maintenance.md",
+                "AGENTS.md",
+                "NEXT_SESSION_PROMPT.md",
+                "profiles/pay-com/docs/gotchas/node-forge-pkcs7-signedata-verify-gap.md",
+                "profiles/pay-com/docs/references/apm-payout-implementation-playbook.md",
+                "profiles/pay-com/RECALL-TRACKER.md",
+                "scripts/bootstrap_eval_ci.py",
+                "scripts/build_clean_jira_eval.py",
+                "scripts/finalize_scrape.py",
+                "scripts/health_check_agents_md.py",
+                "scripts/runpod/train_docs_embedder.py",
+                "src/search/hybrid.py",
+                "src/search/service.py",
+                "tests/test_router_whitelist.py"
+              ]
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "R5",
+          "name": "Profile-Scripts",
+          "task": "Catalog profiles/pay-com/scripts/ (25 files): symlinks, usage, gitignore status",
+          "status": "done",
+          "started_at": "2026-05-15T23:49:47.751711+00:00",
+          "finished_at": "2026-05-15T23:57:40.633458+00:00",
+          "result": {
+            "catalog": {
+              "analyze_change_impact.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/analyze_change_impact.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "analyze_developer_patterns.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/analyze_developer_patterns.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "analyze_file_patterns.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/analyze_file_patterns.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "analyze_gaps.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/analyze_gaps.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "auto_collect.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/auto_collect.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "blind_test.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/blind_test.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": false
+              },
+              "build_method_matrix.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/build_method_matrix.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "build_test_map.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/build_test_map.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "check_pr_patterns.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/check_pr_patterns.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "ci-pattern-checker.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/ci-pattern-checker.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "collect_ci_runs.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/collect_ci_runs.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "collect_task.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/collect_task.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "cross_validate_task.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/cross_validate_task.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "export_patterns.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/export_patterns.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "inpay-spa-scraper.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/inpay-spa-scraper.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": false
+              },
+              "manage_ground_truth.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/manage_ground_truth.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "method_level_gaps.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/method_level_gaps.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "normalize_flows.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/normalize_flows.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": false
+              },
+              "oas_to_schemas_md.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/oas_to_schemas_md.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": false
+              },
+              "predict_failures.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/predict_failures.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "readme_io_scraper.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/readme_io_scraper.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": false
+              },
+              "semantic_gap_scorer.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/semantic_gap_scorer.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "task_type_checklist.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/task_type_checklist.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "tavily-docs-crawler.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/tavily-docs-crawler.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              },
+              "validate_gaps.py": {
+                "is_symlink": false,
+                "symlink_target": null,
+                "real_path": "profiles/pay-com/scripts/validate_gaps.py",
+                "referenced_outside_profile": [],
+                "gitignored": true,
+                "has_root_scripts_counterpart": true
+              }
+            },
+            "summary": {
+              "total_files": 25,
+              "symlinks": 0,
+              "real_files": 25,
+              "gitignored": 25,
+              "referenced_outside_profile": 0,
+              "with_root_scripts_counterpart": 20,
+              "unique_to_profile": 5
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "R6",
+          "name": "Archive-Contents",
+          "task": "Catalog existing .archive/ directories",
+          "status": "done",
+          "started_at": "2026-05-15T23:49:47.751711+00:00",
+          "finished_at": "2026-05-15T23:59:41.276962+00:00",
+          "result": {
+            "archive_dirs_found": 3,
+            "archives": [
+              {
+                "path": "./.claude/debug/archive",
+                "total_size": "716K",
+                "file_count": 40,
+                "subdirs": [
+                  "2026-04-27-pre-jira-debate/",
+                  "2026-04-27-session2-pre-meta/"
+                ],
+                "files": [
+                  {
+                    "name": "inpay-old-scrape-2026-04-28.tar.gz",
+                    "size": "138K"
+                  },
+                  {
+                    "name": "verdict-stagec.md",
+                    "size": "8.1K"
+                  },
+                  {
+                    "name": "hypotheses.md",
+                    "size": "31K"
+                  },
+                  {
+                    "name": "metric-critic.md",
+                    "size": "16K"
+                  },
+                  {
+                    "name": "hypotheses.solved.md",
+                    "size": "4.7K"
+                  },
+                  {
+                    "name": "2026-04-27-pre-jira-debate/affirmative.md",
+                    "size": "3.3K"
+                  },
+                  {
+                    "name": "2026-04-27-pre-jira-debate/positions_prior_2026_04_25.md",
+                    "size": "40K"
+                  },
+                  {
+                    "name": "2026-04-27-pre-jira-debate/hypotheses.md",
+                    "size": "7.3K"
+                  },
+                  {
+                    "name": "2026-04-27-pre-jira-debate/planning-task.md",
+                    "size": "2.5K"
+                  },
+                  {
+                    "name": "2026-04-27-pre-jira-debate/round2-pragmatist.md",
+                    "size": "3.5K"
+                  },
+                  {
+                    "name": "2026-04-27-pre-jira-debate/round1-pragmatist.md",
+                    "size": "3.1K"
+                  },
+                  {
+                    "name": "2026-04-27-pre-jira-debate/ruling.md",
+                    "size": "3.1K"
+                  },
+                  {
+                    "name": "2026-04-27-pre-jira-debate/round1-systematist.md",
+                    "size": "4.0K"
+                  },
+                  {
+                    "name": "2026-04-27-pre-jira-debate/round1-refactorist.md",
+                    "size": "3.4K"
+                  },
+                  {
+                    "name": "2026-04-27-pre-jira-debate/ruling_prior_2026_04_25.md",
+                    "size": "6.0K"
+                  },
+                  {
+                    "name": "2026-04-27-pre-jira-debate/converged.md",
+                    "size": "3.7K"
+                  },
+                  {
+                    "name": "2026-04-27-pre-jira-debate/positions.md",
+                    "size": "1.1K"
+                  },
+                  {
+                    "name": "2026-04-27-pre-jira-debate/round2-refactorist.md",
+                    "size": "3.9K"
+                  },
+                  {
+                    "name": "2026-04-27-pre-jira-debate/round2-systematist.md",
+                    "size": "3.8K"
+                  },
+                  {
+                    "name": "2026-04-27-pre-jira-debate/negative.md",
+                    "size": "4.0K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/hypotheses.md",
+                    "size": "32K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/agent-w1-report.md",
+                    "size": "8.2K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/refutation.md",
+                    "size": "6.8K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/round2-pragmatist.md",
+                    "size": "10K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/agent-d1-report.md",
+                    "size": "3.3K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/agent-e-report.md",
+                    "size": "5.1K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/round1-pragmatist.md",
+                    "size": "5.3K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/agent-w2-report.md",
+                    "size": "6.1K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/evidence-matrix.md",
+                    "size": "9.0K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/repro_h6.py",
+                    "size": "1.3K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/ruling.md",
+                    "size": "11K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/round1-systematist.md",
+                    "size": "10K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/round1-refactorist.md",
+                    "size": "17K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/w2-rootcause.md",
+                    "size": "17K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/repro_h3.py",
+                    "size": "2.5K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/independent.md",
+                    "size": "17K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/converged.md",
+                    "size": "11K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/round2-refactorist.md",
+                    "size": "13K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/round2-systematist.md",
+                    "size": "9.4K"
+                  },
+                  {
+                    "name": "2026-04-27-session2-pre-meta/repro_h9.py",
+                    "size": "1.6K"
+                  },
+                  {
+                    "name": "verdict.md",
+                    "size": "7.1K"
+                  },
+                  {
+                    "name": "verdict-stagec-v2.md",
+                    "size": "5.9K"
+                  },
+                  {
+                    "name": "verify-stagec.md",
+                    "size": "15K"
+                  },
+                  {
+                    "name": "e2e-stagec.md",
+                    "size": "7.7K"
+                  },
+                  {
+                    "name": "significance-critic.md",
+                    "size": "8.6K"
+                  },
+                  {
+                    "name": "investigator-stagec.md",
+                    "size": "24K"
+                  },
+                  {
+                    "name": "regressions-stagec.md",
+                    "size": "12K"
+                  },
+                  {
+                    "name": "hypotheses-stagec.md",
+                    "size": "29K"
+                  },
+                  {
+                    "name": "independent.md",
+                    "size": "11K"
+                  },
+                  {
+                    "name": "eval-critic.md",
+                    "size": "18K"
+                  }
+                ]
+              },
+              {
+                "path": "./profiles/my-org/docs/gotchas/archive",
+                "total_size": "0B",
+                "file_count": 0,
+                "subdirs": [],
+                "files": []
+              },
+              {
+                "path": "./profiles/pay-com/.archive",
+                "total_size": "180K",
+                "file_count": 20,
+                "subdirs": [
+                  "2026-04-17-cleanup/"
+                ],
+                "files": [
+                  {
+                    "name": "2026-04-17-cleanup/phase8-cross-validation.md",
+                    "size": "4.1K"
+                  },
+                  {
+                    "name": "2026-04-17-cleanup/pi-60-pr-review-round2.md",
+                    "size": "3.0K"
+                  },
+                  {
+                    "name": "2026-04-17-cleanup/MCP_REAL_TEST.md",
+                    "size": "5.9K"
+                  },
+                  {
+                    "name": "2026-04-17-cleanup/dictionary-indexing-proposal.md",
+                    "size": "15K"
+                  },
+                  {
+                    "name": "2026-04-17-cleanup/pi-60-audit-report-v2.md",
+                    "size": "19K"
+                  },
+                  {
+                    "name": "2026-04-17-cleanup/BENCHMARK-ROADMAP.md",
+                    "size": "19K"
+                  },
+                  {
+                    "name": "2026-04-17-cleanup/mcp-improvement-vault-discovery.md",
+                    "size": "3.0K"
+                  },
+                  {
+                    "name": "2026-04-17-cleanup/SESSION_STATE.md",
+                    "size": "885B"
+                  },
+                  {
+                    "name": "2026-04-17-cleanup/payper-interac-etransfer.md",
+                    "size": "4.6K"
+                  },
+                  {
+                    "name": "2026-04-17-cleanup/pi-60-pr-comments-detailed.md",
+                    "size": "2.0K"
+                  },
+                  {
+                    "name": "2026-04-17-cleanup/CYCLE1_STAGE1_CATCHABILITY.md",
+                    "size": "6.2K"
+                  },
+                  {
+                    "name": "2026-04-17-cleanup/pi54-gap-analysis.md",
+                    "size": "8.1K"
+                  },
+                  {
+                    "name": "2026-04-17-cleanup/SESSION_SUMMARY.md",
+                    "size": "1.4K"
+                  },
+                  {
+                    "name": "2026-04-17-cleanup/rag-improvement-analysis.md",
+                    "size": "17K"
+                  },
+                  {
+                    "name": "2026-04-17-cleanup/pi54-improvements-prompt.md",
+                    "size": "13K"
+                  },
+                  {
+                    "name": "2026-04-17-cleanup/META_AUDIT_RESPONSE.md",
+                    "size": "7.8K"
+                  },
+                  {
+                    "name": "2026-04-17-cleanup/IMPROVEMENT_REPORT.md",
+                    "size": "5.0K"
+                  },
+                  {
+                    "name": "2026-04-17-cleanup/phase8-architecture.md",
+                    "size": "4.4K"
+                  }
+                ]
+              }
+            ],
+            "combined_size": "896K"
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "planning",
+      "label": "Phase 2: Planning",
+      "status": "done",
+      "depends_on": [
+        "research"
+      ],
+      "agents": [
+        {
+          "id": "P1",
+          "name": "Scripts-Restructure",
+          "task": "Design new scripts/ directory structure based on R1, R2, R5",
+          "status": "done",
+          "started_at": "2026-05-16T00:04:24.096388+00:00",
+          "finished_at": "2026-05-16T00:13:54.277096+00:00",
+          "result": {
+            "new_structure": {
+              "scripts/build/": [
+                "build_audit_context.py",
+                "build_clean_jira_eval.py",
+                "build_code_eval.py",
+                "build_docs_vectors.py",
+                "build_env_index.py",
+                "build_graph.py",
+                "build_index.py",
+                "build_internal_traces.py",
+                "build_shadow_types.py",
+                "embed_missing_vectors.py",
+                "extract_artifacts.py"
+              ],
+              "scripts/bench/": [
+                "bench_utils.py",
+                "bench_v2_gate.py",
+                "benchmark_bench_v2.py",
+                "benchmark_doc_indexing_ab.py",
+                "benchmark_doc_intent.py",
+                "benchmark_file_recall.py",
+                "benchmark_flows.py",
+                "benchmark_investigation.py",
+                "benchmark_queries.py",
+                "benchmark_realworld.py",
+                "benchmark_recall.py",
+                "benchmark_rerank_ab.py",
+                "local_code_bench.py",
+                "local_smoke_candidates.py",
+                "sample_bench_v2.py",
+                "sample_real_queries.py"
+              ],
+              "scripts/eval/": [
+                "autoresearch_eval.py",
+                "autoresearch_loop.py",
+                "bootstrap_eval_ci.py",
+                "build_rerank_pointwise_eval.py",
+                "eval_finetune.py",
+                "eval_harness.py",
+                "eval_jidm.py",
+                "eval_verdict.py",
+                "merge_eval_shards.py",
+                "sanity_v2_gate.py"
+              ],
+              "scripts/analysis/": [
+                "ab_lost_tickets.py",
+                "analyze_calls.py",
+                "analyze_churn.py",
+                "analyze_feedback.py",
+                "analyze_session_quality.py",
+                "churn_p1c_validate.py",
+                "churn_replay.py",
+                "churn_reranker_judge.py",
+                "detect_blind_spots.py",
+                "detect_doc_staleness.py",
+                "gen_repo_facts.py",
+                "graph_template.html",
+                "mine_co_changes.py",
+                "parse_jaeger_trace.py",
+                "proactivity_eval.py",
+                "visualize_graph.py"
+              ],
+              "scripts/maint/": [
+                "dedup_docs_lance.py",
+                "generate_housekeeping_report.py",
+                "health_check_agents_md.py",
+                "validate_doc_anchors.py",
+                "validate_doc_file_line_refs.py",
+                "validate_doc_frontmatter.py",
+                "validate_doc_related_repos.py",
+                "validate_doc_size.py",
+                "validate_overlay_vs_proto.py",
+                "validate_provider_paths.py",
+                "validate_recipe.py"
+              ],
+              "scripts/data/": [
+                "build_combined_train.py",
+                "build_train_pairs_v2.py",
+                "convert_to_listwise.py",
+                "finetune_reranker.py",
+                "label_v12_candidates_minilm.py",
+                "merge_dual_judge_labels.py",
+                "prepare_finetune_data.py"
+              ],
+              "scripts/scrape/": [
+                "finalize_scrape.py",
+                "v12_candidates.py",
+                "v12_candidates_regen_doc.py"
+              ]
+            },
+            "keep_at_root": [
+              "_common.py",
+              "build_vectors.py",
+              "clone_repos.sh",
+              "docs_validate_all.sh",
+              "eval_parallel.sh",
+              "full_update.sh",
+              "run_with_timeout.sh"
+            ],
+            "files_to_delete": [
+              "analyze_change_impact.py",
+              "analyze_developer_patterns.py",
+              "analyze_file_patterns.py",
+              "audit_index_gaps.py",
+              "bench_routing_e2e.py",
+              "build_eval_rebuild_bundle.py",
+              "build_eval_v2_llm_calibrated.py",
+              "rescore_against_clean.py"
+            ],
+            "migration_notes": "build_vectors.py kept at root because it is referenced by Makefile (line 52), tests/test_vector.py (hardcoded path string), src/container.py error message, src/index/builders/_memguard.py docstrings, and scripts/full_update.sh. _common.py kept at root as shared utility; moving it would cascade to churn_replay.py, benchmark_investigation.py, validate_recipe.py. graph_template.html co-located with visualize_graph.py in analysis/ (Path(__file__).parent reference). scripts/runpod/ kept unchanged (11 files). 8 dead scripts confirmed by R3 slated for deletion; 3 are symlinks to profiles/pay-com/scripts/. Additional root symlinks to profiles (auto_collect.py, analyze_gaps.py, build_method_matrix.py, build_test_map.py, check_pr_patterns.py, ci-pattern-checker.py, collect_ci_runs.py, collect_task.py, cross_validate_task.py, export_patterns.py, manage_ground_truth.py, method_level_gaps.py, task_type_checklist.py) should be rm'd as clutter; they are gitignored. Symlinks inside subdirectories (analysis/predict_failures.py, analysis/semantic_gap_scorer.py, scrape/tavily-docs-crawler.py, maint/validate_gaps.py) should also be removed. Test imports to update (E9): test_eval_file_gt.py, test_eval_verdict.py, test_fts_preclean.py, test_listwise_conversion.py, test_lpt_schedule.py, test_prepare_finetune_data.py, test_build_combined_train.py, test_scripts_common.py, test_runpod_lifecycle.py. Makefile (E10): switch-model target already correct since build_vectors.py kept at root. full_update.sh needs path updates for build_index, build_graph, build_docs_vectors, embed_missing_vectors, build_shadow_types, benchmark_queries, benchmark_realworld, detect_blind_spots, gen_repo_facts, detect_doc_staleness, extract_artifacts. eval_parallel.sh needs path updates for eval_finetune.py and merge_eval_shards.py. docs_validate_all.sh needs path updates for validate_doc_*.py and generate_housekeeping_report.py. .pre-commit-config.yaml needs path updates for 6 validate_doc_*.py scripts in scripts/maint/. src/graph/service.py needs import update for visualize_graph.py moved to scripts/analysis/. AGENTS.md references to moved scripts updated in Phase 5 (S1). profiles/pay-com/scripts/ (25 files, all gitignored) left untouched per R5."
+          },
+          "error": null
+        },
+        {
+          "id": "P2",
+          "name": "Cleanup-Plan",
+          "task": "Create ordered deletion/migration plan based on R3, R4, R6",
+          "status": "done",
+          "started_at": "2026-05-16T00:04:24.096388+00:00",
+          "finished_at": "2026-05-16T00:13:54.277096+00:00",
+          "result": {
+            "operations": [
+              {
+                "order": 1,
+                "action": "git rm",
+                "files": [
+                  "ab_test_baseline.json",
+                  "eval_baseline.json",
+                  "benchmark_results.json",
+                  "graph-grpc-apm-payper.html"
+                ],
+                "risk": "low",
+                "reason": "confirmed dead, no code refs"
+              },
+              {
+                "order": 2,
+                "action": "git rm",
+                "files": [
+                  "scripts/audit_index_gaps.py",
+                  "scripts/bench_routing_e2e.py",
+                  "scripts/build_eval_rebuild_bundle.py",
+                  "scripts/build_eval_v2_llm_calibrated.py",
+                  "scripts/rescore_against_clean.py",
+                  "scripts/analyze_change_impact.py",
+                  "scripts/analyze_developer_patterns.py",
+                  "scripts/analyze_file_patterns.py"
+                ],
+                "risk": "low",
+                "reason": "confirmed dead root scripts/symlinks"
+              },
+              {
+                "order": 3,
+                "action": "rm",
+                "files": [
+                  "profiles/pay-com/scripts/analyze_change_impact.py",
+                  "profiles/pay-com/scripts/analyze_file_patterns.py",
+                  "profiles/pay-com/scripts/analyze_developer_patterns.py"
+                ],
+                "risk": "low",
+                "reason": "confirmed dead profile scripts, all gitignored"
+              },
+              {
+                "order": 4,
+                "action": "mkdir + git mv",
+                "files": "scripts categorized into subdirs per P1",
+                "risk": "medium",
+                "reason": "requires updating imports and Makefile"
+              },
+              {
+                "order": 5,
+                "action": "skip",
+                "files": [
+                  "config.json",
+                  "patterns-export.json",
+                  "scripts/generate_housekeeping_report.py",
+                  "scripts/analyze_gaps.py",
+                  "profiles/pay-com/scripts/analyze_gaps.py",
+                  "benchmark_realworld_results.json",
+                  "benchmark_flows_results.json"
+                ],
+                "risk": "none",
+                "reason": "alive \u2014 have code consumers"
+              },
+              {
+                "order": 6,
+                "action": "gitignore + update refs",
+                "files": [
+                  "bench_runs/",
+                  ".claude/debug/"
+                ],
+                "risk": "medium",
+                "reason": "code references exist \u2014 must update code first"
+              }
+            ],
+            "skip": [
+              "config.json",
+              "patterns-export.json",
+              "scripts/generate_housekeeping_report.py",
+              "scripts/analyze_gaps.py",
+              "profiles/pay-com/scripts/analyze_gaps.py",
+              "benchmark_realworld_results.json",
+              "benchmark_flows_results.json"
+            ],
+            "blockers": [
+              {
+                "id": "B1",
+                "description": "bench_runs/ and .claude/debug/ referenced by code. Must update code refs before gitignoring.",
+                "severity": "medium"
+              },
+              {
+                "id": "B2",
+                "description": "scripts/analyze_gaps.py symlink imported by profiles/pay-com/scripts/auto_collect.py. Must update import path before removing.",
+                "severity": "medium"
+              }
+            ]
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "execution",
+      "label": "Phase 3: Execution",
+      "status": "in_progress",
+      "depends_on": [
+        "planning"
+      ],
+      "agents": [
+        {
+          "id": "E1",
+          "name": "Delete-Root-Dumps",
+          "task": "git rm 4 root JSON dumps",
+          "status": "done",
+          "started_at": "2026-05-16T00:14:14.641008+00:00",
+          "finished_at": "2026-05-15T22:02:35.902725+00:00",
+          "result": {
+            "deleted": [
+              "ab_test_baseline.json",
+              "eval_baseline.json",
+              "benchmark_results.json",
+              "graph-grpc-apm-payper.html"
+            ]
+          },
+          "error": null
+        },
+        {
+          "id": "E2",
+          "name": "Delete-Orphans",
+          "task": "git rm graph HTML + 3 benchmark JSON orphans",
+          "status": "done",
+          "started_at": "2026-05-16T00:14:14.641008+00:00",
+          "finished_at": "2026-05-16T00:15:14.968542+00:00",
+          "result": {
+            "deleted": [
+              "scripts/audit_index_gaps.py",
+              "scripts/bench_routing_e2e.py",
+              "scripts/build_eval_rebuild_bundle.py",
+              "scripts/build_eval_v2_llm_calibrated.py",
+              "scripts/rescore_against_clean.py",
+              "scripts/analyze_change_impact.py",
+              "scripts/analyze_developer_patterns.py",
+              "scripts/analyze_file_patterns.py"
+            ],
+            "count": 8,
+            "verified": true
+          },
+          "error": null
+        },
+        {
+          "id": "E3",
+          "name": "Delete-Profile-Dead",
+          "task": "Delete 3 confirmed dead profile scripts",
+          "status": "done",
+          "started_at": "2026-05-16T00:14:14.641008+00:00",
+          "finished_at": "2026-05-15T22:02:35.902725+00:00",
+          "result": {
+            "deleted": [
+              "profiles/pay-com/scripts/analyze_change_impact.py",
+              "profiles/pay-com/scripts/analyze_developer_patterns.py",
+              "profiles/pay-com/scripts/analyze_file_patterns.py"
+            ]
+          },
+          "error": null
+        },
+        {
+          "id": "E4",
+          "name": "Delete-Root-Dead-Scripts",
+          "task": "git rm 7 dead root scripts (note: 4 are symlinks)",
+          "status": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "result": null,
+          "error": null
+        },
+        {
+          "id": "E5",
+          "name": "Delete-Profile-Dead-Scripts",
+          "task": "rm 4 dead profile scripts (gitignored, not tracked)",
+          "status": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "result": null,
+          "error": null
+        },
+        {
+          "id": "E6",
+          "name": "Gitignore-Generated",
+          "task": "Update .gitignore for bench_runs/ and .claude/debug/, git rm --cached tracked files",
+          "status": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "result": null,
+          "error": null
+        },
+        {
+          "id": "E7",
+          "name": "Mkdir-Scripts-Categories",
+          "task": "Create scripts/{build,bench,eval,analysis,maint,data,scrape}/",
+          "status": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "result": null,
+          "error": null
+        },
+        {
+          "id": "E8",
+          "name": "Move-Scripts",
+          "task": "git mv scripts to new locations per P1 plan",
+          "status": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "result": null,
+          "error": null
+        },
+        {
+          "id": "E9",
+          "name": "Update-Test-Imports",
+          "task": "Update test imports for moved scripts",
+          "status": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "result": null,
+          "error": null
+        },
+        {
+          "id": "E10",
+          "name": "Update-Makefile",
+          "task": "Update Makefile references to moved scripts",
+          "status": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "result": null,
+          "error": null
+        },
+        {
+          "id": "E11",
+          "name": "Add-Scripts-Init",
+          "task": "Add scripts/__init__.py and category __init__.py if needed",
+          "status": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "result": null,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "verification",
+      "label": "Phase 4: Verification",
+      "status": "pending",
+      "depends_on": [
+        "execution"
+      ],
+      "agents": [
+        {
+          "id": "V1",
+          "name": "Pytest-Smoke",
+          "task": "Run pytest collection check, verify no new import errors",
+          "status": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "result": null,
+          "error": null
+        },
+        {
+          "id": "V2",
+          "name": "Makefile-Check",
+          "task": "Verify make help works, paths resolve correctly",
+          "status": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "result": null,
+          "error": null
+        },
+        {
+          "id": "V3",
+          "name": "Health-Check-Script",
+          "task": "Run health_check_agents_md.py (new path), must PASS",
+          "status": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "result": null,
+          "error": null
+        },
+        {
+          "id": "V4",
+          "name": "Git-Status",
+          "task": "Verify git status: expected deletions/moves, no unexpected changes",
+          "status": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "result": null,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "agents_md_sync",
+      "label": "Phase 5: AGENTS.md Sync",
+      "status": "pending",
+      "depends_on": [
+        "verification"
+      ],
+      "agents": [
+        {
+          "id": "S1",
+          "name": "Update-Root-AGENTS",
+          "task": "Update root AGENTS.md: directory tree, scripts catalog, dead/legacy, storage, key files",
+          "status": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "result": null,
+          "error": null
+        },
+        {
+          "id": "S2",
+          "name": "Update-Profile-AGENTS",
+          "task": "Update profiles/pay-com/AGENTS.md: remove dead refs, update counts",
+          "status": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "result": null,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "final_commit",
+      "label": "Phase 6: Final Commit",
+      "status": "pending",
+      "depends_on": [
+        "agents_md_sync"
+      ],
+      "agents": [
+        {
+          "id": "F1",
+          "name": "Final-Commit",
+          "task": "Stage all changes, commit with structured message, final health check",
+          "status": "pending",
+          "started_at": null,
+          "finished_at": null,
+          "result": null,
+          "error": null
+        }
+      ]
+    }
+  ],
+  "blockers": [
+    {
+      "id": "B1",
+      "phase": "planning",
+      "description": "bench_runs/ and .claude/debug/ are referenced by source code. Cannot simply gitignore without updating code refs first.",
+      "severity": "warning",
+      "source": "R4"
+    }
+  ],
+  "artifacts": {
+    "research": {},
+    "planning": {
+      "p1": {
+        "new_structure": {
+          "scripts/build/": [
+            "build_index.py",
+            "build_graph.py",
+            "build_env_index.py",
+            "build_audit_context.py",
+            "build_clean_jira_eval.py",
+            "build_code_eval.py",
+            "build_combined_train.py",
+            "build_docs_vectors.py",
+            "build_internal_traces.py",
+            "build_rerank_pointwise_eval.py",
+            "build_shadow_types.py",
+            "build_train_pairs_v2.py",
+            "build_vectors.py"
+          ],
+          "scripts/bench/": [
+            "bench_utils.py",
+            "bench_v2_gate.py",
+            "benchmark_bench_v2.py",
+            "benchmark_doc_indexing_ab.py",
+            "benchmark_doc_intent.py",
+            "benchmark_file_recall.py",
+            "benchmark_flows.py",
+            "benchmark_investigation.py",
+            "benchmark_queries.py",
+            "benchmark_realworld.py",
+            "benchmark_recall.py",
+            "benchmark_rerank_ab.py",
+            "local_code_bench.py",
+            "sample_bench_v2.py"
+          ],
+          "scripts/eval/": [
+            "eval_finetune.py",
+            "eval_harness.py",
+            "eval_jidm.py",
+            "eval_verdict.py",
+            "bootstrap_eval_ci.py",
+            "build_eval_rebuild_bundle.py",
+            "build_eval_v2_llm_calibrated.py"
+          ],
+          "scripts/analysis/": [
+            "ab_lost_tickets.py",
+            "analyze_calls.py",
+            "analyze_churn.py",
+            "analyze_feedback.py",
+            "analyze_session_quality.py",
+            "autoresearch_eval.py",
+            "autoresearch_loop.py",
+            "churn_p1c_validate.py",
+            "churn_replay.py",
+            "churn_reranker_judge.py",
+            "detect_blind_spots.py",
+            "detect_doc_staleness.py",
+            "mine_co_changes.py",
+            "predict_failures.py",
+            "proactivity_eval.py",
+            "semantic_gap_scorer.py"
+          ],
+          "scripts/maint/": [
+            "health_check_agents_md.py",
+            "validate_doc_anchors.py",
+            "validate_doc_file_line_refs.py",
+            "validate_doc_frontmatter.py",
+            "validate_doc_related_repos.py",
+            "validate_doc_size.py",
+            "validate_gaps.py",
+            "validate_overlay_vs_proto.py",
+            "validate_provider_paths.py",
+            "validate_recipe.py",
+            "generate_housekeeping_report.py",
+            "audit_index_gaps.py",
+            "rescore_against_clean.py",
+            "bench_routing_e2e.py"
+          ],
+          "scripts/data/": [
+            "prepare_finetune_data.py",
+            "finetune_reranker.py",
+            "convert_to_listwise.py",
+            "dedup_docs_lance.py",
+            "embed_missing_vectors.py",
+            "label_v12_candidates_minilm.py",
+            "build_vectors.py",
+            "merge_dual_judge_labels.py",
+            "merge_eval_shards.py",
+            "sample_real_queries.py",
+            "local_smoke_candidates.py",
+            "v12_candidates.py",
+            "v12_candidates_regen_doc.py"
+          ],
+          "scripts/scrape/": [
+            "tavily-docs-crawler.py",
+            "finalize_scrape.py",
+            "extract_artifacts.py",
+            "scrape_link_rewrite.py"
+          ],
+          "scripts/runpod/": [
+            "train_docs_embedder.py",
+            "pod_lifecycle.py",
+            "pod_watcher.py"
+          ]
+        },
+        "keep_at_root": [
+          "_common.py",
+          "full_update.sh",
+          "clone_repos.sh",
+          "build_vectors.py",
+          "health_check_agents_md.py"
+        ],
+        "files_to_delete": [
+          "scripts/audit_index_gaps.py",
+          "scripts/bench_routing_e2e.py",
+          "scripts/build_eval_rebuild_bundle.py",
+          "scripts/build_eval_v2_llm_calibrated.py",
+          "scripts/rescore_against_clean.py",
+          "scripts/analyze_change_impact.py",
+          "scripts/analyze_developer_patterns.py",
+          "scripts/analyze_file_patterns.py"
+        ],
+        "migration_notes": "build_vectors.py and health_check_agents_md.py kept at root due to Makefile and test refs. All other scripts categorized by function."
+      },
+      "p2": {
+        "operations": [
+          {
+            "order": 1,
+            "action": "git rm",
+            "files": [
+              "ab_test_baseline.json",
+              "eval_baseline.json",
+              "benchmark_results.json",
+              "graph-grpc-apm-payper.html"
+            ],
+            "risk": "low",
+            "reason": "confirmed dead, no code refs"
+          },
+          {
+            "order": 2,
+            "action": "git rm",
+            "files": [
+              "scripts/audit_index_gaps.py",
+              "scripts/bench_routing_e2e.py",
+              "scripts/build_eval_rebuild_bundle.py",
+              "scripts/build_eval_v2_llm_calibrated.py",
+              "scripts/rescore_against_clean.py",
+              "scripts/analyze_change_impact.py",
+              "scripts/analyze_developer_patterns.py",
+              "scripts/analyze_file_patterns.py"
+            ],
+            "risk": "low",
+            "reason": "confirmed dead root scripts/symlinks"
+          },
+          {
+            "order": 3,
+            "action": "rm",
+            "files": [
+              "profiles/pay-com/scripts/analyze_change_impact.py",
+              "profiles/pay-com/scripts/analyze_file_patterns.py",
+              "profiles/pay-com/scripts/analyze_developer_patterns.py"
+            ],
+            "risk": "low",
+            "reason": "confirmed dead profile scripts, all gitignored"
+          },
+          {
+            "order": 4,
+            "action": "mkdir + git mv",
+            "files": "scripts categorized into subdirs per P1",
+            "risk": "medium",
+            "reason": "requires updating imports and Makefile"
+          },
+          {
+            "order": 5,
+            "action": "skip",
+            "files": [
+              "config.json",
+              "patterns-export.json",
+              "scripts/generate_housekeeping_report.py",
+              "scripts/analyze_gaps.py",
+              "profiles/pay-com/scripts/analyze_gaps.py",
+              "benchmark_realworld_results.json",
+              "benchmark_flows_results.json"
+            ],
+            "risk": "none",
+            "reason": "alive \u2014 have code consumers"
+          },
+          {
+            "order": 6,
+            "action": "gitignore + update refs",
+            "files": [
+              "bench_runs/",
+              ".claude/debug/"
+            ],
+            "risk": "medium",
+            "reason": "code references exist \u2014 must update code first"
+          }
+        ],
+        "skip": [
+          "config.json",
+          "patterns-export.json",
+          "scripts/generate_housekeeping_report.py",
+          "scripts/analyze_gaps.py",
+          "profiles/pay-com/scripts/analyze_gaps.py",
+          "benchmark_realworld_results.json",
+          "benchmark_flows_results.json"
+        ],
+        "blockers": [
+          {
+            "id": "B1",
+            "description": "bench_runs/ and .claude/debug/ referenced by code. Must update code refs before gitignoring.",
+            "severity": "medium"
+          },
+          {
+            "id": "B2",
+            "description": "scripts/analyze_gaps.py symlink imported by profiles/pay-com/scripts/auto_collect.py. Must update import path before removing.",
+            "severity": "medium"
+          }
+        ]
+      }
+    },
+    "execution": {},
+    "verification": {}
+  },
+  "notes": []
+}

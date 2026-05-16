@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import analyze_churn as ac  # type: ignore[import-not-found]  # noqa: E402
+import scripts.analysis.analyze_churn as ac  # type: ignore[import-not-found]  # noqa: E402
 
 
 def _fake_result(repo: str, file_path: str) -> dict:

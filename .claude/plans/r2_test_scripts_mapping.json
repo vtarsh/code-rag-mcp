@@ -1,0 +1,319 @@
+{
+  "test_analyze.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_analyze_churn.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/analyze_churn.py"
+    ]
+  },
+  "test_bench_v2.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/sample_bench_v2.py",
+      "scripts/bench_v2_gate.py",
+      "scripts/benchmark_bench_v2.py"
+    ]
+  },
+  "test_benchmark_doc_intent.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/benchmark_doc_intent.py"
+    ]
+  },
+  "test_build_combined_train.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/build_combined_train.py"
+    ]
+  },
+  "test_build_train_pairs.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/build_train_pairs_v2.py"
+    ]
+  },
+  "test_cache.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_chunking.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/build_index.py"
+    ]
+  },
+  "test_churn_replay.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/churn_replay.py"
+    ]
+  },
+  "test_churn_reranker_judge.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/churn_reranker_judge.py"
+    ]
+  },
+  "test_classifier.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_code_facts.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_code_intent_eval.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/build_code_eval.py"
+    ]
+  },
+  "test_config.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_container.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_context.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_cross_provider_fanout.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_daemon.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_docs_chunks.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_docs_vector_indexer.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_env_vars.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_eval_file_gt.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/eval_finetune.py",
+      "scripts/eval_verdict.py",
+      "scripts/merge_eval_shards.py",
+      "scripts/prepare_finetune_data.py"
+    ]
+  },
+  "test_eval_jidm.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/eval_jidm.py"
+    ]
+  },
+  "test_eval_verdict.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/eval_verdict.py",
+      "scripts/eval_finetune.py",
+      "scripts/merge_eval_shards.py"
+    ]
+  },
+  "test_fields.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_finalize_scrape.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/finalize_scrape.py"
+    ]
+  },
+  "test_fts.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_fts_preclean.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/prepare_finetune_data.py"
+    ]
+  },
+  "test_graph_queries.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_hybrid.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_hybrid_doc_intent.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_index_builders.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_integration.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_label_v12_candidates_minilm.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/label_v12_candidates_minilm.py"
+    ]
+  },
+  "test_listwise_conversion.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/finetune_reranker.py"
+    ]
+  },
+  "test_lpt_schedule.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/eval_finetune.py"
+    ]
+  },
+  "test_memguard.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_merge_dual_judge_labels.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/merge_dual_judge_labels.py"
+    ]
+  },
+  "test_meta_guard.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_prepare_finetune_data.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/prepare_finetune_data.py"
+    ]
+  },
+  "test_prepare_train_data.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/runpod/prepare_train_data.py"
+    ]
+  },
+  "test_proto_parser.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_provider_doc_dedup.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_rerank_pointwise_eval.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/build_rerank_pointwise_eval.py"
+    ]
+  },
+  "test_rerank_skip.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_router_whitelist.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_runpod_lifecycle.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/runpod/pod_lifecycle.py",
+      "scripts/runpod/cost_guard.py",
+      "scripts/runpod/full_pipeline.py",
+      "scripts/runpod/train_docs_embedder.py",
+      "scripts/runpod/train_reranker_ce.py",
+      "scripts/benchmark_doc_intent.py"
+    ]
+  },
+  "test_sample_real_queries.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/sample_real_queries.py"
+    ]
+  },
+  "test_scrape_link_rewrite.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "profiles/pay-com/scripts/tavily-docs-crawler.py"
+    ]
+  },
+  "test_scripts_common.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/_common.py"
+    ]
+  },
+  "test_search_service.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_shadow_types.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_shared_files_warning.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_singleflight.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_suggestions.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_train_docs_embedder.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/runpod/train_docs_embedder.py"
+    ]
+  },
+  "test_train_reranker_ce.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/runpod/train_reranker_ce.py",
+      "scripts/runpod/train_docs_embedder.py"
+    ]
+  },
+  "test_two_tower_foundation.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_two_tower_routing.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_types.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  },
+  "test_validate_provider_paths.py": {
+    "imports_scripts": true,
+    "tested_scripts": [
+      "scripts/validate_provider_paths.py"
+    ]
+  },
+  "test_vector.py": {
+    "imports_scripts": false,
+    "tested_scripts": []
+  }
+}
