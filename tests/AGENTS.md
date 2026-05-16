@@ -9,15 +9,12 @@
 tests/
 ├── conftest.py              # Shared fixtures (db, tmp_path profiles)
 ├── test_analyze.py          # analyze_task core logic
-├── test_analyze_churn.py    # Churn analysis
 ├── test_bench_v2.py         # Benchmark v2 infrastructure
 ├── test_benchmark_doc_intent.py  # Doc intent benchmarks
 ├── test_build_combined_train.py  # Training data builder
 ├── test_build_train_pairs.py     # Pair builder
 ├── test_cache.py
 ├── test_chunking.py
-├── test_churn_replay.py
-├── test_churn_reranker_judge.py
 ├── test_code_intent_eval.py
 ├── test_eval_file_gt.py
 ├── test_eval_jidm.py
@@ -48,7 +45,6 @@ tests/
 | `test_analyze.py` | 30+ | `src/tools/analyze/` |
 | `test_benchmark_doc_intent.py` | 25+ | `scripts/bench/benchmark_doc_intent.py` |
 | `test_build_combined_train.py` | 15 | `scripts/build/build_combined_train.py` |
-| `test_churn_reranker_judge.py` | 12 | `scripts/analysis/churn_reranker_judge.py` |
 | `test_vector.py` | 10 | `src/search/vectors.py` |
 
 ## Running Tests

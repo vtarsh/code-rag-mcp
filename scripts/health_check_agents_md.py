@@ -227,9 +227,9 @@ class HealthChecker:
                 )
 
     def check_counts(self) -> None:
-        # Root: 62 test files  (line 111)
+        # Root: 59 test files  (line 111)
         actual = self._count_glob("tests/test_*.py")
-        self._assert_count("test files", 62, actual, line=111)
+        self._assert_count("test files", 59, actual, line=111)
 
         # Root: 71 Python modules in src/  (line 181)
         actual = len(list((REPO_ROOT / "src").rglob("*.py")))

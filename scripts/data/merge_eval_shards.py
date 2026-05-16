@@ -7,11 +7,11 @@ scripts/eval_finetune.py main() did when run single-process.
 
 Usage:
   python3 scripts/merge_eval_shards.py \
-    --shards profiles/pay-com/finetune_history/gte_v8.shard0of3.json \
-             profiles/pay-com/finetune_history/gte_v8.shard1of3.json \
-             profiles/pay-com/finetune_history/gte_v8.shard2of3.json \
-    --manifest profiles/pay-com/finetune_data_v8/manifest.json \
-    --out profiles/pay-com/finetune_history/gte_v8.json
+    --shards eval_out/run1.shard0of3.json \
+             eval_out/run1.shard1of3.json \
+             eval_out/run1.shard2of3.json \
+    --manifest train_data/manifest.json \
+    --out eval_out/run1_merged.json
 """
 
 from __future__ import annotations

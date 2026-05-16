@@ -47,18 +47,13 @@ scripts/
 │   ├── eval_harness.py
 │   ├── eval_jidm.py
 │   ├── eval_verdict.py
-│   └── sanity_v2_gate.py
+│   └── eval_verdict.py
 ├── analysis/               # Analytics, churn, mining
-│   ├── ab_lost_tickets.py
 │   ├── analyze_calls.py
-│   ├── analyze_churn.py
 │   ├── analyze_feedback.py
 │   ├── analyze_session_quality.py
 │   ├── autoresearch_eval.py
 │   ├── autoresearch_loop.py
-│   ├── churn_p1c_validate.py
-│   ├── churn_replay.py
-│   ├── churn_reranker_judge.py
 │   ├── detect_blind_spots.py
 │   ├── detect_doc_staleness.py
 │   ├── gen_repo_facts.py

@@ -6,8 +6,6 @@ integration check against the real historical snapshots (v4, v6.2, v7).
 
 from __future__ import annotations
 
-import json
-
 # Scripts/ isn't a package; import via explicit path insertion.
 import sys
 from pathlib import Path
@@ -26,7 +24,6 @@ from scripts.eval.eval_verdict import (  # noqa: E402
     compute_r10_mean,
     count_improvements_regressions,
     decide_verdict,
-    verdict_from_snapshot,
 )
 
 # ---- Metric helper sanity ----
@@ -267,89 +264,3 @@ class TestDecideVerdict:
 
 
 # ---- Integration against the real historical snapshots ----
-
-_HISTORY = _REPO_ROOT / "profiles" / "pay-com" / "finetune_history"
-
-
-@pytest.fixture(scope="module")
-def snapshot_v4():
-    return json.loads((_HISTORY / "gte_v4.json").read_text())
-
-
-@pytest.fixture(scope="module")
-def snapshot_v6_2():
-    return json.loads((_HISTORY / "gte_v6_2.json").read_text())
-
-
-@pytest.fixture(scope="module")
-def snapshot_v7():
-    return json.loads((_HISTORY / "gte_v7.json").read_text())
-
-
-class TestHistoricalSnapshots:
-    """Integration sanity: our historical snapshots should re-score consistently.
-
-    Reference numbers (independently computed by audit 2026-04-20 with
-    per_task data from the same files):
-
-        v4:   Δr@10=+0.0406, Δhit5=+0.0495, improved=115, regressed=41
-        v6.2: Δr@10=+0.0430, Δhit5=+0.0572, improved=129, regressed=40
-        v7:   Δr@10=+0.0339, Δhit5=+0.0561, improved=125, regressed=52
-
-    All three pass current gate (net ≥ 20, deltas ≥ 2pp on both primaries).
-    If these numbers drift, either eval changed OR this module drifted.
-    """
-
-    @pytest.mark.skipif(not (_HISTORY / "gte_v4.json").is_file(), reason="v4 snapshot absent")
-    def test_v4_promotes_and_matches_audit_numbers(self, snapshot_v4):
-        res = verdict_from_snapshot(
-            snapshot_v4["per_task_baseline"],
-            snapshot_v4["per_task_ft_v1"],
-            snapshot_v4["per_task_delta"],
-        )
-        assert res.verdict == "PROMOTE"
-        assert res.metrics["delta_r10_all"] == pytest.approx(0.041, abs=0.002)
-        assert res.metrics["delta_hit5_all"] == pytest.approx(0.050, abs=0.002)
-        assert res.metrics["n_improved_r10"] == 115
-        assert res.metrics["n_regressed_r10"] == 41
-
-    @pytest.mark.skipif(not (_HISTORY / "gte_v6_2.json").is_file(), reason="v6.2 snapshot absent")
-    def test_v62_promotes_and_matches_audit_numbers(self, snapshot_v6_2):
-        res = verdict_from_snapshot(
-            snapshot_v6_2["per_task_baseline"],
-            snapshot_v6_2["per_task_ft_v1"],
-            snapshot_v6_2["per_task_delta"],
-        )
-        assert res.verdict == "PROMOTE"
-        assert res.metrics["delta_r10_all"] == pytest.approx(0.043, abs=0.002)
-        assert res.metrics["delta_hit5_all"] == pytest.approx(0.057, abs=0.002)
-        assert res.metrics["n_improved_r10"] == 129
-        assert res.metrics["n_regressed_r10"] == 40
-
-    @pytest.mark.skipif(not (_HISTORY / "gte_v7.json").is_file(), reason="v7 snapshot absent")
-    def test_v7_promotes_on_jira_eval_but_is_known_bad_on_runtime(self, snapshot_v7):
-        """v7 passes Jira gate — which is WHY runtime benchmarks are a separate
-        required guard (this gate doesn't know about latency or runtime
-        queries). Gate is necessary but not sufficient for prod decisions.
-        """
-        res = verdict_from_snapshot(
-            snapshot_v7["per_task_baseline"],
-            snapshot_v7["per_task_ft_v1"],
-            snapshot_v7["per_task_delta"],
-        )
-        assert res.verdict == "PROMOTE"
-        assert res.metrics["n_regressed_r10"] == 52
-
-    @pytest.mark.skipif(not (_HISTORY / "gte_v6_2.json").is_file(), reason="v6.2 snapshot absent")
-    def test_v62_mrr_diagnostic_is_present(self, snapshot_v6_2):
-        """MRR is diagnostic only — it MUST appear in metrics but MUST NOT
-        affect the verdict. (v6.2 MRR delta ≈ +0.084, just for reference.)
-        """
-        res = verdict_from_snapshot(
-            snapshot_v6_2["per_task_baseline"],
-            snapshot_v6_2["per_task_ft_v1"],
-            snapshot_v6_2["per_task_delta"],
-        )
-        assert "mrr_ft_diag" in res.metrics
-        assert "mrr_baseline_diag" in res.metrics
-        assert "delta_mrr_diag" in res.metrics
