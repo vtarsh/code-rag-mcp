@@ -20,6 +20,11 @@ dependency tracing, and task analysis tools via Model Context Protocol.
 │   config.py ─── profile loading, conventions.yaml           │
 │   container.py ── DB connections, ML model preload          │
 │   ├── search/  (FTS5 + LanceDB + CrossEncoder)              │
+│   │   ├── hybrid.py      — orchestrator: RRF, two-tower,    │
+│   │   │                    cross-provider fan-out             │
+│   │   ├── hybrid_query.py — query intent / stratum / provider│
+│   │   ├── hybrid_rerank.py — CrossEncoder rerank + penalties │
+│   │   ├── fts.py, vector.py, code_facts.py, env_vars.py      │
 │   ├── graph/   (BFS, shortest path, 28 edge types)          │
 │   └── tools/                                                │
 │       ├── analyze/  (task analysis, 13 modules)             │

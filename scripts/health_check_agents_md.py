@@ -233,7 +233,7 @@ class HealthChecker:
 
         # Root: 71 Python modules in src/  (line 181)
         actual = len(list((REPO_ROOT / "src").rglob("*.py")))
-        self._assert_count("src Python modules", 71, actual, line=181)
+        self._assert_count("src Python modules", 73, actual, line=181)
 
         # Root: 14 graph builder modules  (line 467)
         actual = self._count_glob("src/graph/builders/*.py")
