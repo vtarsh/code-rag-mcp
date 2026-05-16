@@ -74,13 +74,13 @@ make test
 ## How it works
 
 ```
-1. clone_repos.sh    — shallow-clone all repos from your GitHub org
-2. extract_artifacts  — parse repos into structured artifacts (proto, docs, configs...)
-3. build_index        — create SQLite FTS5 full-text search index
-4. build_vectors      — create LanceDB vector embeddings for semantic search
-5. build_graph        — build dependency graph (gRPC calls, npm deps, proto imports...)
-6. daemon.py          — persistent HTTP server holding ML models in memory
-7. mcp_server.py      — thin MCP proxy (Claude Code talks to this)
+1. clone_repos.sh                       — shallow-clone all repos from your GitHub org
+2. scripts/scrape/extract_artifacts.py   — parse repos into structured artifacts
+3. scripts/build/build_index.py          — create SQLite FTS5 full-text search index
+4. scripts/build_vectors.py              — create LanceDB vector embeddings (kept at root)
+5. scripts/build/build_graph.py          — build dependency graph (gRPC, npm, proto...)
+6. daemon.py                             — persistent HTTP server holding ML models
+7. mcp_server.py                         — thin MCP proxy (Claude Code talks to this)
 ```
 
 ## Profiles

@@ -36,19 +36,19 @@ Per-task recall, then averaged by group (CORE, PI, BO, HS).
 
 ```bash
 # Full recall on all benchmarkable tasks (current set: 361 — see RECALL-TRACKER)
-python3 scripts/benchmark_recall.py
+python3 scripts/bench/benchmark_recall.py
 
 # By group
-python3 scripts/benchmark_recall.py --group=CORE
-python3 scripts/benchmark_recall.py --group=PI,BO
+python3 scripts/bench/benchmark_recall.py --group=CORE
+python3 scripts/bench/benchmark_recall.py --group=PI,BO
 
 # Single task (verbose — shows missed repos)
-python3 scripts/benchmark_recall.py --task=CORE-2586
+python3 scripts/bench/benchmark_recall.py --task=CORE-2586
 
 # Search quality benchmarks
-python3 scripts/benchmark_queries.py      # conceptual (baseline: 0.85)
-python3 scripts/benchmark_realworld.py    # realworld (baseline: 0.83)
-python3 scripts/benchmark_flows.py        # flow completeness (baseline: 0.875)
+python3 scripts/bench/benchmark_queries.py      # conceptual (baseline: 0.85)
+python3 scripts/bench/benchmark_realworld.py    # realworld (baseline: 0.83)
+python3 scripts/bench/benchmark_flows.py        # flow completeness (baseline: 0.875)
 ```
 
 ### Important Caveats
@@ -63,7 +63,7 @@ python3 scripts/benchmark_flows.py        # flow completeness (baseline: 0.875)
 ### Step 1: Identify Missed Repos
 
 ```bash
-python3 scripts/benchmark_recall.py --task=CORE-2580
+python3 scripts/bench/benchmark_recall.py --task=CORE-2580
 # Output: 57% (4/7) missed=['grpc-core-settings', 'grpc-core-transactions', 'grpc-risk-engine']
 ```
 
@@ -88,15 +88,15 @@ Pattern-based fix, never hardcoded repo name. Examples:
 
 ```bash
 # Before
-python3 scripts/benchmark_recall.py --group=CORE  # 78.1%
+python3 scripts/bench/benchmark_recall.py --group=CORE  # 78.1%
 
 # ... make change ...
 
 # After
-python3 scripts/benchmark_recall.py --group=CORE  # 83.2%
+python3 scripts/bench/benchmark_recall.py --group=CORE  # 83.2%
 
 # Verify no regression in other groups
-python3 scripts/benchmark_recall.py               # total still ≥ 80%
+python3 scripts/bench/benchmark_recall.py               # total still ≥ 80%
 ```
 
 ### Step 5: Commit + Update Tracker
