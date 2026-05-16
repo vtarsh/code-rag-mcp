@@ -275,13 +275,13 @@ class HealthChecker:
         actual = self._count_files("profiles/pay-com/docs/flows")
         self._assert_count("flow files", 20, actual, line=331)
 
-        # Profile: 10 MOC files  (line 358)
+        # Profile: 0 MOC files  (line 358) — _moc/ deleted as stale auto-generated indexes
         actual = self._count_files("profiles/pay-com/docs/notes/_moc")
-        self._assert_count("MOC files", 10, actual, line=358)
+        self._assert_count("MOC files", 0, actual, line=358)
 
-        # Profile: 52 provider folders  (line 375)
+        # Profile: 50 provider folders  (line 375) — aircash + neosurf removed (REMOVED in matrix)
         actual = self._count_dirs("profiles/pay-com/docs/providers")
-        self._assert_count("provider folders", 52, actual, line=375)
+        self._assert_count("provider folders", 50, actual, line=375)
 
         # Profile: 25 profile scripts  (line 61, 448)
         actual = len(
@@ -289,9 +289,9 @@ class HealthChecker:
         )
         self._assert_count("profile scripts", 22, actual, line=448)
 
-        # Profile: 4,086 docs files  (line 102)
+        # Profile: 4,014 docs files  (line 102) — after duplicate purge + removed provider dirs
         actual = self._count_files("profiles/pay-com/docs")
-        self._assert_count("docs files", 4086, actual, line=102)
+        self._assert_count("docs files", 4014, actual, line=102)
 
     # ------------------------------------------------------------------
     # 3. Orphan detection
