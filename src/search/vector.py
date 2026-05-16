@@ -63,12 +63,58 @@ def vector_search(
     where = " AND ".join(filters) if filters else None
 
     try:
-        results = table.search(embedding).where(where).limit(limit).to_list()
+        # P0e (2026-05-17): request larger ANN pool and filter in Python to avoid
+        # LanceDB post-filter returning <limit rows when restrictive WHERE is applied.
+        ann_limit = limit * 10 if where else limit
+        raw_results = table.search(embedding).where(where).limit(ann_limit).to_list()
+
+        # Post-filter in Python: if LanceDB returned too many due to loose filtering,
+        # apply exact filters. If too few, we already got what ANN could find.
+        if where and len(raw_results) > limit:
+            # Re-apply exact filters manually for precision
+            filtered = []
+            for r in raw_results:
+                if repo and repo not in (r.get("repo_name") or ""):
+                    continue
+                if file_type and r.get("file_type") != file_type:
+                    continue
+                if exclude_file_types:
+                    excluded = {ft.strip() for ft in exclude_file_types.split(",") if ft.strip()}
+                    if r.get("file_type") in excluded:
+                        continue
+                filtered.append(r)
+                if len(filtered) >= limit:
+                    break
+            results = filtered
+        else:
+            results = raw_results[:limit]
+
+        distances = [r.get("_distance") for r in results if r.get("_distance") is not None]
+        if distances:
+            log.debug(
+                f"Vector search: model={model_key}, query_len={len(query)}, "
+                f"results={len(results)}, distance_range={min(distances):.3f}-{max(distances):.3f}"
+            )
+        else:
+            log.debug(
+                f"Vector search: model={model_key}, query_len={len(query)}, results={len(results)}, distance_range=N/A"
+            )
         return results, err  # pass through provider warning if any
     except Exception as e:
         log.warning(f"Vector filter failed ({where}): {e}, retrying without filter")
         try:
             results = table.search(embedding).limit(limit).to_list()
+            distances = [r.get("_distance") for r in results if r.get("_distance") is not None]
+            if distances:
+                log.debug(
+                    f"Vector search: model={model_key}, query_len={len(query)}, "
+                    f"results={len(results)}, distance_range={min(distances):.3f}-{max(distances):.3f}"
+                )
+            else:
+                log.debug(
+                    f"Vector search: model={model_key}, query_len={len(query)}, "
+                    f"results={len(results)}, distance_range=N/A"
+                )
             return results, f"Filter failed, showing unfiltered results: {e}"
         except Exception as e2:
             return [], str(e2)

@@ -184,8 +184,8 @@ ASYNC_CHAIN_REPOS: list[str] = list(_async_chain.get("repos", []))
 _tuning: dict = _conventions.get("tuning", {})
 
 # RRF fusion
-RRF_K: int = int(_tuning.get("rrf_k", 60))
-KEYWORD_WEIGHT: float = float(_tuning.get("keyword_weight", 2.0))
+RRF_K: int = int(os.getenv("CODE_RAG_RRF_K", _tuning.get("rrf_k", 60)))
+KEYWORD_WEIGHT: float = float(os.getenv("CODE_RAG_KEYWORD_WEIGHT", _tuning.get("keyword_weight", 2.0)))
 GOTCHAS_BOOST: float = float(_tuning.get("gotchas_boost", 1.5))
 REFERENCE_BOOST: float = float(_tuning.get("reference_boost", 1.3))
 DICTIONARY_BOOST: float = float(_tuning.get("dictionary_boost", 1.4))
@@ -284,6 +284,77 @@ FLOW_EDGE_TYPES: set[str] = {
 
 # Pre-defined business flow entry points for trace_chain.
 KNOWN_FLOWS: dict[str, list[str]] = _load_yaml("known_flows.yaml") or {}
+
+
+# --- Domain dictionary (controlled vocabulary) ---
+def _load_dictionary() -> tuple[dict[str, set[str]], dict[str, str]]:
+    """Load dictionary YAMLs and build alias + hint maps.
+
+    Returns:
+        DICTIONARY_ALIAS_MAP: {lowercase_token: {canonical, alias1, ...}}
+        DICTIONARY_HINT_MAP: {lowercase_token: brief_definition}
+    """
+    alias_map: dict[str, set[str]] = {}
+    hint_map: dict[str, str] = {}
+
+    dict_dir = PROFILE_DIR / "docs" / "dictionary"
+    if not dict_dir.is_dir():
+        return alias_map, hint_map
+
+    def _brief(text: str, max_len: int = 120) -> str:
+        """Extract first sentence or truncate to max_len."""
+        if not text:
+            return ""
+        text = text.replace("\n", " ").strip()
+        for end in (". ", ".\n", ".", "\n", " —"):
+            idx = text.find(end)
+            if idx > 5:
+                return text[: idx + 1].strip()
+        if len(text) > max_len:
+            return text[:max_len].rstrip() + "..."
+        return text.strip()
+
+    for filename in ("concepts.yaml", "entities.yaml", "fields.yaml"):
+        path = dict_dir / filename
+        if not path.exists():
+            continue
+        try:
+            data = yaml.safe_load(path.read_text())
+            if not isinstance(data, list):
+                continue
+            for entry in data:
+                if not isinstance(entry, dict):
+                    continue
+                name = entry.get("name", "")
+                if not name:
+                    continue
+                canonical = name
+                aliases: list[str] = entry.get("aliases", [])
+                all_forms = {canonical, *aliases}
+
+                for form in all_forms:
+                    key = form.lower()
+                    alias_map.setdefault(key, set()).update(all_forms)
+
+                if filename == "concepts.yaml":
+                    brief = _brief(entry.get("definition", ""))
+                elif filename == "entities.yaml":
+                    brief = _brief(entry.get("scope", ""))
+                else:  # fields.yaml
+                    brief = _brief(entry.get("meaning", ""))
+
+                if brief:
+                    for form in all_forms:
+                        hint_map[form.lower()] = brief
+        except Exception:
+            continue
+
+    return alias_map, hint_map
+
+
+DICTIONARY_ALIAS_MAP: dict[str, set[str]]
+DICTIONARY_HINT_MAP: dict[str, str]
+DICTIONARY_ALIAS_MAP, DICTIONARY_HINT_MAP = _load_dictionary()
 
 
 # --- Structured recipes (evidence-based implementation patterns) ---

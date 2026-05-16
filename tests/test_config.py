@@ -3,6 +3,8 @@
 from src.config import (
     BASE_DIR,
     DB_PATH,
+    DICTIONARY_ALIAS_MAP,
+    DICTIONARY_HINT_MAP,
     DOMAIN_GLOSSARY,
     FLOW_EDGE_TYPES,
     KNOWN_FLOWS,
@@ -68,3 +70,31 @@ class TestKnownFlows:
     def test_all_flows_have_seeds(self):
         for name, seeds in KNOWN_FLOWS.items():
             assert len(seeds) > 0, f"Flow '{name}' has no seed repos"
+
+
+class TestDictionary:
+    def test_alias_map_not_empty(self):
+        assert len(DICTIONARY_ALIAS_MAP) > 0
+
+    def test_hint_map_not_empty(self):
+        assert len(DICTIONARY_HINT_MAP) > 0
+
+    def test_auth_code_alias(self):
+        # fields.yaml: authCode aliases: [auth_code]
+        assert "auth_code" in DICTIONARY_ALIAS_MAP
+        assert "authcode" in DICTIONARY_ALIAS_MAP
+        assert "authCode" in DICTIONARY_ALIAS_MAP["auth_code"]
+        assert "auth_code" in DICTIONARY_ALIAS_MAP["authcode"]
+
+    def test_hint_for_auth_code(self):
+        assert "authcode" in DICTIONARY_HINT_MAP
+        assert "auth_code" in DICTIONARY_HINT_MAP
+        assert "authorization code" in DICTIONARY_HINT_MAP["authcode"].lower()
+
+    def test_concept_present(self):
+        assert "throw_policy" in DICTIONARY_ALIAS_MAP
+        assert "throw_policy" in DICTIONARY_HINT_MAP
+
+    def test_entity_present(self):
+        assert "transaction" in DICTIONARY_ALIAS_MAP
+        assert "transaction" in DICTIONARY_HINT_MAP

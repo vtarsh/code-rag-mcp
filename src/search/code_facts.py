@@ -76,17 +76,15 @@ def fetch_chunks_for_files(pairs: list[tuple[str, str]]) -> list[dict[str, Any]]
     if not pairs:
         return []
 
-    results: list[dict[str, Any]] = []
+    values = ",".join(["(?, ?)"] * len(pairs))
+    flat = [item for pair in pairs for item in pair]
     with db_connection() as conn:
-        for repo_name, file_path in pairs:
-            row = conn.execute(
-                """SELECT rowid, repo_name, file_path, file_type, chunk_type,
-                          substr(content, 1, 400) AS snippet
-                   FROM chunks
-                   WHERE repo_name = ? AND file_path = ?
-                   ORDER BY rowid LIMIT 1""",
-                (repo_name, file_path),
-            ).fetchone()
-            if row:
-                results.append(dict(row))
-    return results
+        rows = conn.execute(
+            f"""SELECT MIN(rowid) as rowid, repo_name, file_path, file_type, chunk_type,
+                       substr(content, 1, 400) AS snippet
+                FROM chunks
+                WHERE (repo_name, file_path) IN (VALUES {values})
+                GROUP BY repo_name, file_path""",
+            flat,
+        ).fetchall()
+        return [dict(r) for r in rows]

@@ -71,11 +71,10 @@ class TestFetchChunksForFiles:
     def test_fetches_first_chunk_per_pair(self, mock_db_conn):
         mock_conn = MagicMock()
 
-        def execute_side_effect(_sql, params):
-            repo, path = params
+        def execute_side_effect(sql, params):
             result = MagicMock()
-            if (repo, path) == ("repo-a", "src/foo.js"):
-                result.fetchone.return_value = {
+            result.fetchall.return_value = [
+                {
                     "rowid": 100,
                     "repo_name": "repo-a",
                     "file_path": "src/foo.js",
@@ -83,8 +82,7 @@ class TestFetchChunksForFiles:
                     "chunk_type": "code_file",
                     "snippet": "first 400 chars of foo.js content",
                 }
-            else:
-                result.fetchone.return_value = None
+            ]
             return result
 
         mock_conn.execute.side_effect = execute_side_effect
@@ -95,6 +93,13 @@ class TestFetchChunksForFiles:
         assert len(chunks) == 1
         assert chunks[0]["rowid"] == 100
         assert chunks[0]["repo_name"] == "repo-a"
+
+        # Verify batched query: single call with flat param list
+        assert mock_conn.execute.call_count == 1
+        sql, params = mock_conn.execute.call_args[0]
+        assert "VALUES" in sql
+        assert "IN" in sql
+        assert params == ["repo-a", "src/foo.js", "repo-b", "missing.js"]
 
     def test_empty_pairs_returns_empty(self):
         assert fetch_chunks_for_files([]) == []

@@ -1,6 +1,6 @@
 """Tests for search/fts.py — query expansion and FTS5 sanitization."""
 
-from src.search.fts import _sanitize_fts_input, expand_query, sanitize_fts_query
+from src.search.fts import _sanitize_fts_input, expand_query, expand_query_dictionary, sanitize_fts_query
 
 
 class TestExpandQuery:
@@ -32,6 +32,42 @@ class TestExpandQuery:
     def test_ddm_expansion(self):
         result = expand_query("DDM flow")
         assert "direct debit mandate" in result
+
+
+class TestExpandQueryDictionary:
+    def test_alias_expansion(self):
+        # fields.yaml: authCode aliases: [auth_code]
+        result = expand_query_dictionary("auth_code provider")
+        assert "authCode" in result
+        assert result.startswith("auth_code provider")
+
+    def test_no_expansion_for_unknown(self):
+        result = expand_query_dictionary("random unknown xyz")
+        assert result == "random unknown xyz"
+
+    def test_no_duplicate_expansion(self):
+        result = expand_query_dictionary("authCode provider")
+        # authCode is canonical; auth_code is alias but should be added once
+        assert result.count("authCode") == 1
+        assert "auth_code" in result
+
+    def test_concept_no_alias_noop(self):
+        # concepts.yaml throw_policy has no aliases
+        result = expand_query_dictionary("throw_policy adapter")
+        assert result == "throw_policy adapter"
+
+    def test_case_insensitive_match(self):
+        result = expand_query_dictionary("AUTH_CODE provider")
+        assert "authCode" in result
+
+    def test_multiple_aliases(self):
+        # fields.yaml: processorTransactionId aliases: [processor_transaction_id, externalTransactionId]
+        result = expand_query_dictionary("processor_transaction_id foo")
+        assert "processorTransactionId" in result
+
+    def test_empty_query(self):
+        assert expand_query_dictionary("") == ""
+        assert expand_query_dictionary("   ") == "   "
 
 
 class TestSanitizeFtsQuery:
@@ -73,6 +109,19 @@ class TestSanitizeFtsQuery:
         result = sanitize_fts_query("trustly verification webhook")
         parts = result.split(" OR ")
         assert len(parts) == 3
+
+    def test_snake_case_split_and_quoted(self):
+        result = sanitize_fts_query("update_merchant")
+        assert "update" in result
+        assert "merchant" in result
+        assert '"update_merchant"' in result
+
+    def test_kebab_case_split_and_quoted(self):
+        result = sanitize_fts_query("foo-bar-baz")
+        assert "foo" in result
+        assert "bar" in result
+        assert "baz" in result
+        assert '"foo-bar-baz"' in result
 
 
 class TestSanitizeFtsInput:

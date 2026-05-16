@@ -17,7 +17,7 @@ import logging
 import os
 import re
 
-from src.config import CI_PENALTY, DOC_PENALTY, GUIDE_PENALTY, TEST_PENALTY
+from src.config import CI_PENALTY, DICTIONARY_HINT_MAP, DOC_PENALTY, GUIDE_PENALTY, TEST_PENALTY
 from src.container import get_reranker
 from src.search.hybrid_query import (
     _DOC_RERANK_OFF_STRATA,
@@ -48,6 +48,26 @@ _CI_PATH_RE = re.compile(
 )
 
 
+def _build_dictionary_hint(query: str) -> str:
+    """Look up query tokens in DICTIONARY_HINT_MAP and build a prefix hint.
+
+    Example: query "apm trustly callback" → "[apm = alternative payment method] "
+    """
+    if not query or not query.strip():
+        return ""
+    tokens = query.split()
+    hints: list[str] = []
+    seen: set[str] = set()
+    for token in tokens:
+        key = token.lower().strip(".,;:!?")
+        if key in seen:
+            continue
+        seen.add(key)
+        if key in DICTIONARY_HINT_MAP:
+            hints.append(f"[{token} = {DICTIONARY_HINT_MAP[key]}]")
+    return " ".join(hints) + " " if hints else ""
+
+
 # P10 Phase A2-revise (2026-04-25 late): stratum-gated rerank-skip — INVERTED.
 #
 # Original A2 (2026-04-26 stratum map) was inverted vs true reranker behavior.
@@ -73,15 +93,24 @@ def _merge_two_towers(
 ) -> tuple[list[dict], str | None]:
     """Merge code-tower + docs-tower vector results, deduping by rowid.
 
-    Code tower comes first so its ranking wins on collisions (chunks live in
-    the same SQLite `chunks` table; only the embeddings differ between
-    towers). Keeping the first occurrence preserves the better-ranked
-    position from whichever tower surfaced the chunk first, matching the
-    `if key not in scores` behaviour in the RRF loop downstream.
+    Interleaves by _distance (lower = better similarity) so the best-scoring
+    chunk from either tower wins, instead of always preferring code tower.
     """
+    # Tag results with tower source for observability
+    for r in code_results:
+        r["_tower"] = "code"
+    for r in docs_results:
+        r["_tower"] = "docs"
+
+    # Sort all results by _distance (ascending = better)
+    all_results = sorted(
+        list(code_results) + list(docs_results),
+        key=lambda x: x.get("_distance", float("inf")),
+    )
+
     seen_rowids: set = set()
     merged: list[dict] = []
-    for vrow in list(code_results) + list(docs_results):
+    for vrow in all_results:
         rid = vrow.get("rowid")
         if rid in seen_rowids:
             continue
@@ -173,10 +202,14 @@ def rerank(
         return results  # Fallback: return original order
 
     # Build document strings for reranker
+    dict_hint = ""
+    if os.getenv("CODE_RAG_USE_DICT_RERANK_HINTS", "0") == "1":
+        dict_hint = _build_dictionary_hint(query)
+
     documents: list[str] = []
     for r in results:
         doc = re.sub(r">>>|<<<|\.\.\.|\[Repo: [^\]]+\]", "", r.get("snippet", ""))
-        doc = f"{r['repo_name']} {r['file_path']} {doc}"
+        doc = f"{dict_hint}{r['repo_name']} {r['file_path']} {doc}"[:1024]
         documents.append(doc)
 
     scores = reranker.rerank(query, documents, limit=limit)
@@ -184,12 +217,13 @@ def rerank(
     if not scores:
         return results[:limit]
 
-    # Normalize reranker scores to [0, 1]
-    max_score = max(scores) if scores else 1
-    min_score = min(scores) if scores else 0
-    score_range = max_score - min_score if max_score != min_score else 1
+    import math
 
     # Combine: reranker score (70%) + original RRF score (30%)
+    # Use sigmoid with fixed temperature for stable cross-batch normalization
+    _RERANK_TEMP = 2.0
+
+    # Normalize RRF scores within the candidate pool
     max_rrf = max(r["score"] for r in results) if results else 1
     min_rrf = min(r["score"] for r in results) if results else 0
     rrf_range = max_rrf - min_rrf if max_rrf != min_rrf else 1
@@ -199,15 +233,17 @@ def rerank(
 
     for i, r in enumerate(results):
         rrf_norm = (r["score"] - min_rrf) / rrf_range
-        rerank_norm = (scores[i] - min_score) / score_range if i < len(scores) else 0
-        r["rerank_score"] = float(scores[i]) if i < len(scores) else 0
+        raw_score = float(scores[i]) if i < len(scores) else 0.0
+        # Sigmoid normalization: stable across different candidate pools
+        rerank_norm = 1.0 / (1.0 + math.exp(-raw_score * _RERANK_TEMP))
+        r["rerank_score"] = raw_score
         combined = 0.7 * rerank_norm + 0.3 * rrf_norm
 
         # P4.1: down-weight doc/test/guide chunks so production code ranks higher
-        # on code-related queries. Stored on result for observability.
+        # on code-related queries. Multiplicative penalty (less aggressive than subtractive).
         penalty = _classify_penalty(r.get("file_type", ""), r.get("file_path", "")) if apply_penalties else 0.0
         r["penalty"] = penalty
-        r["combined_score"] = combined - penalty
+        r["combined_score"] = combined * (1.0 - penalty)
 
     results.sort(key=lambda x: x["combined_score"], reverse=True)
     return results[:limit]

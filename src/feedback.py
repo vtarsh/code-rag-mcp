@@ -62,7 +62,7 @@ def log_search(
                 "rank": i + 1,
                 "repo": r.get("repo_name", ""),
                 "file": r.get("file_path", ""),
-                "score": round(r.get("final_score", r.get("_distance", 0)), 4),
+                "score": round(r.get("combined_score", r.get("score", 0)), 4),
                 "sources": r.get("sources", []),
             }
             for i, r in enumerate(results)

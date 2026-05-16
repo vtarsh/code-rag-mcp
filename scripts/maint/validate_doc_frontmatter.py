@@ -5,8 +5,9 @@ Required: type: must appear in YAML frontmatter (between leading `---` blocks).
 Skips: auto-gen `_*_report.md`, `_index.md`, scraped/ subdirs, providers/.
 Exits non-zero on violations.
 """
-from pathlib import Path
+
 import sys
+from pathlib import Path
 
 ROOT = Path.home() / ".code-rag-mcp/profiles/pay-com/docs"
 

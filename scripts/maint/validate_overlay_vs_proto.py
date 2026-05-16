@@ -11,7 +11,9 @@ Output: list of unmarked entries. Exit 1 on violations.
 Coverage check (proto field → overlay entry mention) is harder (needs proto parser);
 left as TODO. This validator catches the easier direction: overlay → proto provenance.
 """
+
 from __future__ import annotations
+
 import re
 import sys
 from pathlib import Path
@@ -62,7 +64,9 @@ def main() -> int:
             continue
         missing.append((entry, entry_locs[entry]))
 
-    print(f"overlay entries checked: total={len(entry_attrs)} ok={len(entry_attrs) - len(missing)} unmarked={len(missing)}")
+    print(
+        f"overlay entries checked: total={len(entry_attrs)} ok={len(entry_attrs) - len(missing)} unmarked={len(missing)}"
+    )
     if not missing:
         print("OK: every overlay entry carries `proto:` or `non_proto: true`.")
         return 0

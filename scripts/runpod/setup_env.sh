@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
 # Pod bootstrap. Run after SSH'ing into a fresh RunPod pod.
 #
-# Installs: Python deps for fine-tuning + bench.
-# Clones: vtarsh/code-rag-mcp (PUBLIC repo only — no private profile data).
+# This script is the FIRST step for a fresh pod. It installs system packages,
+# clones the public repo, and authenticates with HuggingFace.
+#
+# AFTER this, run setup_pod.sh (from this repo) to extract data archives
+# and install project-specific Python deps.
+#
+# Workflow:
+#   1. setup_env.sh       ← this file (fresh pod: system deps + clone)
+#   2. setup_pod.sh       ← extract archives, fix compat, install deps
+#   3. bench_large_models.py  ← run the bench
+#
+# For the full workflow, see: scripts/runpod/README.md
 #
 # HF auth: requires HF_TOKEN in env (or `huggingface-cli login --token <T>`).
 set -euo pipefail
@@ -13,7 +23,7 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 echo "==> [1/4] System packages"
 apt-get update -qq
-apt-get install -y -qq git python3-pip ca-certificates curl jq
+apt-get install -y -qq git python3-pip ca-certificates curl jq rsync
 
 echo "==> [2/4] Python deps (sentence-transformers, lancedb, hf-hub, psutil)"
 "$PYTHON_BIN" -m pip install --quiet --upgrade pip
@@ -52,4 +62,17 @@ else
     echo "    WARN: HF_TOKEN not set in env or /workspace/.hf-token. Push will fail."
 fi
 
-echo "==> Done. Workspace: $WORKSPACE/code-rag-mcp"
+echo ""
+echo "========================================"
+echo "Base env ready. Next: run setup_pod.sh"
+echo "========================================"
+echo ""
+echo "If you have already uploaded data archives to the pod:"
+echo "  cd /workspace/code-rag-mcp"
+echo "  bash scripts/runpod/setup_pod.sh"
+echo ""
+echo "If you need to upload archives first, from your Mac run:"
+echo "  rsync -avz --partial db/*.tar.gz profiles/pay-com/*.tar.gz runpod:/workspace/code-rag-mcp/"
+echo ""
+echo "For full docs: scripts/runpod/README.md"
+echo "========================================"

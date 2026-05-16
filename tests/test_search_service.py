@@ -160,3 +160,282 @@ class TestSearchTool:
         )
         result = search_tool("payment", repo="trustly")
         assert "trustly" in result
+
+    @patch("src.container.check_db_health", return_value=None)
+    @patch("src.search.service.cache_or_compute", side_effect=lambda _k, fn: fn())
+    @patch("src.search.service.hybrid_search")
+    @patch("src.search.service.expand_query_dictionary", return_value="auth_code provider authCode")
+    def test_dictionary_expand_wired(self, mock_expand_dict, mock_hybrid, mock_cache, mock_health):
+        import os
+
+        from src.search.service import search_tool
+
+        os.environ["CODE_RAG_USE_DICTIONARY_EXPAND"] = "1"
+        try:
+            mock_hybrid.return_value = ([], None, 0)
+            search_tool("auth_code provider")
+            mock_expand_dict.assert_called_once()
+        finally:
+            del os.environ["CODE_RAG_USE_DICTIONARY_EXPAND"]
+
+    @patch("src.container.check_db_health", return_value=None)
+    @patch("src.search.service.cache_or_compute", side_effect=lambda _k, fn: fn())
+    @patch("src.search.service.hybrid_search")
+    @patch("src.search.service.expand_query_dictionary")
+    def test_dictionary_expand_disabled_by_default(self, mock_expand_dict, mock_hybrid, mock_cache, mock_health):
+        from src.search.service import search_tool
+
+        mock_hybrid.return_value = ([], None, 0)
+        search_tool("auth_code provider")
+        mock_expand_dict.assert_not_called()
+
+    @patch("src.container.check_db_health", return_value=None)
+    @patch("src.search.service.cache_or_compute", side_effect=lambda _k, fn: fn())
+    @patch("src.search.service.hybrid_search")
+    def test_entity_boost_used_for_long_query_with_entities(self, mock_hybrid, mock_cache, mock_health):
+        """Long query (>=6 words) with entities triggers entity_boost=1.3."""
+        from src.search.service import search_tool
+
+        mock_hybrid.return_value = (
+            [
+                {
+                    "repo_name": "r1",
+                    "file_path": "a.ts",
+                    "file_type": "code",
+                    "chunk_type": "function",
+                    "snippet": "s1",
+                    "sources": ["keyword"],
+                },
+                {
+                    "repo_name": "r2",
+                    "file_path": "b.ts",
+                    "file_type": "code",
+                    "chunk_type": "function",
+                    "snippet": "s2",
+                    "sources": ["keyword"],
+                },
+                {
+                    "repo_name": "r3",
+                    "file_path": "c.ts",
+                    "file_type": "code",
+                    "chunk_type": "function",
+                    "snippet": "s3",
+                    "sources": ["keyword"],
+                },
+                {
+                    "repo_name": "r4",
+                    "file_path": "d.ts",
+                    "file_type": "code",
+                    "chunk_type": "function",
+                    "snippet": "s4",
+                    "sources": ["keyword"],
+                },
+                {
+                    "repo_name": "r5",
+                    "file_path": "e.ts",
+                    "file_type": "code",
+                    "chunk_type": "function",
+                    "snippet": "s5",
+                    "sources": ["keyword"],
+                },
+            ],
+            None,
+            10,
+        )
+        search_tool("ProviderError throw payout input validation for nuvei merchant")
+        assert mock_hybrid.call_count == 1
+        _, kwargs = mock_hybrid.call_args
+        assert kwargs.get("entity_boost") == 1.3
+        # The processed query should only contain entities.
+        assert "nuvei" in mock_hybrid.call_args[0][0]
+        assert "ProviderError" in mock_hybrid.call_args[0][0]
+
+    @patch("src.container.check_db_health", return_value=None)
+    @patch("src.search.service.cache_or_compute", side_effect=lambda _k, fn: fn())
+    @patch("src.search.service.hybrid_search")
+    def test_fallback_when_entity_boost_returns_few_results(self, mock_hybrid, mock_cache, mock_health):
+        """If entity-boosted search returns <5 results, fall back to original query."""
+        from src.search.service import search_tool
+
+        # First call returns 2 results (below 5 threshold), second call returns 10.
+        mock_hybrid.side_effect = [
+            (
+                [
+                    {
+                        "repo_name": "r1",
+                        "file_path": "a.ts",
+                        "file_type": "code",
+                        "chunk_type": "function",
+                        "snippet": "s1",
+                        "sources": ["keyword"],
+                    },
+                    {
+                        "repo_name": "r2",
+                        "file_path": "b.ts",
+                        "file_type": "code",
+                        "chunk_type": "function",
+                        "snippet": "s2",
+                        "sources": ["keyword"],
+                    },
+                ],
+                None,
+                2,
+            ),
+            (
+                [
+                    {
+                        "repo_name": "r1",
+                        "file_path": "a.ts",
+                        "file_type": "code",
+                        "chunk_type": "function",
+                        "snippet": "s1",
+                        "sources": ["keyword"],
+                    },
+                    {
+                        "repo_name": "r2",
+                        "file_path": "b.ts",
+                        "file_type": "code",
+                        "chunk_type": "function",
+                        "snippet": "s2",
+                        "sources": ["keyword"],
+                    },
+                    {
+                        "repo_name": "r3",
+                        "file_path": "c.ts",
+                        "file_type": "code",
+                        "chunk_type": "function",
+                        "snippet": "s3",
+                        "sources": ["keyword"],
+                    },
+                    {
+                        "repo_name": "r4",
+                        "file_path": "d.ts",
+                        "file_type": "code",
+                        "chunk_type": "function",
+                        "snippet": "s4",
+                        "sources": ["keyword"],
+                    },
+                    {
+                        "repo_name": "r5",
+                        "file_path": "e.ts",
+                        "file_type": "code",
+                        "chunk_type": "function",
+                        "snippet": "s5",
+                        "sources": ["keyword"],
+                    },
+                ],
+                None,
+                10,
+            ),
+        ]
+        result = search_tool("ProviderError throw payout input validation for nuvei merchant")
+        assert mock_hybrid.call_count == 2
+        # Second call should use the original expanded query.
+        assert "ProviderError throw payout input validation for nuvei merchant" in mock_hybrid.call_args[0][0]
+        assert "Found 5 of 10 candidates" in result
+
+    @patch("src.container.check_db_health", return_value=None)
+    @patch("src.search.service.cache_or_compute", side_effect=lambda _k, fn: fn())
+    @patch("src.search.service.hybrid_search")
+    def test_no_entity_boost_for_short_query(self, mock_hybrid, mock_cache, mock_health):
+        """Short queries (<6 words) should not trigger entity boost even if entities exist."""
+        from src.search.service import search_tool
+
+        mock_hybrid.return_value = (
+            [
+                {
+                    "repo_name": "r1",
+                    "file_path": "a.ts",
+                    "file_type": "code",
+                    "chunk_type": "function",
+                    "snippet": "s1",
+                    "sources": ["keyword"],
+                }
+            ],
+            None,
+            1,
+        )
+        search_tool("nuvei payout")
+        assert mock_hybrid.call_count == 1
+        _, kwargs = mock_hybrid.call_args
+        assert kwargs.get("entity_boost") == 1.0
+
+    @patch("src.container.check_db_health", return_value=None)
+    @patch("src.search.service.cache_or_compute", side_effect=lambda _k, fn: fn())
+    @patch("src.search.service.hybrid_search")
+    def test_no_entity_boost_when_no_entities(self, mock_hybrid, mock_cache, mock_health):
+        """Long query without extractable entities should use original query."""
+        from src.search.service import search_tool
+
+        mock_hybrid.return_value = (
+            [
+                {
+                    "repo_name": "r1",
+                    "file_path": "a.ts",
+                    "file_type": "code",
+                    "chunk_type": "function",
+                    "snippet": "s1",
+                    "sources": ["keyword"],
+                }
+            ],
+            None,
+            1,
+        )
+        search_tool("Fix All Tasks Tab Filter to Show Group Tasks")
+        assert mock_hybrid.call_count == 1
+        _, kwargs = mock_hybrid.call_args
+        assert kwargs.get("entity_boost") == 1.0
+        assert mock_hybrid.call_args[0][0] == "Fix All Tasks Tab Filter to Show Group Tasks"
+
+
+class TestPreprocessQuery:
+    def test_extracts_provider_names(self):
+        from src.search.service import preprocess_query
+
+        processed, entities = preprocess_query("ProviderError throw payout input validation for nuvei merchant")
+        assert "nuvei" in entities
+        assert "ProviderError" in entities
+        assert processed == " ".join(entities)
+
+    def test_extracts_file_extensions(self):
+        from src.search.service import preprocess_query
+
+        processed, entities = preprocess_query("Fix the validation.ts file and also check handler.go")
+        assert ".ts" in entities
+        assert ".go" in entities
+
+    def test_extracts_error_classes(self):
+        from src.search.service import preprocess_query
+
+        processed, entities = preprocess_query("NotFoundError thrown when ValidationError occurs in service")
+        assert "NotFoundError" in entities
+        assert "ValidationError" in entities
+
+    def test_extracts_all_caps_identifiers(self):
+        from src.search.service import preprocess_query
+
+        processed, entities = preprocess_query("The MAX_RETRY_COUNT and API_BASE_URL are not set")
+        assert "MAX_RETRY_COUNT" in entities
+        assert "API_BASE_URL" in entities
+
+    def test_extracts_repo_names(self):
+        from src.search.service import preprocess_query
+
+        processed, entities = preprocess_query("Update the grpc-payment-gateway logic for nuvei payout")
+        # grpc-payment-gateway is a known repo from conventions.yaml
+        assert "grpc-payment-gateway" in entities
+        assert "nuvei" in entities
+
+    def test_returns_original_when_no_entities(self):
+        from src.search.service import preprocess_query
+
+        processed, entities = preprocess_query("Fix All Tasks Tab Filter to Show Group Tasks")
+        assert entities == []
+        assert processed == "Fix All Tasks Tab Filter to Show Group Tasks"
+
+    def test_returns_empty_for_empty_query(self):
+        from src.search.service import preprocess_query
+
+        processed, entities = preprocess_query("")
+        assert entities == []
+        assert processed == ""

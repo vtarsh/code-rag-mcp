@@ -23,7 +23,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-import importlib.util  # noqa: E402
+import importlib.util
 
 _SPEC = importlib.util.spec_from_file_location(
     "build_train_pairs_v2", REPO_ROOT / "scripts" / "build" / "build_train_pairs_v2.py"

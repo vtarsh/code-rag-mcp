@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 from src.search.hybrid import hybrid_search, rerank
+from src.search.hybrid_rerank import _build_dictionary_hint
 from src.types import SearchResult
 
 
@@ -126,6 +127,40 @@ class TestHybridSearch:
     @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
     @patch("src.search.hybrid.vector_search")
     @patch("src.search.hybrid.fts_search")
+    def test_rrf_same_rowid_same_chunk_merged(self, mock_fts, mock_vec, mock_rerank):
+        """Quick Win #2: When FTS and vector both return the same rowid for
+        the exact same chunk (same repo and file_path), merge them into one
+        entry so they don't consume two reranker slots and split the RRF score.
+        """
+        mock_fts.return_value = [_make_sr(42, repo="shared-repo", snippet="shared snippet")]
+        mock_vec.return_value = (
+            [
+                {
+                    "rowid": 42,
+                    "repo_name": "shared-repo",
+                    "file_path": "src/shared-repo/file.ts",
+                    "file_type": "grpc_method",
+                    "chunk_type": "function",
+                    "content_preview": "shared snippet",
+                }
+            ],
+            None,
+        )
+        results, _err, total = hybrid_search("merge test")
+        # Merged into a single record.
+        assert total == 1
+        assert len(results) == 1
+        merged = results[0]
+        assert merged["repo_name"] == "shared-repo"
+        assert merged["file_path"] == "src/shared-repo/file.ts"
+        # Both sources present, deduplicated.
+        assert set(merged["sources"]) == {"keyword", "vector"}
+        # Score should be the sum of both RRF contributions.
+        assert merged["score"] > 0
+
+    @patch("src.search.hybrid.rerank", side_effect=lambda q, r, lim, **_kw: r[:lim])
+    @patch("src.search.hybrid.vector_search")
+    @patch("src.search.hybrid.fts_search")
     def test_total_candidates_gte_results(self, mock_fts, mock_vec, mock_rerank):
         mock_fts.return_value = [_make_sr(i) for i in range(15)]
         mock_vec.return_value = ([_make_vr(i + 100) for i in range(10)], None)
@@ -153,6 +188,31 @@ class TestHybridSearch:
         assert len(result) == 3
 
 
+class TestDictionaryRerankHint:
+    def test_empty_query(self):
+        assert _build_dictionary_hint("") == ""
+
+    def test_known_token(self):
+        # authCode is in fields.yaml
+        hint = _build_dictionary_hint("authCode provider")
+        assert "authCode" in hint
+        assert "authorization code" in hint.lower()
+
+    def test_multiple_known_tokens(self):
+        hint = _build_dictionary_hint("authCode transaction")
+        assert "authCode" in hint
+        assert "transaction" in hint
+
+    def test_unknown_token_ignored(self):
+        hint = _build_dictionary_hint("xyzzy_unknown")
+        assert hint == ""
+
+    def test_hint_format(self):
+        hint = _build_dictionary_hint("authCode")
+        assert hint.startswith("[authCode = ")
+        assert hint.endswith("] ")
+
+
 class TestRerank:
     def test_empty_results(self):
         assert rerank("query", []) == []
@@ -177,8 +237,8 @@ class TestRerank:
         mock_provider.rerank.return_value = [0.9, 0.1]
         mock_get_reranker.return_value = (mock_provider, None)
         items = [
-            {"score": 0.3, "snippet": "low rrf high rerank", "repo_name": "r1", "file_path": "f1"},
-            {"score": 0.5, "snippet": "high rrf low rerank", "repo_name": "r2", "file_path": "f2"},
+            {"score": 0.5, "snippet": "high rrf high rerank", "repo_name": "r1", "file_path": "f1"},
+            {"score": 0.3, "snippet": "low rrf low rerank", "repo_name": "r2", "file_path": "f2"},
         ]
         result = rerank("query", items, limit=2)
         assert result[0]["repo_name"] == "r1"

@@ -112,6 +112,7 @@ _CODE_SIG_RE = re.compile(
     r"(?:\b[a-z][a-zA-Z0-9]*\([^)]*\)|"
     r"\b[A-Z][A-Z0-9_]{2,}\b|"
     r"[a-z]+_[a-z_]+|"
+    r"\b[a-z]+[A-Z][a-zA-Z0-9]*\b|"
     r"\.(?:js|ts|py|go|proto)\b)"
 )
 _REPO_TOKEN_RE = re.compile(
@@ -202,7 +203,9 @@ def _query_wants_docs(query: str) -> bool:
     if _CODE_SIG_RE.search(query) or _REPO_TOKEN_RE.search(query):
         return False
     tokens = query.split()
-    return 2 <= len(tokens) <= 15
+    # Default to code intent for ambiguous queries.
+    # Doc-intent queries should match explicit doc signals ( Tier 1-3 above ).
+    return False
 
 
 # P10 Phase A2-revise (2026-04-25 late): stratum-gated rerank-skip — INVERTED.

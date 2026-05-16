@@ -45,26 +45,16 @@ def test_tier1_strong_markers_route_to_docs(query: str) -> None:
 @pytest.mark.parametrize(
     "query",
     [
-        # `how` alone (without "to") is not a Tier-1 marker
-        "how does paymentMethodType resolve",  # → caught by Tier-3 "how does"
         # camelCase / snake_case dominated, no Tier-1 marker
         "handleCallback(req)",
         "SIGTERM_HANDLER",
+        # camelCode identifier overrides Tier-3 concept-doc trigger
+        "how does paymentMethodType resolve",
     ],
 )
 def test_tier1_negatives(query: str) -> None:
-    """Sample queries that must NOT trigger Tier-1 alone.
-
-    NOTE: "how does paymentMethodType resolve" actually routes True via Tier-3
-    `how does`. This test row is here to document that nuance — `how does` is
-    a separate concept-doc trigger (per proposal §4.3), so this query is in
-    the docs bucket. We assert separately below in the concept-doc tests.
-    """
-    # First entry intentionally hits Tier-3; the rest are pure code-intent.
-    if "how does" in query:
-        assert _query_wants_docs(query) is True
-    else:
-        assert _query_wants_docs(query) is False
+    """Sample queries that must NOT trigger Tier-1 alone."""
+    assert _query_wants_docs(query) is False
 
 
 # ---------------------------------------------------------------------------
@@ -229,9 +219,7 @@ def test_heldout_donotexpire_stays_out() -> None:
 # ---------------------------------------------------------------------------
 
 EXISTING_IN_BAND = [
-    # From test_hybrid_doc_intent.py — locked-in absence heuristic
-    "Nuvei error code table reason strings",
-    "webhook signature",
+    # From test_hybrid_doc_intent.py — explicit doc signals
     "how to configure idempotency",
     "docs/guide/README.md",
     # Doc-keyword triggers
@@ -265,6 +253,9 @@ EXISTING_OUT_BAND = [
     "express-api-v1 activateWorkflow expire-session checkout",
     # 2+ snake_case in sequence
     "express-api-v1 call-providers-initialize set internalMetadata",
+    # Ambiguous Jira-like queries with no explicit doc signal → code-intent
+    "Nuvei error code table reason strings",
+    "webhook signature",
 ]
 
 

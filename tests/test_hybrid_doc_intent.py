@@ -15,11 +15,12 @@ from src.search.hybrid import _query_wants_docs
 @pytest.mark.parametrize(
     "query,expected",
     [
-        # Absence-based: no code sig, mid-length → doc-intent
-        ("Nuvei error code table reason strings", True),
-        ("webhook signature", True),
+        # Ambiguous queries without explicit doc/code signals default to code-intent
+        # (Jira tasks overwhelmingly modify code files, not docs)
+        ("Nuvei error code table reason strings", False),
+        ("webhook signature", False),
+        # Explicit doc trigger still works
         ("how to configure idempotency", True),
-        # Explicit trigger still works
         ("docs/guide/README.md", True),
         # Code signatures → code-intent
         ("handleCallback(req)", False),  # fn() call

@@ -31,9 +31,9 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 # ---------------------------------------------------------------------------
 # Status-code semantics. The validator only cares about whether a route exists
@@ -135,9 +135,7 @@ def find_spec_files(provider_dir: Path) -> list[Path]:
             data = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if isinstance(data, dict) and (
-            "openapi" in data or "swagger" in data or "paths" in data
-        ):
+        if isinstance(data, dict) and ("openapi" in data or "swagger" in data or "paths" in data):
             specs.append(p)
     return specs
 
@@ -231,9 +229,7 @@ def _is_likely_public_host(host: str) -> bool:
     return True
 
 
-def detect_base_domain(
-    hosts: Iterable[str], dns_results: dict[str, HostDnsStatus]
-) -> str | None:
+def detect_base_domain(hosts: Iterable[str], dns_results: dict[str, HostDnsStatus]) -> str | None:
     """Pick the shortest apex domain across hosts that *could* be public.
 
     Strategy:
@@ -247,10 +243,7 @@ def detect_base_domain(
     public_shaped = [h for h in hosts if _is_likely_public_host(h)]
     if not public_shaped:
         return None
-    resolvable = [
-        h for h in public_shaped
-        if dns_results.get(h, HostDnsStatus(h, False)).resolves
-    ]
+    resolvable = [h for h in public_shaped if dns_results.get(h, HostDnsStatus(h, False)).resolves]
     pool = resolvable or public_shaped
     domains = [_apex_domain(h) for h in pool]
     domains = [d for d in domains if d]
@@ -290,9 +283,7 @@ def generate_facade_candidates(base_domain: str) -> list[str]:
     return ordered
 
 
-def pick_sample_paths(
-    spec: SpecSummary, max_n: int = 3
-) -> list[tuple[str, str]]:
+def pick_sample_paths(spec: SpecSummary, max_n: int = 3) -> list[tuple[str, str]]:
     """Pick up to max_n (method, path) pairs that are safe to probe.
 
     Strategy:
@@ -440,14 +431,12 @@ def derive_strip_verdict(
     if orig_live == n and strip_dead >= 1 and strip_live == 0:
         return (
             VERDICT_KEEP_API,
-            f"{orig_live}/{n} original probes are live, "
-            f"{strip_dead}/{n} stripped 404 — keep /api/ as authored",
+            f"{orig_live}/{n} original probes are live, {strip_dead}/{n} stripped 404 — keep /api/ as authored",
         )
     if orig_dead == n and strip_dead == n:
         return (
             VERDICT_NOT_PUBLIC,
-            "both original and stripped paths return 404/redirect — "
-            "spec describes an internal-only namespace",
+            "both original and stripped paths return 404/redirect — spec describes an internal-only namespace",
         )
     if orig_live >= 1 and strip_live >= 1:
         return (
@@ -529,9 +518,7 @@ def probe_url(url: str, method: str = "GET", timeout: float = 6.0) -> ProbeResul
 # Orchestration
 
 
-def pick_facade(
-    candidates: list[str], timeout: float = 6.0
-) -> tuple[str | None, list[tuple[str, ProbeResult]]]:
+def pick_facade(candidates: list[str], timeout: float = 6.0) -> tuple[str | None, list[tuple[str, ProbeResult]]]:
     """Probe each candidate base URL with a HEAD-like GET to /. Return the
     first one that responds with anything other than DNS failure, plus the
     full attempt log."""
@@ -558,19 +545,13 @@ def run_spec_probes(
     for method, raw_path in samples:
         concrete = substitute_placeholders(raw_path)
         url_orig = facade.rstrip("/") + concrete
-        original_results.append(
-            probe_url(url_orig, method=method.upper(), timeout=timeout)
-        )
+        original_results.append(probe_url(url_orig, method=method.upper(), timeout=timeout))
         if concrete.startswith("/api/"):
             stripped_path = strip_api_prefix(concrete)
             url_strip = facade.rstrip("/") + stripped_path
-            stripped_results.append(
-                probe_url(url_strip, method=method.upper(), timeout=timeout)
-            )
+            stripped_results.append(probe_url(url_strip, method=method.upper(), timeout=timeout))
 
-    verdict, rationale = derive_strip_verdict(
-        original_results, stripped_results, paths_with_api, paths_total
-    )
+    verdict, rationale = derive_strip_verdict(original_results, stripped_results, paths_with_api, paths_total)
     return SpecProbeOutcome(
         spec_name=spec.file_name,
         sample_method_paths=samples,
@@ -599,8 +580,7 @@ def render_report(
     lines.append(f"# Validation report — {provider_dir.name}")
     lines.append("")
     lines.append(
-        f"Provider directory: `{provider_dir}`. Specs found: {len(specs)}. "
-        f"Public façade: `{facade or 'NONE'}`."
+        f"Provider directory: `{provider_dir}`. Specs found: {len(specs)}. Public façade: `{facade or 'NONE'}`."
     )
     lines.append("")
 
@@ -640,9 +620,7 @@ def render_report(
         for o in outcomes:
             lines.append(f"### `{o.spec_name}` — **{o.verdict}**")
             lines.append("")
-            lines.append(
-                f"Paths: {o.paths_total} total, {o.paths_with_api_prefix} with `/api/` prefix."
-            )
+            lines.append(f"Paths: {o.paths_total} total, {o.paths_with_api_prefix} with `/api/` prefix.")
             lines.append("")
             lines.append(f"Rationale: {o.rationale}")
             lines.append("")
@@ -653,10 +631,7 @@ def render_report(
                     strip_r = o.stripped_results[i] if i < len(o.stripped_results) else None
                     if orig:
                         loc = f" → {orig.location}" if orig.location else ""
-                        lines.append(
-                            f"- `{method.upper()} {raw}` → "
-                            f"{orig.status_code} ({orig.semantic}){loc}"
-                        )
+                        lines.append(f"- `{method.upper()} {raw}` → {orig.status_code} ({orig.semantic}){loc}")
                     if strip_r:
                         stripped_path = strip_api_prefix(substitute_placeholders(raw))
                         loc = f" → {strip_r.location}" if strip_r.location else ""
@@ -683,9 +658,7 @@ def render_report(
                 public = "**NOT PUBLIC**"
             else:
                 public = "(manual review)"
-            lines.append(
-                f"| `{o.spec_name}` | `{sample_path}` | `{public}` | {o.verdict} |"
-            )
+            lines.append(f"| `{o.spec_name}` | `{sample_path}` | `{public}` | {o.verdict} |")
     lines.append("")
 
     return "\n".join(lines)
@@ -696,9 +669,7 @@ def render_report(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Validate scraped provider docs against the live public façade."
-    )
+    parser = argparse.ArgumentParser(description="Validate scraped provider docs against the live public façade.")
     parser.add_argument("provider_dir", type=Path, help="profiles/{p}/docs/providers/{name}")
     parser.add_argument(
         "--public-host",
@@ -762,8 +733,7 @@ def main(argv: list[str] | None = None) -> int:
         base_domain = detect_base_domain(hosts, dns_results)
         candidates = generate_facade_candidates(base_domain) if base_domain else []
         print(
-            f"[3/4] Detected base domain: {base_domain!r}; probing "
-            f"{len(candidates)} façade candidate(s)…",
+            f"[3/4] Detected base domain: {base_domain!r}; probing {len(candidates)} façade candidate(s)…",
             file=sys.stderr,
         )
         facade, facade_log = pick_facade(candidates, timeout=args.timeout)
@@ -772,9 +742,7 @@ def main(argv: list[str] | None = None) -> int:
     if facade:
         print(f"[4/4] Probing endpoints on {facade}…", file=sys.stderr)
         for s in specs:
-            outcomes.append(
-                run_spec_probes(s, facade, probe_limit=args.probe_limit, timeout=args.timeout)
-            )
+            outcomes.append(run_spec_probes(s, facade, probe_limit=args.probe_limit, timeout=args.timeout))
     else:
         print("[4/4] No façade reachable — skipping endpoint probes", file=sys.stderr)
 

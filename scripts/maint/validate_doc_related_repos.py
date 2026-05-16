@@ -5,7 +5,9 @@ Exits non-zero on violations. Designed for pre-commit / CI integration.
 Catches H8: `related_repos:` frontmatter entries that no longer exist as
 cloned repos under ~/.code-rag-mcp/raw/.
 """
+
 from __future__ import annotations
+
 import re
 import sys
 from pathlib import Path
@@ -17,6 +19,7 @@ SKIP_DIR_PARTS = {"scraped"}
 
 try:
     import yaml  # type: ignore
+
     HAVE_YAML = True
 except ImportError:
     HAVE_YAML = False
@@ -60,8 +63,12 @@ def parse_related_repos(fm: str) -> list[str]:
 
 
 def iter_md_files() -> list[Path]:
-    return [p for sub in SUBDIRS for p in (DOCS_ROOT / sub).rglob("*.md")
-            if not any(part in SKIP_DIR_PARTS for part in p.parts)]
+    return [
+        p
+        for sub in SUBDIRS
+        for p in (DOCS_ROOT / sub).rglob("*.md")
+        if not any(part in SKIP_DIR_PARTS for part in p.parts)
+    ]
 
 
 def main() -> int:
@@ -84,7 +91,9 @@ def main() -> int:
                 unresolved += 1
                 if len(broken) < 30:
                     broken.append(f"{md} -> related_repos: {repo} -> NOT FOUND under {RAW_ROOT}")
-    print(f"related_repos entries checked: total={total} ok={ok} unresolved={unresolved} (yaml={'on' if HAVE_YAML else 'off'})")
+    print(
+        f"related_repos entries checked: total={total} ok={ok} unresolved={unresolved} (yaml={'on' if HAVE_YAML else 'off'})"
+    )
     if broken:
         print("\nFirst unresolved:")
         for b in broken:

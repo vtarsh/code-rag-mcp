@@ -15,10 +15,12 @@ Sections:
 
 Run: python3.12 scripts/generate_housekeeping_report.py
 """
+
 from __future__ import annotations
+
+import datetime as dt
 import re
 import sys
-import datetime as dt
 from collections import defaultdict
 from pathlib import Path
 
@@ -112,7 +114,7 @@ def render_report(asym: list, stales: list) -> str:
     lines = []
     lines.append(f"# Weekly Docs Housekeeping Report — {today}")
     lines.append("")
-    lines.append(f"Format: H10 ruling (top-5 per section, per-PR batched, recall-delta-weighted).")
+    lines.append("Format: H10 ruling (top-5 per section, per-PR batched, recall-delta-weighted).")
     lines.append("")
     lines.append("## 1. Duplicate blocks (top-5 by Jaccard)")
     lines.append("")

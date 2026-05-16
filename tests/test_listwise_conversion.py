@@ -12,7 +12,7 @@ import pytest
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.data.finetune_reranker import detect_listwise_format  # noqa: E402
+from scripts.data.finetune_reranker import detect_listwise_format
 
 
 class TestDetectListwiseFormat:

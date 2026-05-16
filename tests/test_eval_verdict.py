@@ -15,7 +15,7 @@ import pytest
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.eval.eval_verdict import (  # noqa: E402
+from scripts.eval.eval_verdict import (
     DELTA_HIT5_THRESHOLD,
     DELTA_R10_THRESHOLD,
     MIN_NET_IMPROVED,

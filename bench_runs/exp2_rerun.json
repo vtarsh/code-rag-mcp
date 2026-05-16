@@ -1,0 +1,12 @@
+{
+  "config": {
+    "eval": "/Users/vaceslavtarsevskij/.code-rag-mcp/profiles/pay-com/eval/jira_eval_clean.jsonl",
+    "limit": 10,
+    "daemon_url": "http://127.0.0.1:8742/tool/search"
+  },
+  "aggregates": {
+    "n": 665,
+    "hit_at_10": 0.0
+  },
+  "eval_per_query": []
+}

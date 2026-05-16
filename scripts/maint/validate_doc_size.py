@@ -8,8 +8,9 @@ Limits:
 
 Skips auto-generated `_*_report.md`. Exits non-zero on violations.
 """
-from pathlib import Path
+
 import sys
+from pathlib import Path
 
 ROOT = Path.home() / ".code-rag-mcp/profiles/pay-com/docs"
 
@@ -42,7 +43,7 @@ def main() -> int:
             if lines > limit:
                 violations.append((md, lines, limit))
     if not violations:
-        print(f"OK: all docs within size limits.")
+        print("OK: all docs within size limits.")
         return 0
     print(f"FAIL: {len(violations)} file(s) exceed size limit.")
     for path, lines, limit in violations:

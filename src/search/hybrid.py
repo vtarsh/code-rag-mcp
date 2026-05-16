@@ -330,17 +330,15 @@ def _repo_prefilter(query: str, top_k: int) -> list[str]:
         return []
 
     global _warned_missing_repo_table
-    db_path = os.path.join(os.getenv("CODE_RAG_HOME", os.path.expanduser("~/.code-rag")), "db", "knowledge.db")
 
     try:
-        conn = sqlite3.connect(db_path, timeout=5.0)
-        cur = conn.execute(
-            "SELECT repo_name FROM repo_summaries WHERE summary MATCH ? ORDER BY rank LIMIT ?",
-            (sanitized, top_k),
-        )
-        rows = cur.fetchall()
-        conn.close()
-        return [r[0] for r in rows if r[0]]
+        with db_connection() as conn:
+            cur = conn.execute(
+                "SELECT repo_name FROM repo_summaries WHERE summary MATCH ? ORDER BY rank LIMIT ?",
+                (sanitized, top_k),
+            )
+            rows = cur.fetchall()
+            return [r[0] for r in rows if r[0]]
     except sqlite3.OperationalError as exc:
         if "no such table" in str(exc).lower():
             if not _warned_missing_repo_table:
@@ -372,9 +370,14 @@ def _apply_repo_prefilter(scores: dict[str, dict], query: str) -> None:
         return
 
     predicted_set = set(predicted_repos)
+    # Additive boost: add a fraction of max RRF score instead of multiplying.
+    # Multiplicative boost (1.4x) was too aggressive and could push irrelevant
+    # chunks from predicted repos above relevant chunks from other repos.
+    max_rrf = max((s["score"] for s in scores.values()), default=1.0)
+    additive_boost = (REPO_PREFILTER_BOOST - 1.0) * max_rrf * 0.1
     for data in scores.values():
         if data.get("repo_name", "") in predicted_set:
-            data["score"] *= REPO_PREFILTER_BOOST
+            data["score"] += additive_boost
             if "repo_prefilter" not in data["sources"]:
                 data["sources"].append("repo_prefilter")
 
@@ -389,6 +392,7 @@ def hybrid_search(
     reranker_override=None,
     cross_provider: bool = False,
     docs_index: bool | None = None,
+    entity_boost: float = 1.0,
 ) -> tuple[list[dict], str | None, int]:
     """Hybrid search: combine FTS5 keyword + vector similarity via RRF.
 
@@ -414,10 +418,15 @@ def hybrid_search(
       - False : force the code tower regardless of intent (debug / eval).
       FTS5 is content-agnostic and always runs against the shared chunks pool.
 
+    `entity_boost` (2026-05-16): multiplies the keyword RRF weight when the
+    query has been preprocessed to contain only high-confidence entities.
+      Default 1.0 = no change. 1.3 gives exact entity matches 30% more RRF
+      weight, compensating for the shorter query's weaker vector signal.
+
     Returns (ranked_results, vector_error | None, total_candidates).
     """
     K = RRF_K
-    KW_WEIGHT = KEYWORD_WEIGHT
+    KW_WEIGHT = KEYWORD_WEIGHT * entity_boost
 
     # 1. Keyword search (FTS5) — large pool, no per-repo cap.
     #    P4.2: raised 100→150 to fill rerank pool to ~200 after RRF overlap.
@@ -439,27 +448,32 @@ def hybrid_search(
     # (b) using a fixed merged position (throws away ranking signal). Dedupe
     # by rowid is the lowest-risk option.
     if docs_index is True:
-        vector_results, vec_err = vector_search(query, repo, file_type, exclude_file_types, limit=50, model_key="docs")
+        vector_results, vec_err = vector_search(query, repo, file_type, exclude_file_types, limit=100, model_key="docs")
     elif docs_index is False:
-        vector_results, vec_err = vector_search(query, repo, file_type, exclude_file_types, limit=50)
+        vector_results, vec_err = vector_search(query, repo, file_type, exclude_file_types, limit=100)
     else:
-        is_doc_intent = _query_wants_docs(query)
-        has_code_signal = bool(_CODE_SIG_RE.search(query or "") or _REPO_TOKEN_RE.search(query or ""))
-        if is_doc_intent and not has_code_signal:
-            # pure doc intent → docs tower only
-            vector_results, vec_err = vector_search(
-                query, repo, file_type, exclude_file_types, limit=50, model_key="docs"
-            )
-        elif has_code_signal and not is_doc_intent:
-            # pure code intent → code tower only (unchanged legacy path)
-            vector_results, vec_err = vector_search(query, repo, file_type, exclude_file_types, limit=50)
+        if os.getenv("CODE_RAG_DISABLE_DOCS_TOWER") == "1":
+            vector_results, vec_err = vector_search(query, repo, file_type, exclude_file_types, limit=100)
         else:
-            # mixed / ambiguous → query both towers and merge.
-            code_results, code_err = vector_search(query, repo, file_type, exclude_file_types, limit=50, model_key=None)
-            docs_results, docs_err = vector_search(
-                query, repo, file_type, exclude_file_types, limit=50, model_key="docs"
-            )
-            vector_results, vec_err = _merge_two_towers(code_results, docs_results, code_err, docs_err)
+            is_doc_intent = _query_wants_docs(query)
+            has_code_signal = bool(_CODE_SIG_RE.search(query or "") or _REPO_TOKEN_RE.search(query or ""))
+            if is_doc_intent and not has_code_signal:
+                # pure doc intent → docs tower only
+                vector_results, vec_err = vector_search(
+                    query, repo, file_type, exclude_file_types, limit=50, model_key="docs"
+                )
+            elif has_code_signal and not is_doc_intent:
+                # pure code intent → code tower only (unchanged legacy path)
+                vector_results, vec_err = vector_search(query, repo, file_type, exclude_file_types, limit=100)
+            else:
+                # mixed / ambiguous → query both towers and merge.
+                code_results, code_err = vector_search(
+                    query, repo, file_type, exclude_file_types, limit=100, model_key=None
+                )
+                docs_results, docs_err = vector_search(
+                    query, repo, file_type, exclude_file_types, limit=100, model_key="docs"
+                )
+                vector_results, vec_err = _merge_two_towers(code_results, docs_results, code_err, docs_err)
 
     # 3. RRF fusion
     #
@@ -470,12 +484,12 @@ def hybrid_search(
     # into one corrupted record (keeping whichever hit arrived first for
     # repo/path/snippet and summing both RRF scores).
     #
-    # We do NOT attempt to re-merge "same logical chunk" across sources here
-    # because chunk identity (repo, file, chunk_type) is not unique — a file
-    # often has many chunks of the same chunk_type. The downstream reranker
-    # scores by content, so a chunk that surfaces in both sources at distinct
-    # keys is ranked consistently by the cross-encoder rather than artificially
-    # boosted by RRF-sum tricks.
+    # Quick Win #2 (2026-05-16): `scripts/build_vectors.py` stores the SQLite
+    # `chunks.rowid` directly in the LanceDB vector table's `rowid` column.
+    # So `fts:42` and `vec:42` CAN point to the exact same chunk. After both
+    # loops, we merge collisions where rowid matches and repo_name+file_path
+    # match (sanity check). This prevents the same chunk from consuming two
+    # independent reranker slots and splitting its RRF score.
     scores: dict[str, dict] = {}  # "fts:<rowid>" | "vec:<rowid>" → result dict
 
     for rank_idx, sr in enumerate(keyword_results):
@@ -509,6 +523,33 @@ def hybrid_search(
             }
         scores[key]["score"] += rrf_score
         scores[key]["sources"].append("vector")
+
+    # Merge same-rowid chunks across FTS and vector when they refer to the
+    # same physical chunk (same repo and file path).
+    for key in list(scores.keys()):
+        if key.startswith("fts:"):
+            rowid = key.split(":", 1)[1]
+            vec_key = f"vec:{rowid}"
+            if vec_key in scores:
+                fts_data = scores[key]
+                vec_data = scores[vec_key]
+                if fts_data.get("repo_name") == vec_data.get("repo_name") and fts_data.get("file_path") == vec_data.get(
+                    "file_path"
+                ):
+                    fts_data["score"] += vec_data["score"]
+                    fts_data["sources"] = list(dict.fromkeys(fts_data["sources"] + vec_data["sources"]))
+                    del scores[vec_key]
+
+    keyword_only_count = sum(1 for s in scores.values() if s.get("sources") == ["keyword"])
+    vector_only_count = sum(1 for s in scores.values() if s.get("sources") == ["vector"])
+    both_count = sum(
+        1 for s in scores.values() if "keyword" in s.get("sources", []) and "vector" in s.get("sources", [])
+    )
+    _logger.debug(
+        f"Hybrid fusion: fts={len(keyword_results)}, vec={len(vector_results)}, "
+        f"merged={len(scores)}, keyword_only={keyword_only_count}, "
+        f"vector_only={vector_only_count}, both={both_count}"
+    )
 
     # P0c: wire code_facts_fts — structured facts (schemas, env lookups, guards,
     # retry policies) that chunks_fts can miss. Boost chunks whose (repo, file)

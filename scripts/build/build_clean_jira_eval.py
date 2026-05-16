@@ -20,7 +20,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 NOISE_REGEXES: tuple[re.Pattern, ...] = tuple(
     re.compile(p)

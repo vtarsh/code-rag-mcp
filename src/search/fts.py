@@ -13,9 +13,39 @@ import os
 import re
 import sqlite3
 
-from src.config import DOMAIN_GLOSSARY, PHRASE_GLOSSARY
+from src.config import DICTIONARY_ALIAS_MAP, DOMAIN_GLOSSARY, PHRASE_GLOSSARY
 from src.container import db_connection
 from src.types import SearchResult
+
+
+def expand_query_dictionary(query: str) -> str:
+    """Expand query using domain dictionary aliases (conservative OR expansion).
+
+    When a query token exactly matches a dictionary concept or alias,
+    append canonical forms / aliases not already present in the query.
+
+    Example: "auth_code provider" → "auth_code provider authCode"
+    """
+    if not query or not query.strip():
+        return query
+
+    tokens = query.split()
+    lower_tokens = {t.lower().strip(".,;:!?") for t in tokens}
+    expansions: list[str] = []
+
+    for token in tokens:
+        key = token.lower().strip(".,;:!?")
+        if key in DICTIONARY_ALIAS_MAP:
+            for variant in DICTIONARY_ALIAS_MAP[key]:
+                if variant.lower() not in lower_tokens:
+                    expansions.append(variant)
+                    lower_tokens.add(variant.lower())
+
+    if expansions:
+        expanded = query + " " + " ".join(expansions)
+        logging.debug("Dictionary query expanded: %r -> %r", query, expanded)
+        return expanded
+    return query
 
 
 def expand_query(query: str) -> str:
@@ -181,10 +211,13 @@ def sanitize_fts_query(query: str) -> str:
     for token in tokens:
         if len(token) < 3:
             continue
-        if "-" in token and not token.startswith('"'):
-            sanitized.append(f'"{token}"')
-        elif "." in token:
+        if "." in token:
             parts = [p for p in token.split(".") if len(p) >= 3]
+            sanitized.extend(parts)
+            sanitized.append(f'"{token}"')
+        elif "_" in token or "-" in token:
+            # snake_case or kebab-case: split and OR the parts
+            parts = [p for p in re.split(r"[_-]", token) if len(p) >= 3]
             sanitized.extend(parts)
             sanitized.append(f'"{token}"')
         else:
@@ -241,7 +274,7 @@ def fts_search(
             raw_rows = conn.execute(
                 f"""
                 SELECT rowid, repo_name, file_path, file_type, chunk_type,
-                       snippet(chunks, 0, '>>>', '<<<', '...', 64) as snippet
+                       snippet(chunks, 0, '>>>', '<<<', '...', 256) as snippet
                 FROM chunks WHERE {where} ORDER BY rank LIMIT ?
             """,
                 params,

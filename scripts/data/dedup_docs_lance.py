@@ -32,7 +32,7 @@ def main() -> int:
         return 1
 
     try:
-        import lancedb  # noqa: WPS433  — lazy import for test envs without lancedb
+        import lancedb
     except ImportError as exc:
         print(f"  [dedup] lancedb not installed: {exc}")
         return 2

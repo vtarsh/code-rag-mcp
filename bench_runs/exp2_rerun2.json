@@ -1,0 +1,1309 @@
+{
+  "config": {
+    "eval": "/Users/vaceslavtarsevskij/.code-rag-mcp/profiles/pay-com/eval/jira_eval_clean.jsonl",
+    "limit": 10,
+    "daemon_url": "http://127.0.0.1:8742/tool/search"
+  },
+  "aggregates": {
+    "n": 665,
+    "hit_at_10": 0.1564
+  },
+  "eval_per_query": [
+    {
+      "query": "Settlement Accounts - Query only merchant specific",
+      "query_id": "BO-1037",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Refactor update merchant and merchant application",
+      "query_id": "BO-1041",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Integrate Payment Methods Configurations Microfrontend into Backoffice",
+      "query_id": "BO-1042",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Replace JSON Viewer with Monaco Editor",
+      "query_id": "BO-1103",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Core Documents Reference Migration",
+      "query_id": "BO-1244",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Add and Use Default Risk Alert Category in Risk Rules",
+      "query_id": "BO-1266",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Make MATCH modal always accessible",
+      "query_id": "BO-1435",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Export Assessment Form PDF and Attach as Legal Entity Business Document",
+      "query_id": "BO-1585",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Add `settlement_account` Option to LogicFieldsValueFieldType",
+      "query_id": "BO-1588",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Migrate Generic Notes and Verification Check Fields to Rich Text",
+      "query_id": "BO-1593",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Add Generic Routines Tab",
+      "query_id": "BO-1607",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Alert Management - Add Customer ID on the Alerts table",
+      "query_id": "BO-885",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Refactor types of useParams for merchants pages",
+      "query_id": "BO-920",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Alert Management - No assignee when alerts are resolved or closed",
+      "query_id": "BO-928",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "PPRO adjustments and IDEAL updates",
+      "query_id": "CORE-1751",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Add transaction error fallback workflow",
+      "query_id": "CORE-2167",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Adjustments to Transactions",
+      "query_id": "CORE-2175",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Optimizations for v1 payouts, setup session and charge/holds actions",
+      "query_id": "CORE-2187",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Retry tokenize request to API",
+      "query_id": "CORE-2286",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Remove <> from cardholder name on SIlverflow",
+      "query_id": "CORE-2299",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "API: Get By Token",
+      "query_id": "CORE-2304",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Allow merchants to customize decline message per decline code",
+      "query_id": "CORE-2351",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "ACH and RTP payment method options",
+      "query_id": "CORE-2361",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Extend Evidences with cardholder files",
+      "query_id": "CORE-2362",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Submit Evidence: API automation",
+      "query_id": "CORE-2404",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Tech debt: migrate `workflow-onboarding-merchant-providers` to typescript",
+      "query_id": "CORE-2435",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Collaborations: migrate core collaborations service to PG",
+      "query_id": "CORE-2495",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "[Payments] Granulated options for disabling processing for settlement accounts",
+      "query_id": "CORE-2552",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "[GW] Add validation on gateway for refunds",
+      "query_id": "CORE-2556",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "[API] Retry attempt counter",
+      "query_id": "CORE-2572",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Visa click to pay",
+      "query_id": "HS-244",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Support products in partial approve",
+      "query_id": "HS-252",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Headless function not validating allowd PMs",
+      "query_id": "HS-257",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "applpay button fixes",
+      "query_id": "HS-262",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Setup Session - allow continue with default",
+      "query_id": "HS-273",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Radio: fix \"more apms\" button overflow",
+      "query_id": "HS-278",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "support \"inlineRedirect\" feature flag",
+      "query_id": "HS-283",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "redirectMobile / redirectDesktop",
+      "query_id": "HS-286",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "OKTO CASH - princess skin",
+      "query_id": "HS-294",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Rapyd providers integrations",
+      "query_id": "PI-1",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "paynt - adjust payout",
+      "query_id": "PI-10",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "braintree provider integration",
+      "query_id": "PI-11",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "nexi provider integrations",
+      "query_id": "PI-12",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Check CVV removal condition in all live providers",
+      "query_id": "PI-13",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Validate old integration - gumballpay",
+      "query_id": "PI-15",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Date Picker bug close on click new date",
+      "query_id": "BO-1000",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Provider Integration - Ecentric",
+      "query_id": "PI-16",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Validate old integration - Shift4 (formerly credorax)",
+      "query_id": "PI-17",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Merchant Status Button in button",
+      "query_id": "BO-1006",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Prod bug UNKNOWN: Metadata string value \"Error: Code: 60. DB::Exception",
+      "query_id": "BO-1016",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Refresh Compliance bug",
+      "query_id": "BO-1018",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Aps revalidate new flow (similar to gumball)",
+      "query_id": "PI-20",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Migrate onActionClick navigate to Link component",
+      "query_id": "BO-1024",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "chargeback911 integration",
+      "query_id": "PI-21",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Refactor fields list component - more generic",
+      "query_id": "BO-1032",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "add stripe cash-app integration",
+      "query_id": "PI-22",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Provider integration - ilixium",
+      "query_id": "PI-23",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Fix TX table query \"orderBy\"",
+      "query_id": "BO-1043",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Provider  integration - Libra OBP",
+      "query_id": "PI-26",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Add bank name to bank account form",
+      "query_id": "BO-1044",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Expose Merchant Drilldown to operations & sales",
+      "query_id": "BO-1045",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "PPRO add bancontact",
+      "query_id": "PI-27",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "core-transactions findByParams optimisation",
+      "query_id": "BO-1047",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Date input - some months cannot be selected",
+      "query_id": "BO-1049",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "create bank storage providers",
+      "query_id": "PI-29",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Task Adjustments and Fixes",
+      "query_id": "BO-1051",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "ppro blik one click",
+      "query_id": "PI-30",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Skrill & Netteler add verification",
+      "query_id": "PI-32",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Simulate access of a group",
+      "query_id": "BO-1054",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "crb ach payouts provider",
+      "query_id": "PI-37",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Task readonly fields",
+      "query_id": "BO-1060",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "nuvei provider",
+      "query_id": "PI-39",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Merchant > Finance > Balance - Host balance next app",
+      "query_id": "BO-1063",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Merchant > Finance > Rolling Reserves",
+      "query_id": "BO-1064",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Risk Alerts > False Positive Status",
+      "query_id": "BO-1065",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Connections table id duplications",
+      "query_id": "BO-1071",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "useAsyncTable query response type",
+      "query_id": "BO-1073",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "trustly integration",
+      "query_id": "PI-40",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Audits export csv",
+      "query_id": "BO-1078",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "finish nuvei integrations testing",
+      "query_id": "PI-41",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "create chargeback911 task and signals handeling",
+      "query_id": "PI-42",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "gumballpay payout integrations",
+      "query_id": "PI-46",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Remove monitoring page",
+      "query_id": "BO-1099",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Payhub Integration",
+      "query_id": "PI-47",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Creating Merchant Onboarding Flow - Hubspot",
+      "query_id": "BO-1104",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "[Provider] - Paymend integration",
+      "query_id": "PI-48",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Merchant Documents Onboarding Flow - Hubspot",
+      "query_id": "BO-1105",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Update Vite and babel",
+      "query_id": "BO-1108",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Mercant Drilldown > \"Finance configurations\" tab",
+      "query_id": "BO-1109",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Didn't find a structure: variable_capital_investment_company for country: GR",
+      "query_id": "BO-1129",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "EPS APM via Nuvei",
+      "query_id": "PI-50",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Bank Accounts - display EU fields in UK region",
+      "query_id": "BO-1134",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Tasks Documents Preview",
+      "query_id": "BO-1139",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Research and delete unused code",
+      "query_id": "BO-1140",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Transactions Table Card Issuer Country Export Csv Error",
+      "query_id": "BO-1142",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "[APM] - Plaid verification flow",
+      "query_id": "PI-51",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Finance, referral and commissions audits",
+      "query_id": "BO-1144",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Add audit logs to pricing-configs",
+      "query_id": "BO-1147",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "[APM] - Trustly payouts",
+      "query_id": "PI-53",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Compliance Overview - Merchant Info Block",
+      "query_id": "BO-1149",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Compliance Overview - Review Details Block",
+      "query_id": "BO-1150",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "[APM] - Trustly verification flow",
+      "query_id": "PI-54",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Compliance Overview - Risk Details Block",
+      "query_id": "BO-1151",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Compliance Overview - Marketing Communication Block",
+      "query_id": "BO-1152",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "[APM] - Nuvei  pay by bank",
+      "query_id": "PI-55",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Compliance Overview - Location Details Block",
+      "query_id": "BO-1153",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Compliance Business details - General Information Block",
+      "query_id": "BO-1154",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Compliance Business details - Address Blocks",
+      "query_id": "BO-1155",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Compliance Business details - Primary contact person Block",
+      "query_id": "BO-1156",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Compliance Business Activity - Business Activity Block",
+      "query_id": "BO-1157",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Compliance Business Activity - Website & Processing Info Block",
+      "query_id": "BO-1158",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Compliance Stakeholders - Individual Fields",
+      "query_id": "BO-1159",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "[APM] - Aeropay integration",
+      "query_id": "PI-59",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Move Documents Types to core-configuration",
+      "query_id": "BO-1160",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Iris APM integration",
+      "query_id": "PI-6",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "[APM] PPRO - Bancomat, satispay",
+      "query_id": "PI-62",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Stripe - add dynamic MCC",
+      "query_id": "PI-64",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Delete defaultValue Field config",
+      "query_id": "BO-1168",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "[APM] - Paypal integration updates",
+      "query_id": "PI-8",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Remove renderFieldValue promise",
+      "query_id": "BO-1169",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "ECP - adjust providers credentials token by currency to be dynamic",
+      "query_id": "PI-9",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Remove preUpdateParser from form config",
+      "query_id": "BO-1170",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Remove record form config type",
+      "query_id": "BO-1171",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Add \"internal\" field to logic builder form and related queries/services",
+      "query_id": "BO-1172",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Paypass Task Management",
+      "query_id": "BO-1175",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Vat Number validation merchant application",
+      "query_id": "BO-1178",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "UseAsyncTable hook delete useGqlQuery",
+      "query_id": "BO-1184",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Create \"Ask document\" task",
+      "query_id": "BO-1186",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Configurations - Space export fields screen",
+      "query_id": "BO-1187",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Compliance > Verfication Check > MATCH",
+      "query_id": "BO-1197",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Compliance Tasks Table - Task Management",
+      "query_id": "BO-1199",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Move get-groups method in grpc-google-utils to api",
+      "query_id": "BO-1200",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "use \"maxDisplayedTabs\" in Configurations",
+      "query_id": "BO-1201",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Column Definitions Types",
+      "query_id": "BO-1205",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Editor Full Screen",
+      "query_id": "BO-1207",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Internal Rules - Company Name Filter error",
+      "query_id": "BO-1208",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Transactions Logs- iLike filter",
+      "query_id": "BO-1212",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Core Cost - ValidationError: \"currency\" is not allowed to be empty",
+      "query_id": "BO-1216",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Hits Table Export - Csv Report",
+      "query_id": "BO-1217",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Hubspot documents tasks notes copy to document note",
+      "query_id": "BO-1218",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Hubspot documents task new field note from hubspot",
+      "query_id": "BO-1219",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Migrate download documents to url download instead of fetch",
+      "query_id": "BO-1222",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Editable Expiry Date and Issuing Date Documents",
+      "query_id": "BO-1224",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Hubspot two new fields - documents dates",
+      "query_id": "BO-1225",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Update Merchant Refactor",
+      "query_id": "BO-1226",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Create configuration tab for document types",
+      "query_id": "BO-1228",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Percent Risk Details - Percent Held Back Confirmation Modal",
+      "query_id": "BO-1230",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Tasks order by created at",
+      "query_id": "BO-1231",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "InputType Date - PresentableField",
+      "query_id": "BO-1232",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Move task templates and tasks category to use id",
+      "query_id": "BO-1233",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Remove `toColumnDefinitions` function",
+      "query_id": "BO-1234",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Compliance Business Details - Archived Block",
+      "query_id": "BO-1238",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Compliance Business Activity - Archived Block",
+      "query_id": "BO-1239",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Extract merchantsTabs and Refactor Tabs with Props",
+      "query_id": "BO-1240",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Remove merchant Resolver from MerchantApplication",
+      "query_id": "BO-1242",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Migrate `verificationChecks` from `MerchantApplication` to Dedicated Queries and Mutations",
+      "query_id": "BO-1245",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Transactions Table - New Columns",
+      "query_id": "BO-1246",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Fix Styling of Individuals Tab in Verification Checks (Compliance)",
+      "query_id": "BO-1247",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Refactor RiskListValues Table to Use Scylla and Client-Side Rendering",
+      "query_id": "BO-1249",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Optimize `getRiskEmployees` Usage and Reduce Google Utils Requests",
+      "query_id": "BO-1256",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Add Auditing to Task and Task Template Operations",
+      "query_id": "BO-1257",
+      "hit_at_k": 1,
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "query": "Enable Editing of `category` Field in Risk Alert",
+      "query_id": "BO-1258",
+      "hit_at_k": 0,
+      "strata": [
+        "jira"
+      ]
+    }
+  ]
+}

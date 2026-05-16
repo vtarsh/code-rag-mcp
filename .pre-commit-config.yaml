@@ -66,3 +66,11 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [manual]
+
+      - id: gotcha-tags
+        name: gotcha tags dictionary validator
+        entry: /usr/local/bin/python3.12 scripts/maint/validate_gotcha_tags.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]

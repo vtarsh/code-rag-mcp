@@ -5,7 +5,9 @@ Exits non-zero on violations. Designed for pre-commit / CI integration.
 Catches H3: [text](file.md#anchor) markdown links where the heading slug
 no longer exists in target file. Uses GitHub-style slug rules.
 """
+
 from __future__ import annotations
+
 import re
 import sys
 from pathlib import Path

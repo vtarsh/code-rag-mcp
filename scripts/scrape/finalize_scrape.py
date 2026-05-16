@@ -35,9 +35,7 @@ _VALIDATOR_PATH = REPO_ROOT / "scripts" / "maint" / "validate_provider_paths.py"
 # Late-bound module reference — populated by _load_validator() so tests can
 # stub it. Type is intentionally loose; the script imports a few symbols.
 def _load_validator():
-    spec = importlib.util.spec_from_file_location(
-        "validate_provider_paths", _VALIDATOR_PATH
-    )
+    spec = importlib.util.spec_from_file_location("validate_provider_paths", _VALIDATOR_PATH)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot import validator from {_VALIDATOR_PATH}")
     mod = importlib.util.module_from_spec(spec)
@@ -65,10 +63,7 @@ DEFINITIVE_VERDICTS: frozenset[str] = frozenset(
         vpp.VERDICT_NOT_PUBLIC,
     }
 )
-KNOWN_VERDICTS: frozenset[str] = frozenset(
-    DEFINITIVE_VERDICTS
-    | {vpp.VERDICT_INCONCLUSIVE, vpp.VERDICT_NO_PROBES}
-)
+KNOWN_VERDICTS: frozenset[str] = frozenset(DEFINITIVE_VERDICTS | {vpp.VERDICT_INCONCLUSIVE, vpp.VERDICT_NO_PROBES})
 
 BEGIN_MARKER = "<!-- BEGIN auto-validator -->"
 END_MARKER = "<!-- END auto-validator -->"
@@ -101,9 +96,7 @@ class FinalizeOutcome:
 # Pure helpers (network-free, fully unit-testable).
 
 
-def is_placeholder_index(
-    index_text: str | None, line_limit: int = PLACEHOLDER_LINE_LIMIT
-) -> bool:
+def is_placeholder_index(index_text: str | None, line_limit: int = PLACEHOLDER_LINE_LIMIT) -> bool:
     """Decide if the supplied index.md text is a 'placeholder' that
     finalize_scrape may auto-edit.
 
@@ -142,9 +135,7 @@ def classify_verdicts(
     return seen.issubset(DEFINITIVE_VERDICTS), unknown
 
 
-def render_warning_block(
-    facade: str | None, outcomes: list
-) -> str:
+def render_warning_block(facade: str | None, outcomes: list) -> str:
     """Build the markdown block we (may) inject between BEGIN/END markers.
 
     Output is deterministic so --check can compare for drift exactly.
@@ -178,10 +169,7 @@ def render_warning_block(
             else:
                 public = "(manual review)"
             rationale = o.rationale.replace("|", "\\|")
-            lines.append(
-                f"| `{o.spec_name}` | `{sample_path}` | `{public}` "
-                f"| **{o.verdict}** | {rationale} |"
-            )
+            lines.append(f"| `{o.spec_name}` | `{sample_path}` | `{public}` | **{o.verdict}** | {rationale} |")
     lines.append("")
     lines.append(END_MARKER)
     return "\n".join(lines)
@@ -200,9 +188,7 @@ def inject_block(index_text: str | None, block: str) -> str:
     has_begin = BEGIN_MARKER in text
     has_end = END_MARKER in text
     if has_begin and not has_end:
-        raise RuntimeError(
-            "index.md has BEGIN marker but no END marker — corrupt state, refusing to write"
-        )
+        raise RuntimeError("index.md has BEGIN marker but no END marker — corrupt state, refusing to write")
     if has_begin and has_end:
         before, _, rest = text.partition(BEGIN_MARKER)
         _, _, after = rest.partition(END_MARKER)
@@ -270,9 +256,7 @@ def run_validator(
     outcomes: list = []
     if facade:
         for s in specs:
-            outcomes.append(
-                vpp.run_spec_probes(s, facade, probe_limit=probe_limit, timeout=timeout)
-            )
+            outcomes.append(vpp.run_spec_probes(s, facade, probe_limit=probe_limit, timeout=timeout))
     return specs, dns_results, facade, facade_log, outcomes
 
 
@@ -408,9 +392,7 @@ def main(argv: list[str] | None = None) -> int:
         default=3,
         help="Max GET paths to probe per spec.",
     )
-    parser.add_argument(
-        "--timeout", type=float, default=6.0, help="Per-request timeout (seconds)."
-    )
+    parser.add_argument("--timeout", type=float, default=6.0, help="Per-request timeout (seconds).")
     parser.add_argument(
         "--check",
         action="store_true",

@@ -17,8 +17,9 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Callable, Final
+from typing import Final
 
 API_BASE: Final = os.getenv("RUNPOD_API_BASE", "https://rest.runpod.io/v1")
 DEFAULT_DAILY_CAP_USD: Final = float(os.getenv("RUNPOD_MAX_DAILY_SPEND_USD", "5"))
@@ -33,9 +34,7 @@ class CostGuardError(RuntimeError):
 def _read_api_key() -> str:
     key = os.getenv("RUNPOD_API_KEY")
     if not key:
-        raise CostGuardError(
-            "RUNPOD_API_KEY missing. Run `source ~/.runpod/credentials` first."
-        )
+        raise CostGuardError("RUNPOD_API_KEY missing. Run `source ~/.runpod/credentials` first.")
     if not key.startswith("rpa_"):
         raise CostGuardError("RUNPOD_API_KEY format unexpected (no rpa_ prefix).")
     return key
@@ -94,8 +93,7 @@ def assert_can_spend(
     """
     if estimated_run_usd > single_run_cap_usd:
         raise CostGuardError(
-            f"Estimated run ${estimated_run_usd:.2f} exceeds "
-            f"single-run cap ${single_run_cap_usd:.2f}."
+            f"Estimated run ${estimated_run_usd:.2f} exceeds single-run cap ${single_run_cap_usd:.2f}."
         )
     today = today_spend_fn()
     if today + estimated_run_usd > daily_cap_usd:

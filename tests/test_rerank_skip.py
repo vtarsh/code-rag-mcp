@@ -72,7 +72,7 @@ _DOC_QUERY_NO_STRATUM = "how to configure idempotency"
 
 # Doc-intent query with a stratum token from the OFF set — gate skips rerank.
 # `webhook` is OFF (reranker hurts on this stratum per A2-revise eval).
-_DOC_QUERY_OFF_STRATUM = "webhook signature validation"
+_DOC_QUERY_OFF_STRATUM = "how to validate webhook signature"
 
 # Doc-intent query with a stratum token from the KEEP set — gate runs rerank.
 # `nuvei` is KEEP (reranker helps on this stratum per A2-revise eval).

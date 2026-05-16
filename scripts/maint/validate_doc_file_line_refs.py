@@ -5,7 +5,9 @@ Exits non-zero on violations. Designed for pre-commit / CI integration.
 Catches H13: file:line references in MD docs that no longer exist in cloned
 source repos under ~/.code-rag-mcp/raw/.
 """
+
 from __future__ import annotations
+
 import re
 import sys
 from pathlib import Path
@@ -20,9 +22,9 @@ SKIP_FILENAMES = {"_housekeeping_report.md", "_deprecated_scan_report.md", "_scr
 # repo and path segments allow alnum, _, -, .  Filename must have an extension.
 REF_RE = re.compile(
     r"(?<![\w/])"
-    r"([A-Za-z0-9][A-Za-z0-9_.-]*"             # repo dir
-    r"(?:/[A-Za-z0-9_.-]+)+"                    # /relative/path
-    r"\.[A-Za-z0-9]+)"                           # .ext
+    r"([A-Za-z0-9][A-Za-z0-9_.-]*"  # repo dir
+    r"(?:/[A-Za-z0-9_.-]+)+"  # /relative/path
+    r"\.[A-Za-z0-9]+)"  # .ext
     r"(?::(\d+)(?:-(\d+))?|#L(\d+)(?:-L?(\d+))?)"
 )
 
@@ -63,13 +65,17 @@ def main() -> int:
                 if not (RAW_ROOT / repo).is_dir():
                     unverifiable += 1
                     if len(warns) < 30:
-                        warns.append(f"{md}:{lineno} -> {ref_path}:{start_n}{'-'+str(end_n) if end else ''} -> UNVERIFIABLE (repo {repo} not in raw/, may be pre-main)")
+                        warns.append(
+                            f"{md}:{lineno} -> {ref_path}:{start_n}{'-' + str(end_n) if end else ''} -> UNVERIFIABLE (repo {repo} not in raw/, may be pre-main)"
+                        )
                     continue
                 target = RAW_ROOT / repo / rel
                 if not target.is_file():
                     broken_file += 1
                     if len(broken) < 30:
-                        broken.append(f"{md}:{lineno} -> {ref_path}:{start_n}{'-'+str(end_n) if end else ''} -> BROKEN-FILE (no {target})")
+                        broken.append(
+                            f"{md}:{lineno} -> {ref_path}:{start_n}{'-' + str(end_n) if end else ''} -> BROKEN-FILE (no {target})"
+                        )
                     continue
                 try:
                     line_count = sum(1 for _ in target.open("rb"))
@@ -79,10 +85,14 @@ def main() -> int:
                 if end_n > line_count:
                     broken_line += 1
                     if len(broken) < 30:
-                        broken.append(f"{md}:{lineno} -> {ref_path}:{start_n}{'-'+str(end_n) if end else ''} -> BROKEN-LINE (file has {line_count} lines)")
+                        broken.append(
+                            f"{md}:{lineno} -> {ref_path}:{start_n}{'-' + str(end_n) if end else ''} -> BROKEN-LINE (file has {line_count} lines)"
+                        )
                 else:
                     ok += 1
-    print(f"file:line refs checked: total={total} ok={ok} broken_file={broken_file} broken_line={broken_line} unverifiable={unverifiable}")
+    print(
+        f"file:line refs checked: total={total} ok={ok} broken_file={broken_file} broken_line={broken_line} unverifiable={unverifiable}"
+    )
     if broken:
         print("\nFirst broken refs (FAIL):")
         for b in broken:
