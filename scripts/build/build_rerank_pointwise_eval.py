@@ -6,7 +6,7 @@ collapses to 4 unique queries with positives -> all 3 reranker candidates tied a
 0.6337 R@10 last cycle (saturated, eval too small to discriminate).
 
 This script derives a discriminating eval from the calibrated docs intent eval
-(`profiles/pay-com/doc_intent_eval_v3_n200_v2.jsonl`, n=192 scoreable). For each
+(`profiles/pay-com/eval/doc_intent_eval_v3_n200_v2.jsonl`, n=192 scoreable). For each
 scoreable query:
     - positives = expected_paths (label=1)
     - hard-negatives = FTS5 top-50 paths over the docs corpus minus expected_paths
@@ -52,9 +52,9 @@ sys.path.insert(0, str(ROOT))
 
 from src.search.fts import fts_search  # noqa: E402
 
-EVAL_PATH = ROOT / "profiles" / "pay-com" / "doc_intent_eval_v3_n200_v2.jsonl"
+EVAL_PATH = ROOT / "profiles" / "pay-com" / "eval" / "doc_intent_eval_v3_n200_v2.jsonl"
 DB_PATH = ROOT / "db" / "knowledge.db"
-OUT_PATH = ROOT / "profiles" / "pay-com" / "rerank_pointwise_eval_v1.jsonl"
+OUT_PATH = ROOT / "profiles" / "pay-com" / "eval" / "rerank_pointwise_eval_v1.jsonl"
 DISCRIM_OUT = Path("/tmp/pointwise_eval_v1_check.txt")
 
 # Docs corpus file_types — anything outside this set is code/config noise
@@ -299,14 +299,15 @@ def discrim_check(pairs: list[dict]) -> dict:
     for p in pairs:
         by_qid[p["query_id"]].append(p)
 
-    print(f"  loading vanilla cross-encoder/ms-marco-MiniLM-L-6-v2 ...")
+    print("  loading vanilla cross-encoder/ms-marco-MiniLM-L-6-v2 ...")
     from sentence_transformers import CrossEncoder
+
     ce = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
     rng = random.Random(42)
     minilm_recalls: list[float] = []
     random_recalls: list[float] = []
-    for qid, qpairs in by_qid.items():
+    for _qid, qpairs in by_qid.items():
         if not qpairs:
             continue
         query = qpairs[0]["query"]

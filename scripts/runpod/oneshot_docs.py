@@ -23,7 +23,7 @@ Usage::
         --candidate-tag=docs-nomic-ft-v2 \\
         --base-model=nomic-ai/nomic-embed-text-v1.5 \\
         --train-data=/tmp/train_triplets.jsonl \\
-        --eval-data=profiles/pay-com/doc_intent_eval_v3.jsonl \\
+        --eval-data=profiles/pay-com/eval/doc_intent_eval_v3.jsonl \\
         --hf-repo=Tarshevskiy/pay-com-docs-nomic-ft-v2
 """
 

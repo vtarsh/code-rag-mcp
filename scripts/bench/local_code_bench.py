@@ -43,7 +43,7 @@ def main() -> int:
     p.add_argument(
         "--eval",
         type=Path,
-        default=REPO_ROOT / "profiles" / "pay-com" / "code_intent_eval_v1.jsonl",
+        default=REPO_ROOT / "profiles" / "pay-com" / "eval" / "code_intent_eval_v1.jsonl",
     )
     p.add_argument("--model", default="coderank")
     p.add_argument("--out", type=Path, default=None)

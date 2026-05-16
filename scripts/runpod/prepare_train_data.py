@@ -27,17 +27,15 @@ from typing import Final
 
 _BASE: Final = Path(os.getenv("CODE_RAG_HOME", Path.home() / ".code-rag-mcp"))
 DEFAULT_DB: Final = _BASE / "db" / "knowledge.db"
-DEFAULT_LABELED: Final = (
-    _BASE / "profiles" / "pay-com" / "v12_candidates_regen_labeled_FINAL.jsonl"
-)
+DEFAULT_LABELED: Final = _BASE / "profiles" / "pay-com" / "v12_candidates_regen_labeled_FINAL.jsonl"
 
 # Eval files train pairs MUST be disjoint from. Both legacy v3 (n=100) and
 # the expanded v3_n150 (n=143) — union the two. P7 Phase 1.2 (CM4 closure):
 # without the query-disjoint check, silver-positive transduction can leak
 # eval queries into training even when paths are disjoint.
 DEFAULT_EVAL_FILES: Final = (
-    _BASE / "profiles" / "pay-com" / "doc_intent_eval_v3.jsonl",
-    _BASE / "profiles" / "pay-com" / "doc_intent_eval_v3_n150.jsonl",
+    _BASE / "profiles" / "pay-com" / "eval" / "doc_intent_eval_v3.jsonl",
+    _BASE / "profiles" / "pay-com" / "eval" / "doc_intent_eval_v3_n150.jsonl",
 )
 
 # Regex scan — even though the labeled set has no hits today, we bake the
@@ -61,10 +59,7 @@ def load_labeled(path: Path) -> list[dict]:
 
 
 def filter_doc_intent_positives(rows: list[dict]) -> list[dict]:
-    return [
-        r for r in rows
-        if r.get("query_tag") == "doc-intent" and r.get("label_final") == "+"
-    ]
+    return [r for r in rows if r.get("query_tag") == "doc-intent" and r.get("label_final") == "+"]
 
 
 def dedupe_by_query_file(rows: list[dict]) -> list[dict]:
@@ -105,6 +100,7 @@ def contains_secret(text: str) -> bool:
 
 
 # ----- eval-disjoint guards (CM4 + P7 Phase 1.2) ----------------------------
+
 
 def _norm_query(q: str) -> str:
     """Normalize a query for disjoint comparison: lower-cased + stripped."""
@@ -166,15 +162,10 @@ def _assert_query_disjoint_from_eval(
     silver-positive transduction leak: the same query can appear in training
     even with a different doc path. This guards the query side.
     """
-    leaked = [
-        p for p in pairs
-        if _norm_query(p.get("query", "")) in eval_queries
-    ]
+    leaked = [p for p in pairs if _norm_query(p.get("query", "")) in eval_queries]
     if leaked:
         sample = [p.get("query", "") for p in leaked[:5]]
-        raise ValueError(
-            f"REFUSE: {len(leaked)} train pairs collide with eval queries: {sample}"
-        )
+        raise ValueError(f"REFUSE: {len(leaked)} train pairs collide with eval queries: {sample}")
 
 
 def _assert_path_disjoint_from_eval(
@@ -186,18 +177,10 @@ def _assert_path_disjoint_from_eval(
     Original CM4 spec from debate-recipes.md §CM4. Independent of the query
     check — both must pass.
     """
-    leaked = [
-        p for p in pairs
-        if (p.get("_repo_name", ""), p.get("_file_path", "")) in eval_paths
-    ]
+    leaked = [p for p in pairs if (p.get("_repo_name", ""), p.get("_file_path", "")) in eval_paths]
     if leaked:
-        sample = [
-            f"{p.get('_repo_name', '')}:{p.get('_file_path', '')}"
-            for p in leaked[:5]
-        ]
-        raise ValueError(
-            f"REFUSE: {len(leaked)} train pairs collide with eval expected_paths: {sample}"
-        )
+        sample = [f"{p.get('_repo_name', '')}:{p.get('_file_path', '')}" for p in leaked[:5]]
+        raise ValueError(f"REFUSE: {len(leaked)} train pairs collide with eval expected_paths: {sample}")
 
 
 def build_pairs(
@@ -311,8 +294,7 @@ def run(
     else:
         if resolved_count < subset:
             print(
-                f"ERROR: resolved {resolved_count} rows, requested {subset}; "
-                "increase --subset or check db path",
+                f"ERROR: resolved {resolved_count} rows, requested {subset}; increase --subset or check db path",
                 file=sys.stderr,
                 flush=True,
             )
@@ -341,24 +323,32 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument(
-        "--subset", type=int,
+        "--subset",
+        type=int,
         help="Sample N deterministic pairs (Stage C smoke/pilot)",
     )
     mode.add_argument(
-        "--full", action="store_true",
+        "--full",
+        action="store_true",
         help="Emit every resolved pair (Stage D)",
     )
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument(
-        "--out", required=True, type=Path,
+        "--out",
+        required=True,
+        type=Path,
         help="Output JSONL path",
     )
     ap.add_argument(
-        "--db", type=Path, default=DEFAULT_DB,
+        "--db",
+        type=Path,
+        default=DEFAULT_DB,
         help=f"knowledge.db path (default: {DEFAULT_DB})",
     )
     ap.add_argument(
-        "--labeled", type=Path, default=DEFAULT_LABELED,
+        "--labeled",
+        type=Path,
+        default=DEFAULT_LABELED,
         help=f"labeled candidates JSONL (default: {DEFAULT_LABELED})",
     )
     args = ap.parse_args(argv)

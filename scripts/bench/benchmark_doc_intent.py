@@ -13,7 +13,7 @@ R@10 on the reranked top-10. This measures the FULL production pipeline
 bypassed (we already know we want the docs tower for this eval set).
 
 Inputs:
-    profiles/pay-com/doc_intent_eval_v1.jsonl   (frozen pseudo-gold seed, n≈40)
+    profiles/pay-com/eval/doc_intent_eval_v1.jsonl   (frozen pseudo-gold seed, n≈40)
     db/vectors.lance.docs[.<key>]/chunks         (per-model LanceDB tables)
 
 Output: bench_runs/doc_intent_<key>_<ts>.json (one per model)
@@ -44,7 +44,7 @@ Usage:
     python3 scripts/benchmark_doc_intent.py
     python3 scripts/benchmark_doc_intent.py --only docs-gte-large
     python3 scripts/benchmark_doc_intent.py --models docs,docs-gte-large
-    python3 scripts/benchmark_doc_intent.py --eval=profiles/pay-com/doc_intent_eval_v1.jsonl --model=docs
+    python3 scripts/benchmark_doc_intent.py --eval=profiles/pay-com/eval/doc_intent_eval_v1.jsonl --model=docs
     python3 scripts/benchmark_doc_intent.py --no-pre-flight
     python3 scripts/benchmark_doc_intent.py --compare baseline.json candidate.json
 """
@@ -66,7 +66,7 @@ ROOT = Path(os.getenv("CODE_RAG_HOME", str(Path.home() / ".code-rag-mcp")))
 sys.path.insert(0, str(ROOT))
 
 DB_PATH = ROOT / "db" / "knowledge.db"
-EVAL_PATH = ROOT / "profiles" / "pay-com" / "doc_intent_eval_v1.jsonl"
+EVAL_PATH = ROOT / "profiles" / "pay-com" / "eval" / "doc_intent_eval_v1.jsonl"
 BENCH_DIR = ROOT / "bench_runs"
 
 PREFLIGHT_AVAIL_HARD_GB = 3.5  # was 5.0 — daemon co-residency made the gate too tight
@@ -88,11 +88,11 @@ E2E_RERANKER_MODEL = os.getenv(
 )
 
 # AND-gate thresholds (used by --compare; see eval-methodology-verdict.md F4).
-GATE_RECALL_LIFT = 0.10   # candidate.recall_at_10 >= baseline + 0.10
-GATE_NDCG_LIFT = 0.05     # candidate.ndcg_at_10  >= baseline + 0.05
+GATE_RECALL_LIFT = 0.10  # candidate.recall_at_10 >= baseline + 0.10
+GATE_NDCG_LIFT = 0.05  # candidate.ndcg_at_10  >= baseline + 0.05
 GATE_PER_STRATUM_DROP = -0.15  # no stratum drop > 15 pp
-GATE_HIT5_DROP = -0.05         # hit_at_5 floor: not worse than baseline - 5 pp
-GATE_LATENCY_RATIO = 2.0       # candidate.latency_p95_ms < 2x baseline
+GATE_HIT5_DROP = -0.05  # hit_at_5 floor: not worse than baseline - 5 pp
+GATE_LATENCY_RATIO = 2.0  # candidate.latency_p95_ms < 2x baseline
 
 DEFAULT_MODELS: tuple[str, ...] = (
     "docs",  # incumbent baseline (nomic-embed-text-v1.5)
@@ -112,14 +112,14 @@ def _md5_file(path: Path) -> str:
 
 def _avail_gb() -> float:
     import psutil
+
     return psutil.virtual_memory().available / 1024**3
 
 
 def load_eval(path: Path) -> list[dict]:
     if not path.exists():
         print(
-            f"ERROR: eval set not found at {path}. "
-            "Pass --eval=<path> with an existing JSONL.",
+            f"ERROR: eval set not found at {path}. Pass --eval=<path> with an existing JSONL.",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -180,9 +180,7 @@ def _percentile(samples: list[float], p: float) -> float:
     return s[lo] + (s[hi] - s[lo]) * (k - lo)
 
 
-def _recall_at_k(expected: set[tuple[str, str]],
-                 retrieved_in_order: list[tuple[str, str]],
-                 k: int) -> float:
+def _recall_at_k(expected: set[tuple[str, str]], retrieved_in_order: list[tuple[str, str]], k: int) -> float:
     """True Recall@K = |E ∩ top_k| / min(|E|, K). Returns 0.0 if expected empty."""
     if not expected:
         return 0.0
@@ -190,9 +188,7 @@ def _recall_at_k(expected: set[tuple[str, str]],
     return len(expected & top_k) / min(len(expected), k)
 
 
-def _ndcg_at_k(expected: set[tuple[str, str]],
-               retrieved_in_order: list[tuple[str, str]],
-               k: int) -> float:
+def _ndcg_at_k(expected: set[tuple[str, str]], retrieved_in_order: list[tuple[str, str]], k: int) -> float:
     """Binary-relevance nDCG@K. IDCG = sum(1/log2(i+1)) for i=1..min(|E|,k)."""
     if not expected:
         return 0.0
@@ -205,9 +201,7 @@ def _ndcg_at_k(expected: set[tuple[str, str]],
     return dcg / idcg if idcg > 0 else 0.0
 
 
-def _hit_at_k(expected: set[tuple[str, str]],
-              retrieved_in_order: list[tuple[str, str]],
-              k: int) -> int:
+def _hit_at_k(expected: set[tuple[str, str]], retrieved_in_order: list[tuple[str, str]], k: int) -> int:
     """Binary Hit@K (1 if any expected appears in top-k, else 0)."""
     if not expected:
         return 0
@@ -218,10 +212,9 @@ def _hit_at_k(expected: set[tuple[str, str]],
 def open_table(lance_dir: Path):
     """Open the per-model LanceDB chunks table. Raise if missing."""
     import lancedb
+
     if not lance_dir.exists():
-        raise FileNotFoundError(
-            f"{lance_dir} missing — build it via scripts/benchmark_doc_indexing_ab.py"
-        )
+        raise FileNotFoundError(f"{lance_dir} missing — build it via scripts/benchmark_doc_indexing_ab.py")
     db = lancedb.connect(str(lance_dir))
     if "chunks" not in db.table_names():
         raise RuntimeError(f"{lance_dir} has no 'chunks' table")
@@ -239,17 +232,13 @@ def load_st(cfg):
     import torch
     from sentence_transformers import SentenceTransformer
 
-    device = (
-        "mps" if torch.backends.mps.is_available()
-        else ("cuda" if torch.cuda.is_available() else "cpu")
-    )
-    model = SentenceTransformer(
-        cfg.name, trust_remote_code=cfg.trust_remote_code, device=device
-    )
+    device = "mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")
+    model = SentenceTransformer(cfg.name, trust_remote_code=cfg.trust_remote_code, device=device)
     try:
         from src.index.builders.docs_vector_indexer import (
             _fix_gte_persistent_false_buffers,
         )
+
         _fix_gte_persistent_false_buffers(model)
     except Exception as e:  # pragma: no cover - bench safety net
         print(f"[bench] WARN _fix_gte_persistent_false_buffers skipped: {e}")
@@ -265,6 +254,7 @@ def load_reranker(model_name: str = E2E_RERANKER_MODEL):
     is kept independent of the daemon container so the bench is hermetic.
     """
     from sentence_transformers import CrossEncoder
+
     return CrossEncoder(model_name)
 
 
@@ -302,7 +292,7 @@ def rerank_candidates(
     scores = reranker.predict(pairs)
 
     # Attach scores; sort by reranker score desc; return top-`limit`.
-    scored = list(zip(candidates, [float(s) for s in scores]))
+    scored = list(zip(candidates, [float(s) for s in scores], strict=False))
     scored.sort(key=lambda x: x[1], reverse=True)
     out = []
     for c, s in scored[:limit]:
@@ -312,14 +302,16 @@ def rerank_candidates(
     return out
 
 
-def evaluate_model(key: str,
-                   eval_rows: list[dict],
-                   common: dict,
-                   pre_flight: bool = True,
-                   rerank_on: bool = False,
-                   reranker=None,
-                   stratum_gated: bool = False,
-                   dedupe: bool = False) -> dict:
+def evaluate_model(
+    key: str,
+    eval_rows: list[dict],
+    common: dict,
+    pre_flight: bool = True,
+    rerank_on: bool = False,
+    reranker=None,
+    stratum_gated: bool = False,
+    dedupe: bool = False,
+) -> dict:
     """Run TOP_K vector search per query, score multi-metric, log prod top-K.
 
     `rerank_on` (P9 2026-04-25): when True, retrieve E2E_RETRIEVAL_K from the
@@ -385,8 +377,8 @@ def evaluate_model(key: str,
     load_s = time.time() - t0
     print(f"  loaded model on {device} in {load_s:.1f}s")
 
-    eval_results: list[dict] = []   # rows that have expected_paths (scoreable)
-    prod_results: list[dict] = []   # rows with no labels (diagnostic only)
+    eval_results: list[dict] = []  # rows that have expected_paths (scoreable)
+    prod_results: list[dict] = []  # rows with no labels (diagnostic only)
     per_query_latency_ms: list[float] = []
 
     # Per-row metric accumulators.
@@ -433,9 +425,7 @@ def evaluate_model(key: str,
             # 2026-04-25 during loop Iteration 12 baseline diagnosis; the
             # eval-v2 labeler used vector_search via the same provider, so
             # benchmark must match its normalization to be apples-to-apples).
-            vecs = model.encode(
-                [q_text], show_progress_bar=False
-            )
+            vecs = model.encode([q_text], show_progress_bar=False)
             q_vec = vecs[0]
             hits = table.search(q_vec).limit(retrieval_k).to_list()
             if rerank_on and reranker is not None and hits:
@@ -445,9 +435,7 @@ def evaluate_model(key: str,
                 # is True for the doc-intent eval set by construction).
                 skip_for_this_query = False
                 if stratum_gated and _should_skip_rerank is not None:
-                    skip_for_this_query = _should_skip_rerank(
-                        row["query"], is_doc_intent=True
-                    )
+                    skip_for_this_query = _should_skip_rerank(row["query"], is_doc_intent=True)
                 if skip_for_this_query:
                     # No reranker call — keep the bi-encoder ordering, truncate.
                     # When dedupe is on, defer truncation until after dedup so
@@ -466,9 +454,7 @@ def evaluate_model(key: str,
                     # When dedupe is on, rerank the FULL pool so the top-10
                     # unique are selected from a complete reordering.
                     rerank_limit = retrieval_k if dedupe else TOP_K
-                    hits = rerank_candidates(
-                        reranker, row["query"], hits, limit=rerank_limit
-                    )
+                    hits = rerank_candidates(reranker, row["query"], hits, limit=rerank_limit)
                     rerank_ran_n += 1
         except Exception as exc:
             print(f"  ERROR on {row.get('id', '?')}: {exc}", file=sys.stderr)
@@ -503,15 +489,11 @@ def evaluate_model(key: str,
                 # CrossEncoder and `_distance` is no longer meaningful as a
                 # rank — surface `rerank_score` so downstream tooling sees
                 # which signal drove the ordering.
-                "score": float(
-                    h.get("rerank_score", h.get("_distance", 0.0))
-                ),
+                "score": float(h.get("rerank_score", h.get("_distance", 0.0))),
             }
             for i, h in enumerate(hits)
         ]
-        retrieved_ordered: list[tuple[str, str]] = [
-            (t["repo_name"], t["file_path"]) for t in top_files
-        ]
+        retrieved_ordered: list[tuple[str, str]] = [(t["repo_name"], t["file_path"]) for t in top_files]
 
         expected_list = _row_expected(row)
         if expected_list:
@@ -573,8 +555,7 @@ def evaluate_model(key: str,
         hit_at_10 = sum_hit10 / n_eval_rows
 
     per_stratum_recall = {
-        stratum: round(acc[1] / acc[0], 4) if acc[0] else 0.0
-        for stratum, acc in sorted(strat_acc.items())
+        stratum: round(acc[1] / acc[0], 4) if acc[0] else 0.0 for stratum, acc in sorted(strat_acc.items())
     }
     per_stratum_n = {stratum: int(acc[0]) for stratum, acc in sorted(strat_acc.items())}
 
@@ -637,7 +618,8 @@ def evaluate_model(key: str,
     del model
     gc.collect()
     try:
-        import torch  # noqa: WPS433
+        import torch
+
         if torch.backends.mps.is_available():
             torch.mps.empty_cache()
     except Exception:
@@ -665,9 +647,7 @@ def _evaluate_gate(baseline: dict, candidate: dict) -> dict:
         "pass": cond_recall,
     }
     if not cond_recall:
-        reasons.append(
-            f"recall@10 lift {c_recall - b_recall:+.4f} < +{GATE_RECALL_LIFT}"
-        )
+        reasons.append(f"recall@10 lift {c_recall - b_recall:+.4f} < +{GATE_RECALL_LIFT}")
 
     b_ndcg = baseline.get("ndcg_at_10") or 0.0
     c_ndcg = candidate.get("ndcg_at_10") or 0.0
@@ -680,9 +660,7 @@ def _evaluate_gate(baseline: dict, candidate: dict) -> dict:
         "pass": cond_ndcg,
     }
     if not cond_ndcg:
-        reasons.append(
-            f"ndcg@10 lift {c_ndcg - b_ndcg:+.4f} < +{GATE_NDCG_LIFT}"
-        )
+        reasons.append(f"ndcg@10 lift {c_ndcg - b_ndcg:+.4f} < +{GATE_NDCG_LIFT}")
 
     b_strat = baseline.get("per_stratum_recall") or {}
     c_strat = candidate.get("per_stratum_recall") or {}
@@ -711,9 +689,7 @@ def _evaluate_gate(baseline: dict, candidate: dict) -> dict:
         "pass": cond_hit5,
     }
     if not cond_hit5:
-        reasons.append(
-            f"hit@5 drop {c_hit5 - b_hit5:+.4f} < {GATE_HIT5_DROP}"
-        )
+        reasons.append(f"hit@5 drop {c_hit5 - b_hit5:+.4f} < {GATE_HIT5_DROP}")
 
     b_p95 = baseline.get("latency_p95_ms") or 0.0
     c_p95 = candidate.get("latency_p95_ms") or 0.0
@@ -734,9 +710,7 @@ def _evaluate_gate(baseline: dict, candidate: dict) -> dict:
     if not cond_lat:
         reasons.append(f"latency_p95 ratio {ratio:.2f}x >= {GATE_LATENCY_RATIO}x")
 
-    deploy = (
-        cond_recall and cond_ndcg and cond_strat and cond_hit5 and cond_lat
-    )
+    deploy = cond_recall and cond_ndcg and cond_strat and cond_hit5 and cond_lat
     return {
         "deploy": deploy,
         "reasons": reasons,
@@ -782,9 +756,7 @@ def _cmd_compare(baseline_path: Path, candidate_path: Path) -> int:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument(
         "--models",
         help="Comma-separated model keys (default: all 4 = docs + 3 candidates)",
@@ -808,8 +780,7 @@ def main() -> int:
         nargs=2,
         metavar=("BASELINE_RUN", "CANDIDATE_RUN"),
         help=(
-            "Compare two per-model JSONs (or summary lists) and print "
-            "DEPLOY: yes/no based on the 5-condition AND-gate."
+            "Compare two per-model JSONs (or summary lists) and print DEPLOY: yes/no based on the 5-condition AND-gate."
         ),
     )
     p.add_argument(
@@ -823,10 +794,7 @@ def main() -> int:
     )
     p.add_argument(
         "--out",
-        help=(
-            "Optional explicit output path for the per-model JSON. "
-            "If unset, uses bench_runs/<key>_<ts>.json."
-        ),
+        help=("Optional explicit output path for the per-model JSON. If unset, uses bench_runs/<key>_<ts>.json."),
     )
     p.add_argument(
         "--rerank-on",
@@ -908,8 +876,7 @@ def main() -> int:
     avail = _avail_gb()
     if not args.no_pre_flight and avail < PREFLIGHT_AVAIL_HARD_GB:
         print(
-            f"ABORT: sys-avail={avail:.2f}G < {PREFLIGHT_AVAIL_HARD_GB}G "
-            "(rerun with --no-pre-flight to override)",
+            f"ABORT: sys-avail={avail:.2f}G < {PREFLIGHT_AVAIL_HARD_GB}G (rerun with --no-pre-flight to override)",
             file=sys.stderr,
         )
         return 2
@@ -932,10 +899,7 @@ def main() -> int:
                 sliced.append(r)
                 if len(sliced) >= args.probe:
                     break
-        print(
-            f"PROBE mode: sliced eval to {len(sliced)} scoreable rows "
-            f"(of {len(eval_rows)} total)"
-        )
+        print(f"PROBE mode: sliced eval to {len(sliced)} scoreable rows (of {len(eval_rows)} total)")
         eval_rows = sliced
     n_with_expected = sum(1 for r in eval_rows if _row_expected(r))
     n_gold_flag = sum(1 for r in eval_rows if r.get("gold") is True)
@@ -990,10 +954,7 @@ def main() -> int:
     print()
     print("=" * 60)
     print(f"SUMMARY ({summary_path.name})")
-    print(
-        f"  {'model':<22s} {'recall@10':>10s} {'ndcg@10':>9s} "
-        f"{'hit@5':>7s} {'n_eval':>6s} {'p95_ms':>7s}"
-    )
+    print(f"  {'model':<22s} {'recall@10':>10s} {'ndcg@10':>9s} {'hit@5':>7s} {'n_eval':>6s} {'p95_ms':>7s}")
     for m in summary:
         if "skipped_reason" in m:
             print(f"  {m['model_key']:<22s} SKIP {m['skipped_reason']}")

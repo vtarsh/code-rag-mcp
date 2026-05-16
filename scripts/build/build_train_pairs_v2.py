@@ -12,8 +12,8 @@ Usage:
     python3.12 scripts/build_train_pairs_v2.py \
       --queries=logs/tool_calls.jsonl \
       --filter=doc-intent \
-      --eval-disjoint=profiles/pay-com/doc_intent_eval_v3_n150.jsonl \
-      --eval-disjoint=profiles/pay-com/doc_intent_eval_v3.jsonl \
+      --eval-disjoint=profiles/pay-com/eval/doc_intent_eval_v3_n150.jsonl \
+      --eval-disjoint=profiles/pay-com/eval/doc_intent_eval_v3.jsonl \
       --reranker=cross-encoder/ms-marco-MiniLM-L-6-v2 \
       --positives-rank=1-3 --hard-neg-rank=11-30 \
       --max-pairs=12000 --seed=42 \
@@ -35,8 +35,8 @@ import random
 import re
 import sys
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Iterable
 
 ROOT = Path(os.getenv("CODE_RAG_HOME", str(Path.home() / ".code-rag-mcp")))
 os.environ.setdefault("CODE_RAG_HOME", str(ROOT))
@@ -97,8 +97,7 @@ def load_prod_queries(path: Path, filter_func: Callable[[str], bool]) -> list[tu
             if d.get("tool") not in ("search", "analyze_task"):
                 continue
             args = d.get("args") or {}
-            q = (args.get("query") or args.get("task_description")
-                 or args.get("description") or "").strip()
+            q = (args.get("query") or args.get("task_description") or args.get("description") or "").strip()
             if not q or not filter_func(q):
                 continue
             freq[q] += 1
@@ -161,12 +160,14 @@ def retrieve_candidates(query: str, limit: int = 100) -> list[dict]:
         if key in seen:
             continue
         seen.add(key)
-        out.append({
-            "repo_name": h.repo_name,
-            "file_path": h.file_path,
-            "file_type": h.file_type,
-            "snippet": h.snippet or "",
-        })
+        out.append(
+            {
+                "repo_name": h.repo_name,
+                "file_path": h.file_path,
+                "file_type": h.file_type,
+                "snippet": h.snippet or "",
+            }
+        )
     return out
 
 
@@ -191,13 +192,14 @@ def pick_positives_and_hard_negatives(
     eval_paths: set[tuple[str, str]],
 ) -> tuple[list[dict], list[dict]]:
     """Slice ranks (1-indexed). Drop anything whose path is in eval_paths."""
+
     def _filter(items: list[dict]) -> list[dict]:
         return [i for i in items if path_disjoint(i["repo_name"], i["file_path"], eval_paths)]
 
     pos_lo, pos_hi = pos_ranks
     hn_lo, hn_hi = hn_ranks
-    pos = _filter(ranked[pos_lo - 1:pos_hi])
-    hn = _filter(ranked[hn_lo - 1:hn_hi])
+    pos = _filter(ranked[pos_lo - 1 : pos_hi])
+    hn = _filter(ranked[hn_lo - 1 : hn_hi])
     return pos, hn
 
 
@@ -215,19 +217,20 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--queries", type=Path, default=ROOT / "logs/tool_calls.jsonl")
     ap.add_argument("--filter", choices=("doc-intent", "all"), default="doc-intent")
     ap.add_argument(
-        "--eval-disjoint", type=Path, action="append", default=[],
+        "--eval-disjoint",
+        type=Path,
+        action="append",
+        default=[],
         help="Eval JSONL to disjoint against (queries+expected_paths). Repeatable.",
     )
     ap.add_argument("--reranker", default="cross-encoder/ms-marco-MiniLM-L-6-v2")
     ap.add_argument("--positives-rank", default="1-3", type=_parse_rank_range)
     ap.add_argument("--hard-neg-rank", default="11-30", type=_parse_rank_range)
     ap.add_argument("--max-pairs", type=int, default=12000)
-    ap.add_argument("--candidate-pool", type=int, default=100,
-                    help="FTS5 top-N candidates per query before reranking")
+    ap.add_argument("--candidate-pool", type=int, default=100, help="FTS5 top-N candidates per query before reranking")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--out", required=True, type=Path)
-    ap.add_argument("--probe", type=int, default=0,
-                    help="Process only N queries (smoke mode); 0 = no limit")
+    ap.add_argument("--probe", type=int, default=0, help="Process only N queries (smoke mode); 0 = no limit")
     args = ap.parse_args(argv)
 
     rng = random.Random(args.seed)
@@ -247,7 +250,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  after query-disjoint: {len(queries)} queries", file=sys.stderr)
 
     if args.probe and args.probe > 0:
-        queries = queries[:args.probe]
+        queries = queries[: args.probe]
         print(f"  probe mode: limited to {len(queries)} queries", file=sys.stderr)
 
     # Determinism: shuffle once with seed, then iterate. Output order is then
@@ -257,6 +260,7 @@ def main(argv: list[str] | None = None) -> int:
     # Lazy reranker load — keeps tests fast (they patch retrieve+score).
     print(f"loading reranker: {args.reranker}", file=sys.stderr)
     from sentence_transformers import CrossEncoder
+
     reranker = CrossEncoder(args.reranker, max_length=512)
 
     rows: list[dict] = []
@@ -267,7 +271,10 @@ def main(argv: list[str] | None = None) -> int:
             cands = retrieve_candidates(q, limit=args.candidate_pool)
             ranked = score_with_reranker(q, cands, reranker)
             pos, hn = pick_positives_and_hard_negatives(
-                ranked, args.positives_rank, args.hard_neg_rank, eval_ps,
+                ranked,
+                args.positives_rank,
+                args.hard_neg_rank,
+                eval_ps,
             )
             if not pos:
                 n_no_pos += 1
@@ -276,8 +283,7 @@ def main(argv: list[str] | None = None) -> int:
             outf.write(json.dumps(row, ensure_ascii=False) + "\n")
             rows.append(row)
             if i % 50 == 0:
-                print(f"  {i}/{len(queries)} pairs={len(rows)} skipped_no_pos={n_no_pos}",
-                      file=sys.stderr)
+                print(f"  {i}/{len(queries)} pairs={len(rows)} skipped_no_pos={n_no_pos}", file=sys.stderr)
             if len(rows) >= args.max_pairs:
                 print(f"  hit max-pairs={args.max_pairs}", file=sys.stderr)
                 break

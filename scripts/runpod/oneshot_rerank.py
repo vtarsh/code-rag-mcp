@@ -26,7 +26,7 @@ Usage::
         --candidate-tag=rerank-l12 \\
         --base-model=cross-encoder/ms-marco-MiniLM-L-12-v2 \\
         --train-data=profiles/pay-com/finetune_data_v8/train.jsonl \\
-        --eval-data=profiles/pay-com/rerank_pointwise_eval_v1.jsonl \\
+        --eval-data=profiles/pay-com/eval/rerank_pointwise_eval_v1.jsonl \\
         --hf-repo=Tarshevskiy/pay-com-rerank-l12-ft-v2
 """
 

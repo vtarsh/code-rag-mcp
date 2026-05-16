@@ -5,8 +5,8 @@ DE1 (meta-converged STAGE 1) — drops:
 2. GT (repo, file_path) pairs not in current `db/knowledge.db` chunks table.
 3. Queries with <3 GT pairs after cleaning.
 
-Inputs:  profiles/pay-com/jira_eval_n900.jsonl
-Outputs: profiles/pay-com/jira_eval_clean.jsonl
+Inputs:  profiles/pay-com/eval/jira_eval_n900.jsonl
+Outputs: profiles/pay-com/eval/jira_eval_clean.jsonl
          .claude/debug/current/exp1-clean-eval-stats.md (also stdout)
 """
 
@@ -95,7 +95,7 @@ def expected_pairs(row: dict) -> list[tuple[str, str]]:
     for p in row.get("expected_paths", []):
         if isinstance(p, dict):
             out.append((p.get("repo_name", ""), p.get("file_path", "")))
-        elif isinstance(p, (list, tuple)) and len(p) >= 2:
+        elif isinstance(p, list | tuple) and len(p) >= 2:
             out.append((p[0], p[1]))
     return out
 
@@ -132,8 +132,8 @@ def clean_row(
 
 def main() -> int:
     p = argparse.ArgumentParser()
-    p.add_argument("--input", type=Path, default=REPO_ROOT / "profiles/pay-com/jira_eval_n900.jsonl")
-    p.add_argument("--output", type=Path, default=REPO_ROOT / "profiles/pay-com/jira_eval_clean.jsonl")
+    p.add_argument("--input", type=Path, default=REPO_ROOT / "profiles/pay-com/eval/jira_eval_n900.jsonl")
+    p.add_argument("--output", type=Path, default=REPO_ROOT / "profiles/pay-com/eval/jira_eval_clean.jsonl")
     p.add_argument("--db", type=Path, default=REPO_ROOT / "db/knowledge.db")
     p.add_argument("--min-gt", type=int, default=3)
     p.add_argument("--stats", type=Path, default=REPO_ROOT / ".claude/debug/current/exp1-clean-eval-stats.md")
@@ -189,9 +189,7 @@ def main() -> int:
     mean_orig = orig_total_gt / n_orig if n_orig else 0.0
     mean_clean = sum_kept_gt / n_clean if n_clean else 0.0
     pct_q_dropped = 100.0 * n_dropped_query / n_orig if n_orig else 0.0
-    pct_gt_dropped = (
-        100.0 * (orig_total_gt - sum_kept_gt) / orig_total_gt if orig_total_gt else 0.0
-    )
+    pct_gt_dropped = 100.0 * (orig_total_gt - sum_kept_gt) / orig_total_gt if orig_total_gt else 0.0
 
     lines = [
         "# EXP1 — clean jira eval stats",

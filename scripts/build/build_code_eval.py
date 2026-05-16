@@ -67,7 +67,7 @@ from src.search.hybrid import _query_wants_docs  # noqa: E402
 
 TOOL_CALLS_LOG = ROOT / "logs" / "tool_calls.jsonl"
 DB_PATH = ROOT / "db" / "knowledge.db"
-OUT_PATH = ROOT / "profiles" / "pay-com" / "code_intent_eval_v1.jsonl"
+OUT_PATH = ROOT / "profiles" / "pay-com" / "eval" / "code_intent_eval_v1.jsonl"
 
 # Doc file_types to EXCLUDE — anything not in here is treated as code-corpus.
 # This matches the production split used by the docs vector tower.
@@ -82,18 +82,18 @@ DOC_FILE_TYPES = (
 )
 DOC_FILE_TYPES_SET = frozenset(DOC_FILE_TYPES)
 
-FTS_LIMIT = 50               # candidates per query
-POSITIVE_THRESHOLD = 0.30    # heuristic relevance >= this -> label=1 candidate
-POSITIVE_TOP_K = 15          # cap on positives kept per query (top by score)
-MIN_QUERY_LEN = 3            # tokens — skip "x", "abc"-style noise
-MAX_QUERY_LEN = 20           # tokens — skip pasted long blocks
-TARGET_QUERIES = 80          # collect more than the 30 minimum to leave headroom
+FTS_LIMIT = 50  # candidates per query
+POSITIVE_THRESHOLD = 0.30  # heuristic relevance >= this -> label=1 candidate
+POSITIVE_TOP_K = 15  # cap on positives kept per query (top by score)
+MIN_QUERY_LEN = 3  # tokens — skip "x", "abc"-style noise
+MAX_QUERY_LEN = 20  # tokens — skip pasted long blocks
+TARGET_QUERIES = 80  # collect more than the 30 minimum to leave headroom
 
 # Stratum keyword maps — applied first-match-wins in declared order.
 STRATUM_KEYWORDS = (
-    ("debug",       re.compile(r"\b(error|bug|fix|missing|broken|fail|crash|stack)\b", re.IGNORECASE)),
-    ("audit",       re.compile(r"\b(audit|check|verify|validate|validation|review|consistent)\b", re.IGNORECASE)),
-    ("trace",       re.compile(r"\b(flow|webhook|signal|workflow|trace|chain|signalWithStart|process)\b", re.IGNORECASE)),
+    ("debug", re.compile(r"\b(error|bug|fix|missing|broken|fail|crash|stack)\b", re.IGNORECASE)),
+    ("audit", re.compile(r"\b(audit|check|verify|validate|validation|review|consistent)\b", re.IGNORECASE)),
+    ("trace", re.compile(r"\b(flow|webhook|signal|workflow|trace|chain|signalWithStart|process)\b", re.IGNORECASE)),
     ("integration", re.compile(r"\b(grpc-apm-|grpc-providers-|integration|provider)\b", re.IGNORECASE)),
 )
 
@@ -276,7 +276,7 @@ def label_query(
     scored.sort(key=lambda x: -x[0])
     seen_paths: set[tuple[str, str]] = set()
     out: list[dict] = []
-    for score, c in scored:
+    for _score, c in scored:
         key = (c["repo_name"], c["file_path"])
         if key in seen_paths:
             continue

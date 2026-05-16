@@ -1,7 +1,7 @@
 """Tests for the v1 pointwise reranker eval (Bug 2 fix).
 
 Covers two surfaces:
-1. The output file (`profiles/pay-com/rerank_pointwise_eval_v1.jsonl`) — schema +
+1. The output file (`profiles/pay-com/eval/rerank_pointwise_eval_v1.jsonl`) — schema +
    size acceptance bar (>=30 unique queries; median >=3 positives per query).
 2. The builder helpers (`scripts/build_rerank_pointwise_eval.py`) — `stats()`
    computes the right per-query buckets given a synthetic pair list.
@@ -25,7 +25,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-EVAL_PATH = REPO_ROOT / "profiles" / "pay-com" / "rerank_pointwise_eval_v1.jsonl"
+EVAL_PATH = REPO_ROOT / "profiles" / "pay-com" / "eval" / "rerank_pointwise_eval_v1.jsonl"
 
 REQUIRED_FIELDS = ("query", "doc_path", "doc_text", "label", "query_id", "stratum")
 

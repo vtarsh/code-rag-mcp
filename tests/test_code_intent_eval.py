@@ -1,7 +1,7 @@
 """Tests for the v1 code-intent eval (NEW).
 
 Two surfaces:
-1. The output file (`profiles/pay-com/code_intent_eval_v1.jsonl`) — schema +
+1. The output file (`profiles/pay-com/eval/code_intent_eval_v1.jsonl`) — schema +
    size acceptance bar (>=30 unique queries; median >=3 positives per query;
    stratification recorded per row).
 2. The builder helpers (`scripts/build_code_eval.py`) — `_split_tokens`,
@@ -22,7 +22,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-EVAL_PATH = REPO_ROOT / "profiles" / "pay-com" / "code_intent_eval_v1.jsonl"
+EVAL_PATH = REPO_ROOT / "profiles" / "pay-com" / "eval" / "code_intent_eval_v1.jsonl"
 
 REQUIRED_FIELDS = ("query", "query_id", "expected_paths", "stratum")
 

@@ -338,7 +338,7 @@ def _query_wants_docs(query: str) -> bool:
 #
 # Original A2 (2026-04-26 stratum map) was inverted vs true reranker behavior.
 # v2 LLM-calibrated eval (10 Opus agents, ~2200 judgments, n=192 across 10
-# strata in `profiles/pay-com/doc_intent_eval_v3_n200_v2.jsonl`) revealed the
+# strata in `profiles/pay-com/eval/doc_intent_eval_v3_n200_v2.jsonl`) revealed the
 # correct direction. Per-stratum R@10 deltas (A2 with skip-on-OFF vs full
 # rerank-on baseline):
 #
