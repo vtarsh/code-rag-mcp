@@ -18,28 +18,49 @@ import os
 import re
 
 from src.config import (
-    CI_PENALTY,
     CODE_FACT_BOOST,
     CODE_FACT_INJECT_WEIGHT,
     DICTIONARY_BOOST,
-    DOC_PENALTY,
     ENV_VAR_BOOST,
     GOTCHAS_BOOST,
-    GUIDE_PENALTY,
     KEYWORD_WEIGHT,
     PROVIDER_PREFIXES,
     REFERENCE_BOOST,
     RERANK_POOL_SIZE,
     RRF_K,
-    TEST_PENALTY,
 )
-from src.container import db_connection, get_reranker
+from src.container import db_connection
 from src.search.code_facts import code_facts_search, fetch_chunks_for_files
 from src.search.env_vars import env_var_search
 from src.search.fts import fts_search
+
+# Re-export query analysis for backward compatibility
+from src.search.hybrid_query import (  # noqa: F401
+    _CODE_SIG_RE,
+    _CONCEPT_DOC_RE,
+    _DOC_QUERY_RE,
+    _DOC_RERANK_KEEP_STRATA,
+    _DOC_RERANK_OFF_STRATA,
+    _PROVIDER_ONLY_RE,
+    _REPO_OVERVIEW_RE,
+    _REPO_TOKEN_RE,
+    _STRATUM_CHECK_ORDER,
+    _STRATUM_TOKENS,
+    _STRICT_CODE_RE,
+    _detect_provider_topic,
+    _detect_stratum,
+    _query_wants_docs,
+)
+
+# Re-export reranking for backward compatibility
+from src.search.hybrid_rerank import (  # noqa: F401
+    _classify_penalty,
+    _merge_two_towers,
+    _should_skip_rerank,
+    rerank,
+)
 from src.search.vector import vector_search
 
-# Cross-provider fan-out (2026-04-23): eliminates provider-swap reformulation
 # chains. 82% of reformulation chains end with identical result_len and 56% of
 # transitions are pure provider token swaps (nuvei -> payper -> volt). When the
 # query matches {provider} {topic_verb}, we pull top-1 analogous chunk from each
@@ -84,33 +105,6 @@ _TOPIC_VERBS: frozenset[str] = frozenset(
 
 # Max sibling providers returned (spec: up to 6 siblings).
 _MAX_SIBLINGS: int = 6
-
-
-def _detect_provider_topic(query: str) -> tuple[str, str] | None:
-    """Return (provider, topic_verb) if the query contains both tokens, else None.
-
-    Both must appear in the query; order does not matter so "nuvei payout" and
-    "payout handle-activities nuvei" both trigger fan-out. Case-insensitive,
-    word-boundary matched to avoid false positives on substrings.
-
-    When a query contains multiple valid topic tokens (e.g. "nuvei payout
-    handle-activities.js" has both `payout` and `activities`), we preserve the
-    token order from the original query so tests and the resulting FTS query
-    line up with user intent — the leftmost verb wins.
-    """
-    if not query:
-        return None
-    token_list = [t.lower().strip(".,;:!?") for t in re.split(r"[\s/\-_.]+", query) if t]
-    token_set = set(token_list)
-    provider = next((t for t in token_list if t in _KNOWN_PROVIDERS), None) or next(
-        (p for p in _KNOWN_PROVIDERS if p in token_set), None
-    )
-    topic = next((t for t in token_list if t in _TOPIC_VERBS), None) or next(
-        (t for t in _TOPIC_VERBS if t in token_set), None
-    )
-    if provider and topic:
-        return provider, topic
-    return None
 
 
 def _sibling_provider_repos(active_provider: str) -> list[tuple[str, str]]:
@@ -216,368 +210,6 @@ _CI_PATH_RE = re.compile(
     r"(?:^|/)(?:ci/deploy\.ya?ml|k8s/\.github/workflows/)",
     re.IGNORECASE,
 )
-
-# Query keywords that disable penalties (user explicitly asked for docs/tests
-# or for a named doc artifact). P1c 2026-04-22: extended with doc-artifact
-# tokens (checklist/framework/matrix/severity/sandbox/overview/reference/rules)
-# after Opus-judge pass showed 11 of 19 base-win pairs failed on these tokens
-# because v8's doc-penalty demoted the exact doc file the user asked for.
-#
-# P8 2026-04-25 (V4): added Tier-1 strong markers `gotcha(s)` and `how to`.
-# `gotcha(s)` is the explicit name of the doc folder (`docs/gotchas/`); `how to`
-# is an unambiguous question marker. Both override `_CODE_SIG_RE` rejection.
-_DOC_QUERY_RE = re.compile(
-    r"\b("
-    r"test|tests|spec|specs|"
-    r"docs?|documentation|readme|guide|guides|tutorial|"
-    r"checklist|framework|matrix|severity|sandbox|overview|reference|rules|"
-    r"gotcha|gotchas|how\s+to"
-    r")\b",
-    re.IGNORECASE,
-)
-
-
-_CODE_SIG_RE = re.compile(
-    r"(?:\b[a-z][a-zA-Z0-9]*\([^)]*\)|"
-    r"\b[A-Z][A-Z0-9_]{2,}\b|"
-    r"[a-z]+_[a-z_]+|"
-    r"\.(?:js|ts|py|go|proto)\b)"
-)
-_REPO_TOKEN_RE = re.compile(
-    r"\b(?:grpc-|express-|next-web-|workflow-|k8s-)[a-z0-9-]+\b",
-    re.IGNORECASE,
-)
-
-
-# P8 2026-04-25 (V4): repo-overview pattern. 28 OOB queries are bare repo-tokens
-# (e.g. `grpc-providers-features`, optionally `... repo|repository`); all
-# hand-classified as doc-intent (repo overview).
-_REPO_OVERVIEW_RE = re.compile(
-    r"^\s*(?:grpc-|express-|next-web-|workflow-|k8s-|backoffice-)[a-z0-9-]+"
-    r"(?:\s+(?:repo|repository))?\s*$",
-    re.IGNORECASE,
-)
-
-# P8 2026-04-25 (V4): provider-only short query. Bare provider name (single
-# token) signals provider-overview / docs intent — captures queries like
-# `trustly`, `nuvei` that the absence heuristic rejected on tok_lt2.
-_PROVIDER_ONLY_RE = re.compile(
-    r"^\s*(?:nuvei|trustly|payper|volt|ppro|paynearme|aeropay|fonix|paysafe|"
-    r"worldpay|skrill|aircash|okto|interac|neosurf|rapyd|epay|fortumo)\s*$",
-    re.IGNORECASE,
-)
-
-# P8 2026-04-25 (V4): Tier-3 concept-doc keywords. Strong doc-intent markers
-# that the absence heuristic missed when paired with code-style tokens. Routed
-# to docs UNLESS _STRICT_CODE_RE also matches (mined code-flow blocklist below).
-_CONCEPT_DOC_RE = re.compile(
-    r"\b(apm|tokenizer|vault|sepa|voucher|"
-    r"integrate|integration|integrations|"
-    r"provider\s+integration|how\s+does|how\s+is|pattern|repo|repository)\b",
-    re.IGNORECASE,
-)
-
-# P8 2026-04-25 (V4): mined "definitely-code" markers. Blocks Tier-3 routing so
-# concept words paired with explicit code-flow tokens (e.g. `doNotExpire APM`,
-# `paynearme methods/sale.js`) keep going to the code tower. Blocklist tokens
-# observed exclusively in code-intent labeled queries (n=50 + held-out 30).
-_STRICT_CODE_RE = re.compile(
-    r"(?:\.(?:js|ts|tsx|jsx|py|go|proto)\b|"  # file extension
-    r"\b[a-z][a-zA-Z]{8,}[A-Z][a-zA-Z]+\b|"  # long camelCase like internalMetadata
-    r"(?:[a-z]+_[a-z_]+\s+){1,}[a-z]+_[a-z_]+|"  # 2+ snake_case in sequence
-    r"\b(?:doNotExpire|signalWithStart|activateWorkflow|destructure|"
-    r"udf|destination_data|process-initialize-data|seeds\.cql|"
-    r"call-providers-initialize|paymentMethodType|sourceDataType|"
-    r"reusablePayouts|notificationType|companyId|transactionId|"
-    r"WITHDRAW_REQUEST|WITHDRAW_ORDER|EXPIRED|updateTransaction|"
-    r"PAYMENT_METHODS|PROVIDER_TRANSACTION|FF3Cipher|accountNumber|"
-    r"clientIp|ip_address|clientUniqueId|TransactionID)\b)",
-)
-
-
-def _query_wants_docs(query: str) -> bool:
-    """Doc-intent classifier with V4 router extension (P8 2026-04-25).
-
-    Decision order:
-      1. Tier-1 STRONG_DOC trigger (gotcha/how-to + existing doc tokens) → True.
-      2. Tier-2 repo-overview anchor (bare repo-token, optionally + repo/ory) → True.
-      3. Tier-2 provider-only anchor (bare provider name) → True.
-      4. Tier-3 concept-doc keyword AND no strict-code blocklist hit → True.
-      5. Code signature OR repo token present → False (legacy code-intent).
-      6. Absence heuristic: 2..15 tokens → True.
-      7. Otherwise → False.
-
-    V4 expected effect on prod traffic: +394 OOB queries route to docs
-    (+12.9pp). Held-out smoke: 0 IN→OUT flips, 0 code mis-routes, 11 OUT→IN
-    flips (7 doc + 4 ambiguous).
-    """
-    if _DOC_QUERY_RE.search(query or ""):
-        return True
-    if not query:
-        return False
-    # Tier-2: repo-overview / provider-only anchors run BEFORE code_sig
-    # rejection so bare repo-tokens (`grpc-providers-features`) and bare
-    # provider names (`trustly`) route to docs instead of being eaten by
-    # _REPO_TOKEN_RE / tok_lt2.
-    if _REPO_OVERVIEW_RE.search(query):
-        return True
-    if _PROVIDER_ONLY_RE.search(query):
-        return True
-    # Tier-3: concept-doc keyword wins UNLESS a strict-code marker also fires.
-    # Keeps "Okto Cash APM integrations" as docs while keeping
-    # "doNotExpire APM session workflow" as code.
-    if _CONCEPT_DOC_RE.search(query) and not _STRICT_CODE_RE.search(query):
-        return True
-    if _CODE_SIG_RE.search(query) or _REPO_TOKEN_RE.search(query):
-        return False
-    tokens = query.split()
-    return 2 <= len(tokens) <= 15
-
-
-# P10 Phase A2-revise (2026-04-25 late): stratum-gated rerank-skip — INVERTED.
-#
-# Original A2 (2026-04-26 stratum map) was inverted vs true reranker behavior.
-# v2 LLM-calibrated eval (10 Opus agents, ~2200 judgments, n=192 across 10
-# strata in `profiles/pay-com/eval/doc_intent_eval_v3_n200_v2.jsonl`) revealed the
-# correct direction. Per-stratum R@10 deltas (A2 with skip-on-OFF vs full
-# rerank-on baseline):
-#
-#   reranker HURTS (skip → larger R@10 lift):
-#     webhook +3.35pp, trustly +2.68pp, method +1.30pp, payout +1.11pp
-#
-#   reranker HELPS (must keep rerank to avoid regression):
-#     nuvei -7.58pp, aircash -8.78pp, refund -14.51pp
-#
-#   flat / small loss → conservative KEEP rerank:
-#     interac 0.00, provider -0.24pp, tail -1.96pp
-#
-# `tail` is the catch-all (no stratum tokens match) and resolves via the
-# `_detect_stratum() → None → KEEP rerank` fallback below. Provider-specific
-# OFF tokens are checked first so a query mentioning both `trustly` and
-# `provider` lands in OFF (where the calibrated eval shows it belongs).
-_DOC_RERANK_OFF_STRATA: frozenset[str] = frozenset(
-    {
-        "webhook",
-        "trustly",
-        "method",
-        "payout",
-    }
-)
-_DOC_RERANK_KEEP_STRATA: frozenset[str] = frozenset(
-    {
-        "nuvei",
-        "aircash",
-        "refund",
-        "interac",
-        "provider",
-    }
-)
-
-# Provider/topic token map — case-insensitive substring match on the query.
-# OFF strata are checked first (provider-specific tokens like `trustly` are
-# more selective than generic ones like `provider`/`psp`), so a query
-# mentioning both lands in the OFF set.
-_STRATUM_TOKENS: dict[str, tuple[str, ...]] = {
-    "trustly": ("trustly",),
-    "webhook": ("webhook", "callback", "notification"),
-    "method": ("method",),
-    "payout": ("payout",),
-    "nuvei": ("nuvei",),
-    "aircash": ("aircash",),
-    "refund": ("refund", "chargeback"),
-    "interac": ("interac", "etransfer", "e-transfer"),
-    "provider": ("provider", "psp"),
-}
-
-_STRATUM_CHECK_ORDER: tuple[str, ...] = (
-    # OFF first — provider-specific tokens are more selective than generic
-    # OFF tokens (`method`, `payout`) and the KEEP set's `provider`/`psp`.
-    "trustly",
-    "webhook",
-    "method",
-    "payout",
-    # KEEP after — provider-specific KEEP names (`nuvei`, `aircash`) before
-    # the generic `refund`/`interac`/`provider` tokens.
-    "nuvei",
-    "aircash",
-    "refund",
-    "interac",
-    "provider",
-)
-
-# Sanity invariant: every stratum that has a token map must be classified as
-# either OFF or KEEP. Catches typos / split-brain config at import time.
-assert set(_STRATUM_TOKENS.keys()) == (_DOC_RERANK_OFF_STRATA | _DOC_RERANK_KEEP_STRATA), (
-    "Stratum token map must cover all OFF and KEEP strata exactly. "
-    f"missing={(_DOC_RERANK_OFF_STRATA | _DOC_RERANK_KEEP_STRATA) - set(_STRATUM_TOKENS.keys())}, "
-    f"extra={set(_STRATUM_TOKENS.keys()) - (_DOC_RERANK_OFF_STRATA | _DOC_RERANK_KEEP_STRATA)}"
-)
-
-
-def _detect_stratum(query: str) -> str | None:
-    """Detect the eval-v3-n200 stratum a query maps to via token presence.
-
-    Returns the first stratum whose tokens appear in `query` (lowercased,
-    substring match). Order = OFF strata first (provider-specific names are
-    more selective), then KEEP strata. Returns None when no stratum token
-    matches, in which case the caller falls back to the conservative default
-    (run reranker — preserves current production behavior).
-    """
-    if not query:
-        return None
-    q = query.lower()
-    for stratum in _STRATUM_CHECK_ORDER:
-        if any(tok in q for tok in _STRATUM_TOKENS[stratum]):
-            return stratum
-    return None
-
-
-def _merge_two_towers(
-    code_results: list[dict],
-    docs_results: list[dict],
-    code_err: str | None,
-    docs_err: str | None,
-) -> tuple[list[dict], str | None]:
-    """Merge code-tower + docs-tower vector results, deduping by rowid.
-
-    Code tower comes first so its ranking wins on collisions (chunks live in
-    the same SQLite `chunks` table; only the embeddings differ between
-    towers). Keeping the first occurrence preserves the better-ranked
-    position from whichever tower surfaced the chunk first, matching the
-    `if key not in scores` behaviour in the RRF loop downstream.
-    """
-    seen_rowids: set = set()
-    merged: list[dict] = []
-    for vrow in list(code_results) + list(docs_results):
-        rid = vrow.get("rowid")
-        if rid in seen_rowids:
-            continue
-        seen_rowids.add(rid)
-        merged.append(vrow)
-    return merged, (code_err or docs_err)
-
-
-def _should_skip_rerank(query: str, is_doc_intent: bool) -> bool:
-    """Stratum-gated rerank-skip decision.
-
-    Default behavior:
-      - non-doc-intent → False (run reranker, existing behavior preserved)
-      - env `CODE_RAG_DOC_RERANK_OFF=1` → True (kill-switch back-compat with
-        the P10 Phase 1 quickwin; disables reranker for ALL doc-intent queries)
-      - doc-intent + stratum in OFF set → True (reranker hurts these strata)
-      - doc-intent + stratum in KEEP set → False (reranker helps these strata)
-      - doc-intent + unknown stratum → False (conservative fallback: reranker
-        runs on queries the gate can't classify)
-    """
-    if not is_doc_intent:
-        return False
-    if os.getenv("CODE_RAG_DOC_RERANK_OFF", "0") == "1":
-        return True
-    stratum = _detect_stratum(query)
-    if stratum is None:
-        return False
-    return stratum in _DOC_RERANK_OFF_STRATA
-
-
-def _classify_penalty(file_type: str, file_path: str) -> float:
-    """Return the penalty delta (in normalized score units) for a result.
-
-    Priority order (strongest penalty wins):
-      1. Guide-like paths (AI-CODING-GUIDE.md / CLAUDE.md / README.md) -> GUIDE_PENALTY
-      2. Test paths (*.spec.js, *.test.py, /tests/...) -> TEST_PENALTY
-      3. CI yaml paths (ci/deploy.yml, k8s/.github/workflows/*) -> CI_PENALTY
-         (stronger than DOC_PENALTY — v8 surfaces 5+ CI files on short repo
-         queries, and DOC_PENALTY=0.15 was insufficient on pair #2).
-      4. Doc-ish file_type (doc, task, gotchas, reference) -> DOC_PENALTY
-    Returns 0.0 for production code (unchanged).
-
-    Eval A/B: CODE_RAG_DISABLE_PENALTIES=1 short-circuits to 0.0 so penalties
-    can be isolated as a cause when hybrid-mode eval drops GT repos.
-    """
-    if _DISABLE_PENALTIES:
-        return 0.0
-    path = file_path or ""
-    if _GUIDE_PATH_RE.search(path):
-        return GUIDE_PENALTY
-    if _TEST_PATH_RE.search(path):
-        return TEST_PENALTY
-    if _CI_PATH_RE.search(path):
-        return CI_PENALTY
-    if (file_type or "") in _DOC_FILE_TYPES:
-        return DOC_PENALTY
-    return 0.0
-
-
-def rerank(
-    query: str,
-    results: list[dict],
-    limit: int = 10,
-    *,
-    reranker_override=None,
-) -> list[dict]:
-    """Rerank search results with the local CrossEncoder provider.
-
-    Takes RRF-fused results and reranks by scoring each snippet
-    against the query. Combines: 70% reranker score + 30% normalized RRF score.
-
-    `reranker_override` (P0a): any object with a `rerank(query, documents, limit)`
-    method replaces `get_reranker()` for the duration of this call. Used by
-    `scripts/eval_finetune.py --use-hybrid-retrieval` to score the same RRF pool
-    with an arbitrary CrossEncoder so eval shares the production candidate set.
-    """
-    if not results or len(results) <= 1:
-        return results
-
-    if reranker_override is not None:
-        reranker, err = reranker_override, None
-    else:
-        # Run 2 routing (2026-04-27): use code-tuned l12 FT for code-intent queries,
-        # default L6 for docs. Verified on jira n=908: l12 +3.31pp top-10 vs L6 on
-        # code (POSITIVE bootstrap-confirmed). On docs: l12 -9pp top-10 (NEGATIVE).
-        intent = "docs" if _query_wants_docs(query) else "code"
-        reranker, err = get_reranker(intent=intent)
-    if err or reranker is None:
-        return results  # Fallback: return original order
-
-    # Build document strings for reranker
-    documents: list[str] = []
-    for r in results:
-        doc = re.sub(r">>>|<<<|\.\.\.|\[Repo: [^\]]+\]", "", r.get("snippet", ""))
-        doc = f"{r['repo_name']} {r['file_path']} {doc}"
-        documents.append(doc)
-
-    scores = reranker.rerank(query, documents, limit=limit)
-
-    if not scores:
-        return results[:limit]
-
-    # Normalize reranker scores to [0, 1]
-    max_score = max(scores) if scores else 1
-    min_score = min(scores) if scores else 0
-    score_range = max_score - min_score if max_score != min_score else 1
-
-    # Combine: reranker score (70%) + original RRF score (30%)
-    max_rrf = max(r["score"] for r in results) if results else 1
-    min_rrf = min(r["score"] for r in results) if results else 0
-    rrf_range = max_rrf - min_rrf if max_rrf != min_rrf else 1
-
-    # Skip doc/test penalties when the query explicitly asks for them.
-    apply_penalties = not _query_wants_docs(query)
-
-    for i, r in enumerate(results):
-        rrf_norm = (r["score"] - min_rrf) / rrf_range
-        rerank_norm = (scores[i] - min_score) / score_range if i < len(scores) else 0
-        r["rerank_score"] = float(scores[i]) if i < len(scores) else 0
-        combined = 0.7 * rerank_norm + 0.3 * rrf_norm
-
-        # P4.1: down-weight doc/test/guide chunks so production code ranks higher
-        # on code-related queries. Stored on result for observability.
-        penalty = _classify_penalty(r.get("file_type", ""), r.get("file_path", "")) if apply_penalties else 0.0
-        r["penalty"] = penalty
-        r["combined_score"] = combined - penalty
-
-    results.sort(key=lambda x: x["combined_score"], reverse=True)
-    return results[:limit]
 
 
 def _apply_code_facts(

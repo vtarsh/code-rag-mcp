@@ -2,25 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from src.search.hybrid import hybrid_search, rerank
 from src.types import SearchResult
-
-
-@pytest.fixture(autouse=True)
-def _mock_wiring():
-    """P0c: Suppress code_facts/env_vars wiring in hybrid tests by default.
-
-    Individual tests can override these patches to assert the wiring behaviour.
-    Without this fixture, every test would hit the live knowledge.db and pull
-    extra candidates into the pool, breaking existing assertions.
-    """
-    with (
-        patch("src.search.hybrid.code_facts_search", return_value=[]),
-        patch("src.search.hybrid.env_var_search", return_value=[]),
-    ):
-        yield
 
 
 def _make_sr(rowid: int, repo: str = "repo-a", snippet: str = "test snippet") -> SearchResult:
@@ -178,7 +161,7 @@ class TestRerank:
         single = [{"score": 1.0, "snippet": "test", "repo_name": "r", "file_path": "f"}]
         assert rerank("query", single) == single
 
-    @patch("src.search.hybrid.get_reranker")
+    @patch("src.search.hybrid_rerank.get_reranker")
     def test_reranker_unavailable_fallback(self, mock_get_reranker):
         mock_get_reranker.return_value = (None, "model not loaded")
         items = [
@@ -188,7 +171,7 @@ class TestRerank:
         result = rerank("query", items)
         assert result == items
 
-    @patch("src.search.hybrid.get_reranker")
+    @patch("src.search.hybrid_rerank.get_reranker")
     def test_reranker_scores_combined(self, mock_get_reranker):
         mock_provider = MagicMock()
         mock_provider.rerank.return_value = [0.9, 0.1]
@@ -206,7 +189,7 @@ class TestRerank:
 class TestRerankPenalties:
     """P4.1: doc/test/guide chunks are down-weighted on code queries."""
 
-    @patch("src.search.hybrid.get_reranker")
+    @patch("src.search.hybrid_rerank.get_reranker")
     def test_doc_file_type_penalized(self, mock_get_reranker):
         mock_provider = MagicMock()
         mock_provider.rerank.return_value = [0.8, 0.8]
@@ -236,7 +219,7 @@ class TestRerankPenalties:
         assert result[0]["penalty"] == 0.0
         assert result[1]["penalty"] > 0
 
-    @patch("src.search.hybrid.get_reranker")
+    @patch("src.search.hybrid_rerank.get_reranker")
     def test_spec_path_penalized(self, mock_get_reranker):
         mock_provider = MagicMock()
         mock_provider.rerank.return_value = [0.8, 0.8]
@@ -256,7 +239,7 @@ class TestRerankPenalties:
         assert result[0]["repo_name"] == "r2"
         assert result[1]["penalty"] > 0
 
-    @patch("src.search.hybrid.get_reranker")
+    @patch("src.search.hybrid_rerank.get_reranker")
     def test_ai_coding_guide_strongest_penalty(self, mock_get_reranker):
         mock_provider = MagicMock()
         mock_provider.rerank.return_value = [0.8, 0.8, 0.8]
@@ -285,7 +268,7 @@ class TestRerankPenalties:
         spec = next(r for r in result if r["repo_name"] == "r2")
         assert guide["penalty"] >= spec["penalty"]
 
-    @patch("src.search.hybrid.get_reranker")
+    @patch("src.search.hybrid_rerank.get_reranker")
     def test_penalty_skipped_when_query_asks_for_docs(self, mock_get_reranker):
         mock_provider = MagicMock()
         mock_provider.rerank.return_value = [0.9, 0.5]
@@ -298,7 +281,7 @@ class TestRerankPenalties:
         for r in result:
             assert r["penalty"] == 0.0
 
-    @patch("src.search.hybrid.get_reranker")
+    @patch("src.search.hybrid_rerank.get_reranker")
     def test_production_code_not_penalized(self, mock_get_reranker):
         mock_provider = MagicMock()
         mock_provider.rerank.return_value = [0.7, 0.7]
@@ -325,7 +308,7 @@ class TestRerankPenalties:
 
     # P1c 2026-04-22: regression tests from Opus judge failures.
 
-    @patch("src.search.hybrid.get_reranker")
+    @patch("src.search.hybrid_rerank.get_reranker")
     def test_ci_deploy_yml_penalized_on_code_query(self, mock_get_reranker):
         """P1c #2: 'ach provider service integration repo' misfired to ci/deploy.yml."""
         mock_provider = MagicMock()
@@ -355,7 +338,7 @@ class TestRerankPenalties:
         assert result[0]["repo_name"] == "grpc-banks-crb"
         assert result[1]["penalty"] > 0
 
-    @patch("src.search.hybrid.get_reranker")
+    @patch("src.search.hybrid_rerank.get_reranker")
     def test_k8s_github_workflows_penalized(self, mock_get_reranker):
         """P1c: k8s/.github/workflows/* is also CI noise, not service code."""
         mock_provider = MagicMock()
@@ -384,7 +367,7 @@ class TestRerankPenalties:
         assert result[0]["repo_name"] == "grpc-apm-ach"
         assert result[1]["penalty"] > 0
 
-    @patch("src.search.hybrid.get_reranker")
+    @patch("src.search.hybrid_rerank.get_reranker")
     def test_checklist_query_disables_penalty(self, mock_get_reranker):
         """P1c #5/#10/#42: 'checklist' token in query preserves docs/references."""
         mock_provider = MagicMock()
@@ -410,7 +393,7 @@ class TestRerankPenalties:
         for r in result:
             assert r["penalty"] == 0.0
 
-    @patch("src.search.hybrid.get_reranker")
+    @patch("src.search.hybrid_rerank.get_reranker")
     def test_framework_query_disables_penalty(self, mock_get_reranker):
         """P1c #19: 'investigation framework' is a named doc artifact."""
         mock_provider = MagicMock()
@@ -436,7 +419,7 @@ class TestRerankPenalties:
         for r in result:
             assert r["penalty"] == 0.0
 
-    @patch("src.search.hybrid.get_reranker")
+    @patch("src.search.hybrid_rerank.get_reranker")
     def test_severity_rules_query_disables_penalty(self, mock_get_reranker):
         """P1c #4/#45: 'impact audit severity verification' + 'impact audit rules'."""
         mock_provider = MagicMock()
@@ -462,7 +445,7 @@ class TestRerankPenalties:
         for r in result:
             assert r["penalty"] == 0.0
 
-    @patch("src.search.hybrid.get_reranker")
+    @patch("src.search.hybrid_rerank.get_reranker")
     def test_matrix_reference_sandbox_overview_disable_penalty(self, mock_get_reranker):
         """P1c #37/#38: 'reference matrix', 'sandbox testing' name doc artifacts."""
         mock_provider = MagicMock()
@@ -493,7 +476,7 @@ class TestRerankPenalties:
             for r in result:
                 assert r["penalty"] == 0.0, f"query {q!r} should disable penalty"
 
-    @patch("src.search.hybrid.get_reranker")
+    @patch("src.search.hybrid_rerank.get_reranker")
     def test_ci_path_exempted_when_query_asks_docs(self, mock_get_reranker):
         """P1c: CI yml penalty respects the DOC_QUERY regex like other penalties."""
         mock_provider = MagicMock()

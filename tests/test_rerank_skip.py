@@ -42,16 +42,6 @@ from src.search.hybrid import (
 from src.types import SearchResult
 
 
-@pytest.fixture(autouse=True)
-def _mock_wiring():
-    """Suppress code_facts/env_vars wiring so tests don't hit knowledge.db."""
-    with (
-        patch("src.search.hybrid.code_facts_search", return_value=[]),
-        patch("src.search.hybrid.env_var_search", return_value=[]),
-    ):
-        yield
-
-
 def _make_sr(rowid: int, repo: str = "repo-a", path: str | None = None) -> SearchResult:
     return SearchResult(
         rowid=rowid,

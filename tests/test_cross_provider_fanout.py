@@ -9,8 +9,6 @@ provider repos in a single call.
 
 from unittest.mock import patch
 
-import pytest
-
 from src.search.hybrid import (
     _MAX_SIBLINGS,
     _cross_provider_fanout,
@@ -19,16 +17,6 @@ from src.search.hybrid import (
     hybrid_search,
 )
 from src.types import SearchResult
-
-
-@pytest.fixture(autouse=True)
-def _mock_wiring():
-    """Suppress code_facts/env_vars wiring so we don't hit the live DB."""
-    with (
-        patch("src.search.hybrid.code_facts_search", return_value=[]),
-        patch("src.search.hybrid.env_var_search", return_value=[]),
-    ):
-        yield
 
 
 def _make_sr(repo: str, path: str, snippet: str = "sibling chunk body") -> SearchResult:

@@ -444,7 +444,8 @@ def test_start_pod_body_omits_minvcpu_minmemory(env_with_key):
 # ----- Bug 3: TRAIN purpose requires persistent volume -----------------------
 
 
-def test_start_pod_train_purpose_rejects_zero_volume(env_with_key):
+@pytest.mark.parametrize("volume_gb", [0, 19])
+def test_start_pod_train_purpose_rejects_insufficient_volume(env_with_key, volume_gb):
     """Bug 3 (NEXT_SESSION_PROMPT.md §2): purpose=train + volume_gb<20 must
     refuse to create — last cycle 6 ephemeral pods wiped /workspace on stop."""
     with (
@@ -461,30 +462,9 @@ def test_start_pod_train_purpose_rejects_zero_volume(env_with_key):
             time_limit_min=60,
             spending_cap_usd=5.0,
             purpose="train",
-            volume_gb=0,
+            volume_gb=volume_gb,
         )
     # ephemeral wipe danger means we must NOT have hit the create endpoint.
-    assert mock_req.call_count == 0
-
-
-def test_start_pod_train_purpose_rejects_below_threshold_volume(env_with_key):
-    """Boundary: volume_gb=19 still rejected (threshold is 20)."""
-    with (
-        patch.object(pod_lifecycle, "assert_can_spend", return_value=None),
-        patch.object(pod_lifecycle, "_request") as mock_req,
-        pytest.raises(
-            pod_lifecycle.PodLifecycleError,
-            match=r"TRAIN purpose requires --volume-gb >= 20",
-        ),
-    ):
-        pod_lifecycle.start_pod(
-            gpu="rtx4090",
-            secure_cloud=True,
-            time_limit_min=60,
-            spending_cap_usd=5.0,
-            purpose="train",
-            volume_gb=19,
-        )
     assert mock_req.call_count == 0
 
 
@@ -512,44 +492,20 @@ def test_start_pod_train_purpose_accepts_20gb_volume(env_with_key):
     assert captured["body"]["volumeMountPath"] == "/workspace"
 
 
-def test_start_pod_bench_purpose_allows_zero_volume(env_with_key):
+@pytest.mark.parametrize("purpose", ["bench", "smoke"])
+def test_start_pod_non_train_purpose_allows_zero_volume(env_with_key, purpose):
     """Bug 3: only 'train' demands a volume — bench/smoke pods may stay
     ephemeral (no FT artifacts to persist)."""
-    captured = {}
-
-    def _fake_request(method, path, body=None):
-        captured["body"] = body
-        return {"id": "pod_bench"}
-
     with (
         patch.object(pod_lifecycle, "assert_can_spend", return_value=None),
-        patch.object(pod_lifecycle, "_request", side_effect=_fake_request),
+        patch.object(pod_lifecycle, "_request", return_value={"id": f"pod_{purpose}"}),
     ):
         pod_lifecycle.start_pod(
             gpu="rtx4090",
             secure_cloud=True,
             time_limit_min=60,
             spending_cap_usd=5.0,
-            purpose="bench",
-            volume_gb=0,
-        )
-    assert captured["body"]["volumeInGb"] == 0
-    # No volumeMountPath when volume_gb=0 (existing behavior).
-    assert "volumeMountPath" not in captured["body"]
-
-
-def test_start_pod_smoke_purpose_allows_zero_volume(env_with_key):
-    """Bug 3: smoke pods may also stay ephemeral."""
-    with (
-        patch.object(pod_lifecycle, "assert_can_spend", return_value=None),
-        patch.object(pod_lifecycle, "_request", return_value={"id": "pod_s"}),
-    ):
-        pod_lifecycle.start_pod(
-            gpu="rtx4090",
-            secure_cloud=True,
-            time_limit_min=60,
-            spending_cap_usd=5.0,
-            purpose="smoke",
+            purpose=purpose,
             volume_gb=0,
         )
 

@@ -13,19 +13,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-
-@pytest.fixture(autouse=True)
-def _mock_wiring():
-    """Match the pattern from tests/test_hybrid.py — suppress code_facts and
-    env_vars wiring so the RRF pool stays deterministic across tests."""
-    with (
-        patch("src.search.hybrid.code_facts_search", return_value=[]),
-        patch("src.search.hybrid.env_var_search", return_value=[]),
-    ):
-        yield
-
 
 def _vr(rowid: int, repo: str = "repo-x", file_type: str = "library") -> dict:
     """Build a minimal vector-search result dict."""

@@ -16,6 +16,24 @@ sys.path.insert(0, _project_root)
 
 
 @pytest.fixture(autouse=True)
+def _mock_wiring():
+    """Suppress code_facts/env_vars wiring in hybrid tests by default.
+
+    Without this fixture, every test that touches hybrid_search would hit the
+    live knowledge.db and pull extra candidates into the pool, breaking
+    existing assertions.  Individual tests can override these patches to assert
+    the wiring behaviour.
+    """
+    from unittest.mock import patch
+
+    with (
+        patch("src.search.hybrid.code_facts_search", return_value=[]),
+        patch("src.search.hybrid.env_var_search", return_value=[]),
+    ):
+        yield
+
+
+@pytest.fixture(autouse=True)
 def _clear_gh_cache_between_tests():
     """Clear GitHub API cache before each test to prevent cross-test pollution."""
     from src.cache import _query_cache
