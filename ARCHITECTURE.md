@@ -41,7 +41,7 @@ vtarsh/code-rag-mcp (PUBLIC)        vtarsh/code-rag-mcp-profile (PRIVATE)
 ├── scripts/                        ├── conventions.yaml    ← org prefixes, domains
 ├── tests/                          ├── glossary.yaml
 ├── profiles/example/               ├── known_flows.yaml
-├── CLAUDE.md                       ├── benchmarks.yaml
+├── AGENTS.md                       ├── benchmarks.yaml
 ├── ARCHITECTURE.md (this file)     ├── install.sh          ← symlinks scripts
 ├── TESTING.md                      ├── uninstall.sh
 └── Makefile                        ├── scripts/            ← ~30 org-specific scripts
@@ -143,16 +143,33 @@ domain_patterns:
   hs: ...
 ```
 
+## Scripts Organization
+
+Scripts are organized by function:
+
+```
+scripts/
+├── build/         # Index, graph, vector builders
+├── bench/         # Benchmarks and evaluation
+├── eval/          # Eval harnesses and judges
+├── analysis/      # Analytics, churn, mining
+├── maint/         # Maintenance, validation, health checks
+├── data/          # Data prep, finetune, embedding
+├── scrape/        # Doc scraping, crawling
+├── runpod/        # RunPod training pipeline
+└── (root)         # Entry points: full_update.sh, build_vectors.py, _common.py
+```
+
 ## Build Pipeline
 
 ```bash
 make build                    # Full: clone → extract → index → graph → vectors (~2-4h; ~20GB RAM peak)
 
 # Individual steps:
-scripts/extract_artifacts.py  # Parse repos → extracted/ (fills repos.org_deps)
-scripts/build_index.py        # Build FTS5 chunks + code_facts
-scripts/build_graph.py        # Build graph_edges (28 edge types, ~15.5k edges)
-scripts/build_vectors.py      # Build LanceDB embeddings
+scripts/scrape/extract_artifacts.py  # Parse repos → extracted/ (fills repos.org_deps)
+scripts/build/build_index.py         # Build FTS5 chunks + code_facts
+scripts/build/build_graph.py         # Build graph_edges (28 edge types, ~15.5k edges)
+scripts/build_vectors.py             # Build LanceDB embeddings (kept at root for Makefile)
 ```
 
 **Important**: `build_index.py` recreates repos/chunks tables. After rebuild, restore
