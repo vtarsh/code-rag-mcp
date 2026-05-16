@@ -26,6 +26,9 @@ models/
 graph.html
 graph-*.html
 
+# macOS
+.DS_Store
+
 # Python cache
 .pytest_cache/
 
@@ -95,10 +98,5 @@ scripts/tavily-docs-crawler.py
 .playwright-mcp/
 *.png
 
-# Generated runtime artifacts
-graph.html
-clone_log.json
-repo_state.json
-extract_log.json
-blind_spots_results.json
+
 

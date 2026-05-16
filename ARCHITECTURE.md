@@ -26,8 +26,9 @@ dependency tracing, and task analysis tools via Model Context Protocol.
 │       ├── context.py (context_builder)                      │
 │       └── service.py (repo_overview, health_check, etc.)    │
 ├─────────────────────────────────────────────────────────────┤
-│ db/knowledge.db  (SQLite FTS5, ~144MB)                      │
-│ db/vectors.lance.coderank/ (LanceDB, ~238MB — active table) │
+│ db/knowledge.db  (SQLite FTS5, ~253MB)                      │
+│ db/vectors.lance.coderank/ (LanceDB, ~27GB — code tower)    │
+│ db/vectors.lance.docs/     (LanceDB, ~29GB — docs tower)    │
 └─────────────────────────────────────────────────────────────┘
 ```
 

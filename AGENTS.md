@@ -211,8 +211,6 @@ scripts/scrape/extract_artifacts.py → scripts/build/build_index.py → scripts
 
 ## Open Questions
 
-## Open Questions
-
 1. **`bench_runs/` baselines** — Which early baselines are still referenced by active gates?
 2. **`models/` mixed storage** — Only metadata tracked; weights untracked. Is this intentional?
 3. **`setup_wizard.py` stale** — Last touched 8+ weeks ago. Still wired into `Makefile`.
