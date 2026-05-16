@@ -9,6 +9,7 @@ Handles:
 from __future__ import annotations
 
 import logging
+import os
 import re
 import sqlite3
 
@@ -145,6 +146,22 @@ def sanitize_fts_with_stop_words(
     return " OR ".join(sanitized) if sanitized else ""
 
 
+def _camelcase_variants(tokens: list[str]) -> list[str]:
+    """Generate camelCase / PascalCase variants for adjacent token pairs.
+
+    Example: ['update', 'merchant'] -> ['updateMerchant', 'UpdateMerchant'].
+    These match code identifiers that FTS5 `porter unicode61` keeps as single
+    tokens (e.g. `updateMerchant` in `const [updateMerchant] = useMutation()`).
+    """
+    variants: list[str] = []
+    for i in range(len(tokens) - 1):
+        a, b = tokens[i], tokens[i + 1]
+        if a and b and a[0].isalpha() and b[0].isalpha():
+            variants.append(a.lower() + b[0].upper() + b[1:])
+            variants.append(a[0].upper() + a[1:].lower() + b[0].upper() + b[1:])
+    return variants
+
+
 def sanitize_fts_query(query: str) -> str:
     """Sanitize query for FTS5. Uses OR to find partial matches.
 
@@ -152,6 +169,11 @@ def sanitize_fts_query(query: str) -> str:
     For code search, OR is better — finding "trustly" OR "verification"
     is more useful than requiring both in the same chunk.
     The reranker then sorts by actual relevance.
+
+    P0d (2026-05-16): optional camelCase expansion — adjacent tokens generate
+    camelCase / PascalCase variants so queries like "update merchant" also
+    match code identifiers `updateMerchant`.  Controlled by env var
+    CODE_RAG_USE_CAMELCASE_EXPAND (default 0 until bench confirms lift).
     """
     query = _sanitize_fts_input(query)
     tokens = query.split()
@@ -167,6 +189,8 @@ def sanitize_fts_query(query: str) -> str:
             sanitized.append(f'"{token}"')
         else:
             sanitized.append(token)
+    if os.getenv("CODE_RAG_USE_CAMELCASE_EXPAND", "0") == "1":
+        sanitized.extend(_camelcase_variants(sanitized))
     return " OR ".join(sanitized) if sanitized else query
 
 
