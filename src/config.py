@@ -206,6 +206,16 @@ CODE_FACT_INJECT_WEIGHT: float = float(_tuning.get("code_fact_inject_weight", 0.
 # instead of file-level). Default 1.05 = +5%.
 ENV_VAR_BOOST: float = float(_tuning.get("env_var_boost", 1.05))
 
+# EXP2 / RE1 (2026-04-27): soft repo prefilter — predict top-K most-relevant
+# repos for a query via FTS5 BM25 over per-repo summaries, then multiplicatively
+# boost RRF score for chunks from those repos. Targets the 85.4% of jira queries
+# that have >=50% of GT in a single repo. Expected lift +6 to +12pp on hit@10.
+# Kill-switch: set boost to 1.0 (no DB call, zero side-effects).
+REPO_PREFILTER_BOOST: float = float(
+    os.getenv("CODE_RAG_REPO_PREFILTER_BOOST", _tuning.get("repo_prefilter_boost", 1.4))
+)
+REPO_PREFILTER_TOP_K: int = int(os.getenv("CODE_RAG_REPO_PREFILTER_TOP_K", _tuning.get("repo_prefilter_top_k", 3)))
+
 # --- Rerank pool size (P4.2) — feed more candidates to cross-encoder ---
 # Controls pre-rerank cap. Benchmark (rerank_ab_top200.json) showed 50→200
 # gives +10 pp r@10 for baseline MiniLM-L-6. Env override: CODE_RAG_RERANK_POOL_SIZE.

@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import sqlite3
 
 from src.config import (
     CODE_FACT_BOOST,
@@ -26,13 +27,15 @@ from src.config import (
     KEYWORD_WEIGHT,
     PROVIDER_PREFIXES,
     REFERENCE_BOOST,
+    REPO_PREFILTER_BOOST,
+    REPO_PREFILTER_TOP_K,
     RERANK_POOL_SIZE,
     RRF_K,
 )
 from src.container import db_connection
 from src.search.code_facts import code_facts_search, fetch_chunks_for_files
 from src.search.env_vars import env_var_search
-from src.search.fts import fts_search
+from src.search.fts import fts_search, sanitize_fts_query
 
 # Re-export query analysis for backward compatibility
 from src.search.hybrid_query import (  # noqa: F401
@@ -302,6 +305,80 @@ def _apply_env_vars(scores: dict[str, dict], query: str) -> None:
                 data["sources"].append("env_var")
 
 
+# EXP2 / RE1 (2026-04-27): soft repo prefilter — predict top-K repos via BM25 over
+# per-repo summaries, then multiplicatively boost chunks from those repos.
+# Targets the 85.4% of jira queries that have >=50% of GT in a single repo.
+_warned_missing_repo_table: bool = False
+
+
+def _repo_prefilter(query: str, top_k: int) -> list[str]:
+    """Return top-K repo names predicted relevant to `query` via repo_summaries FTS5.
+
+    Sanitizes the query, runs MATCH over the `repo_summaries` table, and returns
+    the repo_name column for the top-K BM25-ranked rows.
+
+    Graceful degradation:
+      - empty query → [] (no DB call)
+      - missing table → [] + one-shot warning
+      - any sqlite/other error → [] (silent, logs exception)
+    """
+    if not query or not query.strip():
+        return []
+
+    sanitized = sanitize_fts_query(query)
+    if not sanitized:
+        return []
+
+    global _warned_missing_repo_table
+    db_path = os.path.join(os.getenv("CODE_RAG_HOME", os.path.expanduser("~/.code-rag")), "db", "knowledge.db")
+
+    try:
+        conn = sqlite3.connect(db_path, timeout=5.0)
+        cur = conn.execute(
+            "SELECT repo_name FROM repo_summaries WHERE summary MATCH ? ORDER BY rank LIMIT ?",
+            (sanitized, top_k),
+        )
+        rows = cur.fetchall()
+        conn.close()
+        return [r[0] for r in rows if r[0]]
+    except sqlite3.OperationalError as exc:
+        if "no such table" in str(exc).lower():
+            if not _warned_missing_repo_table:
+                _logger.warning("repo_summaries table missing — repo prefilter disabled until rebuilt")
+                _warned_missing_repo_table = True
+            return []
+        _logger.exception("repo prefilter OperationalError")
+        return []
+    except Exception:
+        _logger.exception("repo prefilter error")
+        return []
+
+
+def _apply_repo_prefilter(scores: dict[str, dict], query: str) -> None:
+    """Multiply RRF score by REPO_PREFILTER_BOOST for chunks in predicted repos.
+
+    The boost is applied in-place on the `scores` dict.  Appends "repo_prefilter"
+    to `data["sources"]` for observability.
+
+    Kill-switch: REPO_PREFILTER_BOOST <= 1.0 short-circuits before any DB call.
+    """
+    if REPO_PREFILTER_BOOST <= 1.0:
+        return
+    if not scores:
+        return
+
+    predicted_repos = _repo_prefilter(query, REPO_PREFILTER_TOP_K)
+    if not predicted_repos:
+        return
+
+    predicted_set = set(predicted_repos)
+    for data in scores.values():
+        if data.get("repo_name", "") in predicted_set:
+            data["score"] *= REPO_PREFILTER_BOOST
+            if "repo_prefilter" not in data["sources"]:
+                data["sources"].append("repo_prefilter")
+
+
 def hybrid_search(
     query: str,
     repo: str = "",
@@ -446,6 +523,9 @@ def hybrid_search(
         # P0c: wire env_vars — UPPERCASE identifiers in the query resolve to the
         # repos where those env vars are defined. Light repo-level boost.
         _apply_env_vars(scores, query)
+        # EXP2 / RE1: soft repo prefilter — boost chunks from top-K predicted repos.
+        # Applied after code_facts/env_vars (same multiplicative boost pattern).
+        _apply_repo_prefilter(scores, query)
 
     # Apply content-type boosts — curated knowledge ranks higher
     TASK_BOOST = {
