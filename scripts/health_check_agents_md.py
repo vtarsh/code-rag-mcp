@@ -289,9 +289,9 @@ class HealthChecker:
         )
         self._assert_count("profile scripts", 22, actual, line=448)
 
-        # Profile: 4,087 docs files  (line 102)
+        # Profile: 4,086 docs files  (line 102)
         actual = self._count_files("profiles/pay-com/docs")
-        self._assert_count("docs files", 4088, actual, line=102)
+        self._assert_count("docs files", 4086, actual, line=102)
 
     # ------------------------------------------------------------------
     # 3. Orphan detection
@@ -563,7 +563,7 @@ def main() -> int:
     checker = HealthChecker()
 
     # Check all AGENTS.md files
-    all_agents = [ROOT_AGENTS, PROFILE_AGENTS] + SUB_AGENTS
+    all_agents = [ROOT_AGENTS, PROFILE_AGENTS, *SUB_AGENTS]
     for agents_file in all_agents:
         if agents_file.exists():
             checker.check_links(agents_file)
