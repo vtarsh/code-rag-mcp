@@ -88,9 +88,14 @@ The runtime is split into two processes: [`daemon.py`](daemon.py) is a persisten
 | `bench_runs/` | **hybrid** | baselines tracked; timestamped dumps untracked |
 | `models/` | **hybrid** | metadata tracked; model weights untracked |
 | `.secrets/` | **gitignored** | credentials |
+| `graph.html` | **gitignored** | generated graph visualization |
+| `clone_log.json` | **gitignored** | generated clone metadata |
+| `repo_state.json` | **gitignored** | generated repo state |
+| `extract_log.json` | **gitignored** | generated extraction metadata |
+| `blind_spots_results.json` | **gitignored** | generated analysis results |
 | `.claude/rules/`, `.claude/docs/`, `.claude/skills/` | **git** | agent infrastructure |
 | `.claude/plans/`, `.claude/research/` | **git** | planning docs |
-| `.claude/debug/` | **gitignored** | ephemeral debug artifacts |
+| `.claude/debug/` | **git** (ruff-excluded) | ephemeral debug artifacts (149 tracked files) |
 | `.claude/worktrees/` | **gitignored** | ephemeral per-session branches |
 
 ---
@@ -251,10 +256,10 @@ Still alive but note:
 ## Backlinks
 
 ### To This Catalog
-- [[profiles/pay-com/AGENTS.md|Pay-Com Profile]] links here via `[[../../AGENTS.md|Root Catalog]]`
-- [[src/AGENTS.md|src/]] links here via `[[../AGENTS.md|Root Catalog]]`
-- [[scripts/AGENTS.md|scripts/]] links here via `[[../AGENTS.md|Root Catalog]]`
-- [[tests/AGENTS.md|tests/]] links here via `[[../AGENTS.md|Root Catalog]]`
+- [[profiles/pay-com/AGENTS.md|Pay-Com Profile]] links here via `../../AGENTS.md`
+- [[src/AGENTS.md|src/]] links here via `../AGENTS.md`
+- [[scripts/AGENTS.md|scripts/]] links here via `../AGENTS.md`
+- [[tests/AGENTS.md|tests/]] links here via `../AGENTS.md`
 
 ### Cross-Catalog Navigation
 | From | To | Wikilink |
@@ -263,10 +268,10 @@ Still alive but note:
 | Root | src/ | `[[src/AGENTS.md|src/]]` |
 | Root | scripts/ | `[[scripts/AGENTS.md|scripts/]]` |
 | Root | tests/ | `[[tests/AGENTS.md|tests/]]` |
-| Pay-Com | Root | `[[../../AGENTS.md|Root Catalog]]` |
-| src/ | Root | `[[../AGENTS.md|Root Catalog]]` |
-| scripts/ | Root | `[[../AGENTS.md|Root Catalog]]` |
-| tests/ | Root | `[[../AGENTS.md|Root Catalog]]` |
+| Pay-Com | Root | `../../AGENTS.md` |
+| src/ | Root | `../AGENTS.md` |
+| scripts/ | Root | `../AGENTS.md` |
+| tests/ | Root | `../AGENTS.md` |
 
 ### Code References (Standard Markdown)
 - `[src/config.py](src/config.py)` — for GitHub clickability

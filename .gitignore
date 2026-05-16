@@ -94,3 +94,10 @@ scripts/tavily-docs-crawler.py
 .secrets/
 .playwright-mcp/
 *.png
+
+# Generated runtime artifacts
+graph.html
+clone_log.json
+repo_state.json
+extract_log.json
+blind_spots_results.json

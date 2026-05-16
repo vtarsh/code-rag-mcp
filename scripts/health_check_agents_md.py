@@ -243,13 +243,13 @@ class HealthChecker:
         actual = self._count_glob("src/index/builders/*.py")
         self._assert_count("index builder modules", 18, actual, line=470)
 
-        # Root: ~116 scripts + helpers  (line 115)
+        # Root: ~117 scripts + helpers  (line 115)
         actual = self._count_files("scripts")
-        self._assert_count("scripts + helpers", 116, actual, line=115, approximate=True)
+        self._assert_count("scripts + helpers", 117, actual, line=115, approximate=True)
 
-        # Root: ~72 tracked scripts  (line 183)
+        # Root: ~100 tracked scripts  (line 183)
         actual = self._git_ls_files("scripts/")
-        self._assert_count("tracked scripts", 72, actual, line=183, approximate=True)
+        self._assert_count("tracked scripts", 100, actual, line=183, approximate=True)
 
         # Root: .claude/debug/ tracked files  (line 552 says 149+)
         actual = self._git_ls_files(".claude/debug/")
