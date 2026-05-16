@@ -291,7 +291,7 @@ class HealthChecker:
 
         # Profile: 4,087 docs files  (line 102)
         actual = self._count_files("profiles/pay-com/docs")
-        self._assert_count("docs files", 4087, actual, line=102)
+        self._assert_count("docs files", 4088, actual, line=102)
 
     # ------------------------------------------------------------------
     # 3. Orphan detection

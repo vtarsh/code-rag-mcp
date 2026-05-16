@@ -88,6 +88,7 @@ The runtime is split into two processes: [`daemon.py`](daemon.py) is a persisten
 | `bench_runs/` | **hybrid** | baselines tracked; timestamped dumps untracked |
 | `models/` | **hybrid** | metadata tracked; model weights untracked |
 | `.secrets/` | **gitignored** | credentials |
+| `patterns-export.json` | **untracked** | referenced by profile scripts |
 | `graph.html` | **gitignored** | generated graph visualization |
 | `clone_log.json` | **gitignored** | generated clone metadata |
 | `repo_state.json` | **gitignored** | generated repo state |
