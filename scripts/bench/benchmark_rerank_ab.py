@@ -14,7 +14,6 @@ import gc
 import json
 import os
 import random
-import re
 import sqlite3
 import sys
 import time
@@ -22,17 +21,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts._common import setup_paths
 
-from src.search.fts import sanitize_fts_query
+setup_paths()
 
 # FTS5 MATCH treats []{}()":, as syntax; strip so prefixes like
 # "[APM] - Nuvei" or "Bancomat, satispay" don't error out.
-_FTS_PRECLEAN = re.compile(r"[\[\]{}():\"',;]")
-
-
-def preclean_for_fts(text: str) -> str:
-    return _FTS_PRECLEAN.sub(" ", text)
-
+from scripts._common import preclean_for_fts
+from src.search.fts import sanitize_fts_query
 
 DEFAULT_MODELS = [
     "cross-encoder/ms-marco-MiniLM-L-6-v2",

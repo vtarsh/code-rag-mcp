@@ -64,6 +64,9 @@ from pathlib import Path
 
 ROOT = Path(os.getenv("CODE_RAG_HOME", str(Path.home() / ".code-rag-mcp")))
 sys.path.insert(0, str(ROOT))
+from scripts._common import setup_paths
+
+setup_paths()
 
 DB_PATH = ROOT / "db" / "knowledge.db"
 EVAL_PATH = ROOT / "profiles" / "pay-com" / "eval" / "doc_intent_eval_v1.jsonl"

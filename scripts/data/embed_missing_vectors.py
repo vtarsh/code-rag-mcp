@@ -19,19 +19,18 @@ import os
 import sqlite3
 import sys
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 
-_BASE_DIR = Path(os.getenv("CODE_RAG_HOME", Path.home() / ".code-rag"))
-_SCRIPT_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_SCRIPT_DIR))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from scripts._common import pause_daemon, setup_paths
 
-import lancedb  # noqa: E402
-import psutil  # noqa: E402
+_BASE_DIR = setup_paths()
 
-from scripts.build_vectors import embed_simple  # noqa: E402
-from src.models import get_model_config  # noqa: E402
+import lancedb
+import psutil
+
+from scripts.build_vectors import embed_simple
+from src.models import get_model_config
 
 _GIB = 1024**3
 RSS_SOFT_LIMIT_BYTES = int(float(os.getenv("CODE_RAG_EMBED_RSS_SOFT_GB", "8")) * _GIB)
@@ -39,40 +38,6 @@ RSS_HARD_LIMIT_BYTES = int(float(os.getenv("CODE_RAG_EMBED_RSS_HARD_GB", "10")) 
 SYS_AVAIL_SOFT_BYTES = int(float(os.getenv("CODE_RAG_EMBED_SYS_AVAIL_SOFT_GB", "2")) * _GIB)
 SYS_AVAIL_HARD_BYTES = int(float(os.getenv("CODE_RAG_EMBED_SYS_AVAIL_HARD_GB", "0.8")) * _GIB)
 DAEMON_PORT = int(os.getenv("CODE_RAG_DAEMON_PORT", "8742"))
-
-
-def pause_daemon(port: int = DAEMON_PORT, timeout: float = 5.0) -> bool:
-    """Force-restart the daemon so its ~1 GB resident models are truly freed.
-
-    Uses POST /admin/shutdown (drain + exit; launchd KeepAlive respawns fresh).
-    /admin/unload alone just drops refs — Python's pymalloc keeps freed pages
-    in arenas, so RSS barely moves. We need a process restart to return pages
-    to the OS. Embedding runs ~14 GB on 16 GB Mac without this and trips Jetsam.
-
-    /admin/shutdown semantics (since 2026-04-22):
-    - drains in-flight /tool/ requests for up to 1 s
-    - returns 503 on new /tool/... arriving during the drain window
-    - then os._exit(0); launchd throttles restart by ~10 s
-
-    Returns True if the daemon acknowledged the shutdown, False if no daemon
-    is reachable or the endpoint is missing.
-    """
-    url = f"http://127.0.0.1:{port}/admin/shutdown"
-    req = urllib.request.Request(url, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            resp.read()
-        print(f"  [daemon on :{port} shutdown requested; launchd will restart fresh]", flush=True)
-        return True
-    except urllib.error.URLError as e:
-        reason = getattr(e, "reason", str(e))
-        if isinstance(reason, OSError) and reason.errno in {61, 111}:  # ECONNREFUSED
-            return False  # daemon not running — nothing to pause
-        print(f"  [daemon shutdown failed: {reason}; continuing without pause]", flush=True)
-        return False
-    except Exception as e:
-        print(f"  [daemon shutdown error: {e}; continuing without pause]", flush=True)
-        return False
 
 
 def parse_args() -> tuple[str, bool]:

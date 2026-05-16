@@ -21,7 +21,7 @@ DB_PATH = BASE_DIR / "db" / "knowledge.db"
 OUTPUT_PATH = BASE_DIR / "graph.html"
 
 # Load provider prefixes from conventions
-import yaml  # noqa: E402
+import yaml
 
 _profile = os.getenv("ACTIVE_PROFILE", "")
 if not _profile:

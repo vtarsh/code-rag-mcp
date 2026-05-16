@@ -21,10 +21,13 @@ import yaml
 # Ensure project root on path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+from scripts._common import setup_paths
 
-from src.js_field_extractor import extract_fields_from_directory  # noqa: E402
-from src.proto_parser import merge_schemas, parse_proto_path  # noqa: E402
-from src.types import FieldMapping, FieldUsage, MethodTypeMap, ProviderTypeMap  # noqa: E402
+setup_paths()
+
+from src.js_field_extractor import extract_fields_from_directory
+from src.proto_parser import merge_schemas, parse_proto_path
+from src.types import FieldMapping, FieldUsage, MethodTypeMap, ProviderTypeMap
 
 # ---------------------------------------------------------------------------
 # Provider configs — maps provider name to source locations

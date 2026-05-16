@@ -38,8 +38,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
+from scripts._common import setup_paths
 
-from scripts.runpod import pod_lifecycle  # noqa: E402
+setup_paths()
+
+from scripts.runpod import pod_lifecycle
 
 REMOTE_REPO_DIR = "/workspace/code-rag-mcp"
 DEFAULT_SSH_KEY = Path("~/.runpod/ssh/RunPod-Key-Go").expanduser()

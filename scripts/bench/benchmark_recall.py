@@ -23,13 +23,16 @@ DB_PATH = _BASE_DIR / "db" / "knowledge.db"
 
 # Patch out GitHub API to avoid timeouts during benchmarking
 sys.path.insert(0, str(_BASE_DIR))
-import src.tools.analyze.shared_sections as ss  # noqa: E402
+from scripts._common import setup_paths
+
+setup_paths()
+import src.tools.analyze.shared_sections as ss
 
 ss.find_task_branches = lambda *a, **k: {}
 ss.find_task_prs = lambda *a, **k: {}
 
-from src.container import get_db  # noqa: E402
-from src.tools.analyze import _analyze_task_impl  # noqa: E402
+from src.container import get_db
+from src.tools.analyze import _analyze_task_impl
 
 _BOLD_REPO_RE = re.compile(r"\*\*([a-z][a-z0-9-]+)\*\*")
 _EXCLUDE_PREFIXES = ("todo", "ok", "done", "in-progress", "check", "found")

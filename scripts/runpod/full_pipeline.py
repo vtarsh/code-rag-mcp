@@ -53,6 +53,9 @@ from typing import Final
 
 # Make sibling helpers importable both as CLI and from the test suite.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from scripts._common import setup_paths
+
+setup_paths()
 
 from scripts.runpod import pod_lifecycle
 from scripts.runpod.pod_lifecycle import PodLifecycleError

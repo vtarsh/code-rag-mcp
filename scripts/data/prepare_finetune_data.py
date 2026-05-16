@@ -37,22 +37,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts._common import preclean_for_fts, setup_paths
+
+setup_paths()
 
 from src.search.fts import sanitize_fts_query
-
-# FTS5 MATCH treats many punctuation chars as reserved syntax; strip them
-# so Jira summaries/descriptions like "[APM] - Nuvei", "Alias:", "payment!",
-# URLs or "file/path.js" don't cause sqlite3.OperationalError in eval/train.
-# Keep: letters, digits, whitespace, _   (FTS5 token chars)
-# Keep: . -                              (handled specially by sanitize_fts_query)
-# Strip everything else (including / which FTS5 treats as a token separator
-# but often trips up when combined with ambiguous terms).
-_FTS_PRECLEAN = re.compile(r"[^\w\s\.\-]")
-
-
-def preclean_for_fts(text: str) -> str:
-    return _FTS_PRECLEAN.sub(" ", text)
-
 
 _BASE = Path(os.getenv("CODE_RAG_HOME", Path.home() / ".code-rag-mcp"))
 TASKS_DB = _BASE / "db" / "tasks.db"

@@ -27,12 +27,13 @@ import os
 import sqlite3
 import sys
 import time
-import urllib.error
-import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts._common import pause_daemon, preclean_for_fts, setup_paths
+
+setup_paths()
 
 from scripts.bench.benchmark_rerank_ab import (
     compute_recall,
@@ -40,8 +41,8 @@ from scripts.bench.benchmark_rerank_ab import (
     percentile,
     top_k_repos,
 )
+from scripts.data.prepare_finetune_data import build_query_text
 from scripts.eval.eval_verdict import verdict_from_snapshot
-from scripts.data.prepare_finetune_data import build_query_text, preclean_for_fts
 
 logging.basicConfig(
     level=logging.INFO,
@@ -54,32 +55,6 @@ _BASE = Path(os.getenv("CODE_RAG_HOME", Path.home() / ".code-rag"))
 TASKS_DB = _BASE / "db" / "tasks.db"
 KNOWLEDGE_DB = _BASE / "db" / "knowledge.db"
 DAEMON_PORT = int(os.getenv("CODE_RAG_DAEMON_PORT", "8742"))
-
-
-def pause_daemon(port: int = DAEMON_PORT, timeout: float = 5.0) -> bool:
-    """POST /admin/shutdown so daemon frees its ML models before eval.
-
-    Eval loads 2 CrossEncoders sequentially over 40 tasks x 200 candidates;
-    daemon's ~1 GB resident MiniLM + MPS buffers would push us into Jetsam
-    territory on 16 GB Mac. Daemon drains in-flight then exits; launchd
-    restarts it fresh after eval finishes.
-    """
-    url = f"http://127.0.0.1:{port}/admin/shutdown"
-    req = urllib.request.Request(url, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            resp.read()
-        log.info("daemon on :%d shutdown requested; launchd will restart fresh", port)
-        return True
-    except urllib.error.URLError as e:
-        reason = getattr(e, "reason", str(e))
-        if isinstance(reason, OSError) and reason.errno in {61, 111}:
-            return False
-        log.info("daemon shutdown failed: %s; continuing", reason)
-        return False
-    except Exception as e:
-        log.info("daemon shutdown error: %s; continuing", e)
-        return False
 
 
 def load_all_gt_tasks(db_path: Path, projects: list[str] | None = None) -> list[dict]:

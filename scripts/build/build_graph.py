@@ -18,6 +18,9 @@ from pathlib import Path
 
 # Ensure repo root is on sys.path so `src.graph.builders` resolves
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from scripts._common import setup_paths
+
+setup_paths()
 
 from src.graph.builders import build_graph
 

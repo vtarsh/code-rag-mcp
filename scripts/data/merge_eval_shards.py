@@ -23,6 +23,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from scripts._common import setup_paths
+
+setup_paths()
 from scripts.eval.eval_verdict import verdict_from_snapshot
 
 
@@ -31,7 +34,7 @@ def percentile(values: list, p: float) -> float:
     if not clean:
         return 0.0
     s = sorted(clean)
-    k = max(0, min(len(s) - 1, int(round((p / 100.0) * (len(s) - 1)))))
+    k = max(0, min(len(s) - 1, round((p / 100.0) * (len(s) - 1))))
     return float(s[k])
 
 

@@ -52,11 +52,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
+from scripts._common import classify_file, setup_paths
 
-# Env overrides — MUST be set before importing src.search.hybrid (module-level
-# _DISABLE_PENALTIES is read once at import time).
-os.environ.setdefault("ACTIVE_PROFILE", "pay-com")
-os.environ.setdefault("CODE_RAG_HOME", str(REPO_ROOT))
+setup_paths()
 os.environ["CODE_RAG_DISABLE_PENALTIES"] = "1"
 
 # Keep code_facts/env_vars enabled — they widen the doc-retrieval surface too
@@ -72,30 +70,6 @@ _DOC_QUERY_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
-
-_CI_PATH_RE = re.compile(r"(?:^|/)(?:ci/deploy\.ya?ml|k8s/\.github/workflows/)", re.IGNORECASE)
-_TEST_PATH_RE = re.compile(r"(?:\.spec\.(?:js|ts|tsx|jsx)$|\.test\.(?:js|ts|tsx|jsx|py)$|_test\.py$|/tests?/)")
-
-
-def classify_file(file_path: str, file_type: str) -> str:
-    """Same category logic as `scripts/v12_candidates.py`."""
-    if _CI_PATH_RE.search(file_path or ""):
-        return "ci-yml"
-    if _TEST_PATH_RE.search(file_path or ""):
-        return "test"
-    if (file_path or "").endswith(".md") or file_type in {
-        "doc",
-        "docs",
-        "reference",
-        "dictionary",
-        "gotchas",
-        "task",
-        "provider_doc",
-    }:
-        return "doc"
-    if (file_path or "").endswith((".yml", ".yaml")):
-        return "config-yaml"
-    return "code"
 
 
 def load_existing(path: Path) -> OrderedDict[str, list[dict]]:

@@ -38,8 +38,6 @@ import random
 import re
 import sys
 import time
-import urllib.error
-import urllib.request
 import warnings
 from pathlib import Path
 
@@ -47,6 +45,8 @@ import torch
 import torch.nn as nn
 from sentence_transformers import CrossEncoder, InputExample
 from torch.utils.data import DataLoader, IterableDataset, get_worker_info
+
+from scripts._common import pause_daemon
 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,32 +56,6 @@ logging.basicConfig(
 log = logging.getLogger("finetune_reranker")
 
 DAEMON_PORT = 8742
-
-
-def pause_daemon(port: int = DAEMON_PORT, timeout: float = 5.0) -> bool:
-    """Force-restart daemon (~1 GB resident models) to free RAM before training.
-
-    Same /admin/shutdown endpoint used by scripts/embed_missing_vectors.py —
-    drains in-flight then os._exit(0); launchd KeepAlive respawns fresh.
-    /admin/unload alone drops refs but pymalloc doesn't release arena pages,
-    so we need the full process restart to actually reclaim RSS.
-    """
-    url = f"http://127.0.0.1:{port}/admin/shutdown"
-    req = urllib.request.Request(url, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            resp.read()
-        log.info("daemon on :%d shutdown requested; launchd will restart fresh", port)
-        return True
-    except urllib.error.URLError as e:
-        reason = getattr(e, "reason", str(e))
-        if isinstance(reason, OSError) and reason.errno in {61, 111}:
-            return False
-        log.info("daemon shutdown failed: %s; continuing", reason)
-        return False
-    except Exception as e:
-        log.info("daemon shutdown error: %s; continuing", e)
-        return False
 
 
 class JsonlExampleStream(IterableDataset):

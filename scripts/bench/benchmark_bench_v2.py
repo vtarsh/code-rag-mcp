@@ -36,6 +36,9 @@ import yaml
 
 _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
+from scripts._common import setup_paths
+
+setup_paths()
 
 # Top-5 providers we separately report strata for (proposal §5).
 TOP5_PROVIDERS = ("payper", "nuvei", "interac", "trustly", "paynearme")

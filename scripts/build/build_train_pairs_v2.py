@@ -42,6 +42,9 @@ ROOT = Path(os.getenv("CODE_RAG_HOME", str(Path.home() / ".code-rag-mcp")))
 os.environ.setdefault("CODE_RAG_HOME", str(ROOT))
 os.environ.setdefault("ACTIVE_PROFILE", "pay-com")
 sys.path.insert(0, str(ROOT))
+from scripts._common import setup_paths
+
+setup_paths()
 
 # Mirror src/search/hybrid.py::_query_wants_docs (regex copy — keep in sync).
 _DOC_QUERY_RE = re.compile(

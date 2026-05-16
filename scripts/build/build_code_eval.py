@@ -61,9 +61,12 @@ ROOT = Path(os.getenv("CODE_RAG_HOME", str(Path.home() / ".code-rag-mcp")))
 os.environ.setdefault("CODE_RAG_HOME", str(ROOT))
 os.environ.setdefault("ACTIVE_PROFILE", "pay-com")
 sys.path.insert(0, str(ROOT))
+from scripts._common import setup_paths
 
-from src.search.fts import fts_search  # noqa: E402
-from src.search.hybrid import _query_wants_docs  # noqa: E402
+setup_paths()
+
+from src.search.fts import fts_search
+from src.search.hybrid import _query_wants_docs
 
 TOOL_CALLS_LOG = ROOT / "logs" / "tool_calls.jsonl"
 DB_PATH = ROOT / "db" / "knowledge.db"

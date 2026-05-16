@@ -49,8 +49,11 @@ ROOT = Path(os.getenv("CODE_RAG_HOME", str(Path.home() / ".code-rag-mcp")))
 os.environ.setdefault("CODE_RAG_HOME", str(ROOT))
 os.environ.setdefault("ACTIVE_PROFILE", "pay-com")
 sys.path.insert(0, str(ROOT))
+from scripts._common import setup_paths
 
-from src.search.fts import fts_search  # noqa: E402
+setup_paths()
+
+from src.search.fts import fts_search
 
 EVAL_PATH = ROOT / "profiles" / "pay-com" / "eval" / "doc_intent_eval_v3_n200_v2.jsonl"
 DB_PATH = ROOT / "db" / "knowledge.db"

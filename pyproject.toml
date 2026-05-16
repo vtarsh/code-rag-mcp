@@ -38,8 +38,12 @@ ignore = [
     "B008",   # function call in default argument (used in MCP tool signatures)
     "RUF001", # ambiguous unicode in strings — Cyrillic is intentional (uk project)
     "RUF002", # ambiguous unicode in docstrings — Cyrillic is intentional (uk project)
-    "RUF003", # ambiguous unicode in comments — Cyrillic is intentional (uk project)
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# Entry-point scripts modify sys.path before project imports — E402 is unavoidable.
+"scripts/**/*.py" = ["E402"]
+"tests/**/*.py" = ["E402"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["src"]

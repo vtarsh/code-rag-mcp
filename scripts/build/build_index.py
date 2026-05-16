@@ -16,8 +16,8 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from src.index.builders import *  # noqa: E402, F403
-from src.index.builders import build_index  # noqa: E402
+from src.index.builders import *  # noqa: F403
+from src.index.builders import build_index
 
 if __name__ == "__main__":
     build_index()

@@ -43,8 +43,11 @@ _VALID_REPO_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 # --- Add project root to path for imports (use script location, not BASE_DIR) ---
 _SCRIPT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_SCRIPT_DIR))
-from src.index.builders import _memguard  # noqa: E402
-from src.models import DEFAULT_MODEL, EMBEDDING_MODELS, get_model_config  # noqa: E402
+from scripts._common import setup_paths
+
+setup_paths()
+from src.index.builders import _memguard
+from src.models import DEFAULT_MODEL, EMBEDDING_MODELS, get_model_config
 
 
 def parse_args():

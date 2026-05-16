@@ -49,7 +49,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 # Reuse production regex so the metric stays coherent with the ranker.
-from src.search.hybrid import _CI_PATH_RE, _DOC_QUERY_RE  # noqa: E402
+from src.search.hybrid import _CI_PATH_RE, _DOC_QUERY_RE
 
 # Code-ish tokens in the query: snake_case, CamelCase of length 3+, function
 # calls, file extensions. Spec is from V-C agent (2026-04-22), kept verbatim.

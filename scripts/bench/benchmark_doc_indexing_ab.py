@@ -31,6 +31,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
 import gc
 import hashlib
@@ -43,6 +44,9 @@ from pathlib import Path
 
 ROOT = Path(os.getenv("CODE_RAG_HOME", str(Path.home() / ".code-rag-mcp")))
 sys.path.insert(0, str(ROOT))
+from scripts._common import setup_paths
+
+setup_paths()
 
 DB_PATH = ROOT / "db" / "knowledge.db"
 BENCH_DIR = ROOT / "bench_runs"
@@ -69,6 +73,7 @@ def _md5_file(path: Path) -> str:
 
 def _avail_gb() -> float:
     import psutil
+
     return psutil.virtual_memory().available / 1024**3
 
 
@@ -140,8 +145,7 @@ def build_one(key: str, common: dict) -> dict:
 
     if key not in EMBEDDING_MODELS:
         print(
-            f"  SKIP {key}: not registered in src/models.EMBEDDING_MODELS — "
-            "extend that registry first",
+            f"  SKIP {key}: not registered in src/models.EMBEDDING_MODELS — extend that registry first",
             file=sys.stderr,
         )
         return {"model_key": key, "skipped_reason": "not_registered"}
@@ -153,8 +157,7 @@ def build_one(key: str, common: dict) -> dict:
     avail = _avail_gb()
     if avail < PREFLIGHT_AVAIL_HARD_GB:
         print(
-            f"  SKIP {key}: sys-avail={avail:.2f}G fell below "
-            f"{PREFLIGHT_AVAIL_HARD_GB}G mid-run",
+            f"  SKIP {key}: sys-avail={avail:.2f}G fell below {PREFLIGHT_AVAIL_HARD_GB}G mid-run",
             file=sys.stderr,
         )
         return {"model_key": key, "skipped_reason": "low_memory", "avail_gb": avail}
@@ -204,12 +207,8 @@ def build_one(key: str, common: dict) -> dict:
     build_s = time.time() - t0
     size_mb = 0.0
     if lance_dir.exists():
-        try:
-            size_mb = sum(
-                f.stat().st_size for f in lance_dir.rglob("*") if f.is_file()
-            ) / (1024 * 1024)
-        except Exception:
-            pass
+        with contextlib.suppress(Exception):
+            size_mb = sum(f.stat().st_size for f in lance_dir.rglob("*") if f.is_file()) / (1024 * 1024)
 
     return {
         "model_key": key,
@@ -257,7 +256,8 @@ def main() -> int:
 
         gc.collect()
         try:
-            import torch  # noqa: WPS433 — opt-in MPS cleanup
+            import torch
+
             if torch.backends.mps.is_available():
                 torch.mps.empty_cache()
         except Exception:

@@ -45,6 +45,9 @@ from typing import Final
 # Make `scripts.runpod.cost_guard` importable both when run as a CLI and when
 # imported by the test suite (which adds project root to sys.path via conftest).
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from scripts._common import setup_paths
+
+setup_paths()
 from scripts.runpod.cost_guard import CostGuardError, assert_can_spend
 
 API_BASE: Final = os.getenv("RUNPOD_API_BASE", "https://rest.runpod.io/v1")
