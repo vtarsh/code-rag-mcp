@@ -18,6 +18,11 @@ from pathlib import Path
 REPO_ROOT = Path("/Users/vaceslavtarsevskij/.code-rag-mcp")
 ROOT_AGENTS = REPO_ROOT / "AGENTS.md"
 PROFILE_AGENTS = REPO_ROOT / "profiles" / "pay-com" / "AGENTS.md"
+SUB_AGENTS = [
+    REPO_ROOT / "src" / "AGENTS.md",
+    REPO_ROOT / "scripts" / "AGENTS.md",
+    REPO_ROOT / "tests" / "AGENTS.md",
+]
 
 STANDARD_IGNORES = {
     ".git",
@@ -123,10 +128,14 @@ class HealthChecker:
                 self.verified_links += 1
             else:
                 self.broken_links += 1
+                try:
+                    target_str = target.relative_to(REPO_ROOT)
+                except ValueError:
+                    target_str = target
                 self._add(
                     Finding(
                         "LINKS",
-                        f"Broken markdown link: `{raw}` → `{target.relative_to(REPO_ROOT)}`",
+                        f"Broken markdown link: `{raw}` → `{target_str}`",
                         line,
                     )
                 )
@@ -143,10 +152,14 @@ class HealthChecker:
                 self.verified_links += 1
             else:
                 self.broken_links += 1
+                try:
+                    target_str = target.relative_to(REPO_ROOT)
+                except ValueError:
+                    target_str = target
                 self._add(
                     Finding(
                         "LINKS",
-                        f"Broken wikilink: `{raw}` → `{target.relative_to(REPO_ROOT)}`",
+                        f"Broken wikilink: `{raw}` → `{target_str}`",
                         line,
                     )
                 )
@@ -449,12 +462,16 @@ class HealthChecker:
                 target = self._resolve_link(raw, base_dir)
                 if target is None:
                     continue
+                try:
+                    target_str = target.relative_to(REPO_ROOT)
+                except ValueError:
+                    target_str = target
                 if not target.exists():
                     self.broken_links += 1
                     self._add(
                         Finding(
                             "LINKS",
-                            f"Broken wikilink (orphan): `{raw}` → `{target.relative_to(REPO_ROOT)}`",
+                            f"Broken wikilink (orphan): `{raw}` → `{target_str}`",
                             line,
                         )
                     )
@@ -463,7 +480,7 @@ class HealthChecker:
                     self._add(
                         Finding(
                             "LINKS",
-                            f"Wikilink targets directory (should be .md): `{raw}` → `{target.relative_to(REPO_ROOT)}`",
+                            f"Wikilink targets directory (should be .md): `{raw}` → `{target_str}`",
                             line,
                             is_error=False,
                         )
@@ -473,7 +490,7 @@ class HealthChecker:
                     self._add(
                         Finding(
                             "LINKS",
-                            f"Wikilink does not target markdown: `{raw}` → `{target.relative_to(REPO_ROOT)}`",
+                            f"Wikilink does not target markdown: `{raw}` → `{target_str}`",
                             line,
                             is_error=False,
                         )
@@ -545,8 +562,15 @@ class HealthChecker:
 def main() -> int:
     checker = HealthChecker()
 
-    checker.check_links(ROOT_AGENTS)
-    checker.check_links(PROFILE_AGENTS)
+    # Check all AGENTS.md files
+    all_agents = [ROOT_AGENTS, PROFILE_AGENTS] + SUB_AGENTS
+    for agents_file in all_agents:
+        if agents_file.exists():
+            checker.check_links(agents_file)
+        else:
+            print(f"⚠️  AGENTS.md not found: {agents_file.relative_to(REPO_ROOT)}")
+
+    # Root-only checks (counts, orphans, storage are top-level only)
     checker.check_wikilink_orphans()
     checker.check_counts()
     checker.check_orphans()
