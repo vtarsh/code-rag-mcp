@@ -47,7 +47,7 @@ def parse_args() -> tuple[bool, set[str] | None, bool, str]:
 
     ``--model={key}`` selects an entry in ``src.models.EMBEDDING_MODELS``;
     defaults to ``"docs"`` (the production nomic-v1.5). For Run 1 docs FT
-    candidates pass e.g. ``--model=docs-nomic-ft-run1``; the lance dir is
+    candidates pass e.g. ``--model=docs-nomic-ft-v2``; the lance dir is
     derived from the EmbeddingModel.lance_dir field so each candidate gets
     its own table.
     """

@@ -79,7 +79,6 @@ scripts/
 │   ├── embed_missing_vectors.py
 │   ├── finetune_reranker.py
 │   ├── label_v12_candidates_minilm.py
-│   ├── local_smoke_candidates.py
 │   ├── merge_dual_judge_labels.py
 │   ├── merge_eval_shards.py
 │   ├── prepare_finetune_data.py

@@ -20,11 +20,11 @@ Usage::
 
     source ~/.runpod/credentials
     python3 scripts/runpod/oneshot_docs.py \\
-        --candidate-tag=docs-nomic-ft-run1 \\
+        --candidate-tag=docs-nomic-ft-v2 \\
         --base-model=nomic-ai/nomic-embed-text-v1.5 \\
-        --train-data=/tmp/r1_cosent_triplets_v3.jsonl \\
+        --train-data=/tmp/train_triplets.jsonl \\
         --eval-data=profiles/pay-com/doc_intent_eval_v3.jsonl \\
-        --hf-repo=Tarshevskiy/pay-com-docs-nomic-ft-run1
+        --hf-repo=Tarshevskiy/pay-com-docs-nomic-ft-v2
 """
 
 from __future__ import annotations

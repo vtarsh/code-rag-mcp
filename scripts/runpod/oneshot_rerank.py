@@ -25,9 +25,9 @@ Usage::
     python3 scripts/runpod/oneshot_rerank.py \\
         --candidate-tag=rerank-l12 \\
         --base-model=cross-encoder/ms-marco-MiniLM-L-12-v2 \\
-        --train-data=profiles/pay-com/finetune_data_combined_v1/train.jsonl \\
-        --eval-data=profiles/pay-com/doc_intent_eval_v3.jsonl \\
-        --hf-repo=Tarshevskiy/pay-com-rerank-l12-ft-run1
+        --train-data=profiles/pay-com/finetune_data_v8/train.jsonl \\
+        --eval-data=profiles/pay-com/rerank_pointwise_eval_v1.jsonl \\
+        --hf-repo=Tarshevskiy/pay-com-rerank-l12-ft-v2
 """
 
 from __future__ import annotations

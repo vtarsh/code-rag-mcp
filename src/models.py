@@ -68,54 +68,6 @@ EMBEDDING_MODELS: dict[str, EmbeddingModel] = {
         lance_dir="vectors.lance.docs",
         description="General-text embeddings for docs tower. ~550MB RAM.",
     ),
-    # Run 1 docs FT candidates (registered before train so the bench step
-    # can resolve {tag} via this registry). HF Hub repos are populated at
-    # the end of the train pod's run; if the repo is missing locally and
-    # offline, sentence-transformers will try to download and fail clearly.
-    "docs-nomic-ft-run1": EmbeddingModel(
-        key="docs-nomic-ft-run1",
-        name="Tarshevskiy/pay-com-docs-nomic-ft-run1",
-        dim=768,
-        query_prefix="search_query: ",
-        document_prefix="search_document: ",
-        trust_remote_code=True,
-        batch_size=16,
-        short_limit=2000,
-        long_limit=8000,
-        lance_dir="vectors.lance.docs.docs-nomic-ft-run1",
-        description="FT'd nomic-embed-text-v1.5 on pay-com docs (Run 1).",
-    ),
-    "docs-mxbai-ft-run1": EmbeddingModel(
-        key="docs-mxbai-ft-run1",
-        name="Tarshevskiy/pay-com-docs-mxbai-ft-run1",
-        dim=1024,
-        query_prefix="",
-        document_prefix="",
-        trust_remote_code=False,
-        batch_size=12,
-        short_limit=2000,
-        long_limit=8000,
-        lance_dir="vectors.lance.docs.docs-mxbai-ft-run1",
-        description="FT'd mxbai-embed-large-v1 on pay-com docs (Run 1).",
-    ),
-    "docs-gte-base-ft-run1": EmbeddingModel(
-        key="docs-gte-base-ft-run1",
-        name="Tarshevskiy/pay-com-docs-gte-base-ft-run1",
-        dim=768,
-        query_prefix="",
-        document_prefix="",
-        trust_remote_code=True,
-        batch_size=16,
-        short_limit=2000,
-        # Bug 6q: train caps encoder at max_seq_length=512 (≈2048 chars). The
-        # build-time U1 patch + cap applied in
-        # docs_vector_indexer._load_sentence_transformer keep encode() safe,
-        # but truncating the input string here also avoids wasted tokenisation
-        # work and keeps the indexer's char-budget bookkeeping honest.
-        long_limit=2000,
-        lance_dir="vectors.lance.docs.docs-gte-base-ft-run1",
-        description="FT'd Alibaba-NLP/gte-base-en-v1.5 on pay-com docs (Run 1).",
-    ),
 }
 
 DEFAULT_MODEL = "coderank"

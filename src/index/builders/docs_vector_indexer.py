@@ -395,7 +395,7 @@ def _open_or_create_writer(
     # Fast-fail thresholds for the FIRST FAST_FAIL_PROBE rows. If the FT'd
     # encoder produces >=FAST_FAIL_RATIO NaN/Inf in that probe window, the
     # build will produce an empty index (LanceDB no_table) and waste 30-40
-    # min on optimize-of-nothing — observed twice on docs-mxbai-ft-run1.
+    # min on optimize-of-nothing — observed twice on early FT candidates.
     # Fail loud immediately so the orchestrator can mark the candidate dead
     # and free the pod.
     FAST_FAIL_PROBE = 200
@@ -590,7 +590,7 @@ def build_docs_vectors(
       incremental runs that share one reindex at the end.
     - ``model_key`` (default "docs"): which entry in ``src.models``'s
       EMBEDDING_MODELS to load. Switch to a Run-1 candidate key (e.g.
-      "docs-nomic-ft-run1") to bench an FT'd model into its own lance dir.
+      "docs-nomic-ft-v2") to bench an FT'd model into its own lance dir.
     - The embed loop streams each batch directly into LanceDB and releases
       refs + MPS cache between batches; a psutil watchdog hard-exits on
       memory pressure so the next run resumes from the rowid checkpoint.
