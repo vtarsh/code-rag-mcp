@@ -100,6 +100,10 @@ class LocalRerankerProvider:
     Short names (no "/") auto-prefix "cross-encoder/" for HuggingFace compatibility.
     """
 
+    # NOTE: Generic MS-MARCO rerankers are harmful for code search (-6pp hit@10).
+    # They are trained on natural language and mis-rank code snippets by boosting
+    # keyword-stuffed docs/package-map files. Use a code-aware fine-tuned model
+    # (e.g. Tarshevskiy/pay-com-rerank-l12-ft-run1) for code search instead.
     DEFAULT_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
     def __init__(self, model_name: str | None = None):

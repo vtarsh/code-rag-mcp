@@ -67,6 +67,10 @@ GRPC_DOMAIN_SUFFIX: str = CONFIG.get("grpc_domain_suffix", "")
 EMBEDDING_MODEL_KEY: str = CONFIG.get("embedding_model", os.getenv("CODE_RAG_MODEL", "coderank"))
 
 # --- Reranker model (CrossEncoder; short names auto-prefix "cross-encoder/") ---
+# WARNING: Generic MS-MARCO rerankers mis-rank code snippets (-6pp hit@10).
+# They boost keyword-stuffed docs/package-map files above real code because
+# they are trained on natural-language text. Use a code-aware fine-tuned
+# reranker for code search (set via CODE_RAG_CODE_RERANKER or config).
 RERANKER_MODEL: str = CONFIG.get(
     "reranker_model", os.getenv("CODE_RAG_RERANKER", "cross-encoder/ms-marco-MiniLM-L-6-v2")
 )
