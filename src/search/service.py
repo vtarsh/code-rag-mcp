@@ -165,10 +165,9 @@ def preprocess_query(query: str) -> tuple[str, list[str]]:
     # possible so the snippet display matches user intent.
     lower_query = query.lower()
     for provider in _PROVIDER_NAMES:
-        if re.search(r"\b" + re.escape(provider) + r"\b", lower_query):
-            if provider not in seen:
-                seen.add(provider)
-                entities.append(provider)
+        if re.search(r"\b" + re.escape(provider) + r"\b", lower_query) and provider not in seen:
+            seen.add(provider)
+            entities.append(provider)
 
     # Repo names — match tokens against static known-repo set.
     for m in _REPO_TOKEN_RE.finditer(query):
@@ -243,6 +242,18 @@ def search_tool(
         cross_provider=cross_provider,
         docs_index=docs_index,
     )
+
+    # 2026-05-17: Env-gated default exclude for noisy file types that
+    # dominate FTS5 keyword search and degrade code-search quality.
+    # package_usage — package-map files with keyword-stuffed metadata.
+    # provider_doc  — provider documentation with generic payment terms.
+    # dictionary    — glossary files that match almost any query.
+    # Eval impact (RunPod jira n=665): +6.47pp hit@10 when excluded.
+    default_exclude = os.environ.get("CODE_RAG_DEFAULT_EXCLUDE", "")
+    if default_exclude and exclude_file_types:
+        exclude_file_types = exclude_file_types + "," + default_exclude
+    elif default_exclude:
+        exclude_file_types = default_exclude
 
     def _compute() -> str:
         ranked, vec_err, total_candidates = hybrid_search(

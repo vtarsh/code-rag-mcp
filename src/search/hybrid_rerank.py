@@ -187,6 +187,16 @@ def rerank(
     `scripts/eval_finetune.py --use-hybrid-retrieval` to score the same RRF pool
     with an arbitrary CrossEncoder so eval shares the production candidate set.
     """
+    # 2026-05-17: Kill-switch for the reranker leg.
+    # Generic MS-MARCO rerankers (e.g. cross-encoder/ms-marco-MiniLM-L-12-v2)
+    # are trained on natural-language text and mis-rank code snippets.
+    # They boost keyword-stuffed docs/package-map files above real code.
+    # Fine-tuned code rerankers (e.g. pay-com-rerank-l12-ft-run1) work well.
+    # When the env var is set we bypass reranking entirely and return the
+    # RRF-fused pool unchanged.
+    if os.environ.get("CODE_RAG_DISABLE_RERANK") == "1":
+        return results[:limit]
+
     if not results or len(results) <= 1:
         return results
 
