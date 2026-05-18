@@ -83,6 +83,15 @@ _FRONTEND_KEYWORDS = frozenset(
         "dashboard",
         "wizard",
         "backoffice",
+        # Plurals (word-boundary "merchant" does NOT match "merchants")
+        "merchants",
+        "buttons",
+        "tabs",
+        "pages",
+        "forms",
+        "tables",
+        "cards",
+        "inputs",
     }
 )
 _FRONTEND_REPOS = frozenset(
