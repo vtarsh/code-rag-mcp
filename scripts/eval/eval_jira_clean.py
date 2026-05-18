@@ -106,6 +106,7 @@ def main() -> int:
             "hit_at_k": hit,
             "recall_at_k": round(recall, 4),
             "ndcg_at_k": round(ndcg, 4),
+            "top_10_repos": [r[0] for r in retrieved],
             "strata": row.get("strata", []),
         }
         eval_per_query.append(q_result)

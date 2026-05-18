@@ -63,10 +63,10 @@ def expand_query(query: str) -> str:
     lower_tokens = {t.lower().strip(".,;:!?\"'") for t in tokens}
     expansions = []
 
-    # Pass 1: single-token glossary
+    # Pass 1: single-token glossary (only expand short tokens — abbreviations/typos)
     for token in tokens:
         key = token.lower().strip(".,;:!?\"'")
-        if key in DOMAIN_GLOSSARY:
+        if key in DOMAIN_GLOSSARY and len(key) <= 6:
             expansions.append(DOMAIN_GLOSSARY[key])
 
     # Pass 2: phrase-aware glossary (multi-token patterns)
