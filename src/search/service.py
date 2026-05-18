@@ -39,6 +39,7 @@ _USE_EXPAND_QUERY = os.getenv("CODE_RAG_USE_EXPAND_QUERY", "1") == "1"
 # frontend repos so backoffice-web / hosted-files surface above backend API.
 _FRONTEND_KEYWORDS = frozenset(
     {
+        # Pure UI/UX terms — these strongly indicate frontend work
         "component",
         "button",
         "modal",
@@ -79,37 +80,9 @@ _FRONTEND_KEYWORDS = frozenset(
         "focus",
         "scroll",
         "drag",
-        # Business-domain terms that strongly correlate with backoffice-web UI work
-        "merchant",
-        "compliance",
-        "underwriting",
-        "risk",
-        "alert",
-        "audit",
-        "document",
-        "preview",
         "dashboard",
-        "report",
-        "view",
-        "screen",
         "wizard",
-        "flow",
-        "step",
-        "field",
-        "fields",
-        "settlement",
-        "account",
-        "application",
-        "tasks",
-        "list",
-        "support",
-        "details",
-        "entity",
-        "management",
         "backoffice",
-        "drilldown",
-        "values",
-        "access",
     }
 )
 _FRONTEND_REPOS = frozenset(
@@ -135,7 +108,18 @@ _FRONTEND_REPOS = frozenset(
         "next-web-settlement-drilldown",
     }
 )
-_FRONTEND_BOOST = float(os.getenv("CODE_RAG_FRONTEND_BOOST", "1.0"))
+_FRONTEND_BOOST = float(os.getenv("CODE_RAG_FRONTEND_BOOST", "1.3"))
+
+# Backend repos that don't match the standard prefixes (grpc-, workflow-, express-api-)
+# but are still backend/infrastructure repos that should receive backend boosts.
+_BACKEND_REPOS = frozenset(
+    {
+        "graphql",
+        GATEWAY_REPO,
+        FEATURE_REPO,
+        CREDENTIALS_REPO,
+    }
+)
 
 # Backend signals — when present, the user is almost certainly doing backend work.
 _BACKEND_KEYWORDS = frozenset(
@@ -333,8 +317,12 @@ def _detect_intent_adjustments(
     - is_backend: True when query contains backend signals
     """
     lower = query.lower()
-    has_frontend = any(kw in lower for kw in _FRONTEND_KEYWORDS)
-    has_backend = any(kw in lower for kw in _BACKEND_KEYWORDS)
+    has_frontend = False
+    for kw in _FRONTEND_KEYWORDS:
+        if re.search(r"\b" + re.escape(kw) + r"\b", lower):
+            has_frontend = True
+            break
+    has_backend = False
     for kw in _BACKEND_KEYWORDS:
         if re.search(r"\b" + re.escape(kw) + r"\b", lower):
             has_backend = True
@@ -349,11 +337,17 @@ def _detect_intent_adjustments(
     if has_backend and not has_frontend:
         # Pure backend query: demote front-end repos, boost backend repos
         repo_boost = {repo: _FRONTEND_DEMOTE_MULTIPLIER for repo in _FRONTEND_REPOS}
+        repo_boost.update({repo: _BACKEND_BOOST_MULTIPLIER for repo in _BACKEND_REPOS if repo})
         repo_prefix_boost = {prefix: _BACKEND_BOOST_MULTIPLIER for prefix in _BACKEND_REPO_PREFIXES}
-    elif is_frontend_only or is_mixed:
-        # Pure frontend or mixed query: boost front-end repos
-        # (backend boost is too noisy for mixed queries like "Update Merchant")
+    elif is_frontend_only:
+        # Pure frontend query: boost front-end repos
         repo_boost = {repo: _FRONTEND_BOOST for repo in _FRONTEND_REPOS}
+    elif is_mixed:
+        # Mixed query: apply both frontend boost and backend boost
+        # (previously backend boost was suppressed, causing backend misses)
+        repo_boost = {repo: _FRONTEND_BOOST for repo in _FRONTEND_REPOS}
+        repo_boost.update({repo: _BACKEND_BOOST_MULTIPLIER for repo in _BACKEND_REPOS if repo})
+        repo_prefix_boost = {prefix: _BACKEND_BOOST_MULTIPLIER for prefix in _BACKEND_REPO_PREFIXES}
 
     return repo_boost, repo_prefix_boost, is_frontend_only, has_backend
 
