@@ -34,12 +34,194 @@ from src.search.suggestions import format_no_results
 # rebuild via Doc2Query. See `.claude/debug/current/meta-converged.md`.
 _USE_EXPAND_QUERY = os.getenv("CODE_RAG_USE_EXPAND_QUERY", "0") == "1"
 
+# 2026-05-18: Frontend/backend query intent routing.
+# When a query smells like UI work (contains frontend keywords), boost
+# frontend repos so backoffice-web / hosted-files surface above backend API.
+_FRONTEND_KEYWORDS = frozenset(
+    {
+        "component",
+        "button",
+        "modal",
+        "tab",
+        "page",
+        "form",
+        "ui",
+        "style",
+        "css",
+        "tsx",
+        "layout",
+        "icon",
+        "tooltip",
+        "dropdown",
+        "menu",
+        "nav",
+        "sidebar",
+        "header",
+        "table",
+        "card",
+        "input",
+        "checkbox",
+        "radio",
+        "select",
+        "filter",
+        "toggle",
+        "accordion",
+        "carousel",
+        "image",
+        "chart",
+        "render",
+        "display",
+        "click",
+        "event",
+        "handler",
+        "animation",
+        "hover",
+        "focus",
+        "scroll",
+        "drag",
+        # Business-domain terms that strongly correlate with backoffice-web UI work
+        "merchant",
+        "compliance",
+        "underwriting",
+        "risk",
+        "alert",
+        "audit",
+        "document",
+        "preview",
+        "dashboard",
+        "report",
+        "view",
+        "screen",
+        "wizard",
+        "flow",
+        "step",
+        "field",
+        "fields",
+        "settlement",
+        "account",
+        "application",
+        "tasks",
+        "list",
+        "support",
+        "details",
+        "entity",
+        "management",
+        "backoffice",
+        "drilldown",
+        "values",
+        "access",
+    }
+)
+_FRONTEND_REPOS = frozenset(
+    {
+        "backoffice-web",
+        "hosted-fields",
+        "space-web",
+        "components",
+        "paypass-web",
+        "checkout-web",
+        "next-web-transaction-drilldown",
+    }
+)
+_FRONTEND_BOOST = float(os.getenv("CODE_RAG_FRONTEND_BOOST", "1.5"))
+
+# Backend veto keywords — if a query contains any of these it is almost certainly
+# backend/API/provider work and should NOT receive a frontend repo boost.
+_BACKEND_VETO_KEYWORDS = frozenset(
+    {
+        # Integration / provider signals
+        "provider",
+        "integration",
+        "grpc",
+        "microservice",
+        "worker",
+        "gateway",
+        "apm",
+        # Core backend operations
+        "payout",
+        "refund",
+        "charge",
+        "hold",
+        "auth",
+        "token",
+        "api",
+        "dispute",
+        "retry",
+        "processor",
+        "cvv",
+        "decline",
+        "validation",
+        "cancel auth",
+        "full risk check",
+        # Data / infra
+        "postgres",
+        "postgresql",
+        "pg lib",
+        "partition",
+        "tuple",
+        "clearing",
+        "timezone",
+        "reference",
+        "changelogs",
+        "bank transfer",
+        "routes",
+        "services",
+        "workflow-tasks",
+        # Export / file-gen (usually backend-driven)
+        "export",
+        "csv",
+        "pdf",
+        # Provider names (exact word matching prevents false hits like 'tab' in 'tabapay')
+        "braintree",
+        "ecentric",
+        "shift4",
+        "libra",
+        "iris",
+        "paypal",
+        "silverflow",
+        "tabapay",
+        "nuvei",
+        "trustly",
+        "gumballpay",
+        "nexi",
+        "visa",
+        "applepay",
+        "worldpay",
+        "neosurf",
+        "payper",
+        "ach",
+        "rtp",
+        "hubspot",
+        "google utils",
+    }
+)
+
+
 _HIGHLIGHT_RE = re.compile(r">>>|<<<")
 # FTS5 truncates the "[Repo: repo-name]" prefix via its ellipsis to leave a
 # "...repo-name]" residue at the start of each snippet. strip_repo_tag() only
 # handles the full "[Repo: ...]" tag, so we clean the residue separately in
 # brief mode where every byte matters.
 _REPO_RESIDUE_RE = re.compile(r"^\.\.\.[a-zA-Z0-9_-]+\]\s*")
+
+
+def _detect_repo_boost(query: str) -> dict[str, float] | None:
+    """Return repo-boost map if query smells like frontend UI work.
+
+    Requires at least one frontend keyword and ZERO backend veto keywords.
+    Word-boundary matching prevents ``tab`` matching inside ``tabapay``.
+    """
+    lower = query.lower()
+    # Fast path: substring check for frontend keywords
+    has_frontend = any(kw in lower for kw in _FRONTEND_KEYWORDS)
+    if not has_frontend:
+        return None
+    # Veto: if any backend keyword matches as a whole word, do not boost
+    for kw in _BACKEND_VETO_KEYWORDS:
+        if re.search(r"\b" + re.escape(kw) + r"\b", lower):
+            return None
+    return {repo: _FRONTEND_BOOST for repo in _FRONTEND_REPOS}
+
 
 # Regex patterns for entity extraction in long-query preprocessing.
 _FILE_EXT_RE = re.compile(r"\.(ts|tsx|js|go|py|sql)\b", re.IGNORECASE)
@@ -255,6 +437,8 @@ def search_tool(
     elif default_exclude:
         exclude_file_types = default_exclude
 
+    repo_boost = _detect_repo_boost(query)
+
     def _compute() -> str:
         ranked, vec_err, total_candidates = hybrid_search(
             search_query,
@@ -265,6 +449,7 @@ def search_tool(
             cross_provider=cross_provider,
             docs_index=docs_index,
             entity_boost=1.3 if use_entity_boost else 1.0,
+            repo_boost=repo_boost,
         )
 
         # Fallback to original query if entity-boosted search returns too few results.
@@ -278,6 +463,7 @@ def search_tool(
                 limit,
                 cross_provider=cross_provider,
                 docs_index=docs_index,
+                repo_boost=repo_boost,
             )
             actual_query = expanded
 
