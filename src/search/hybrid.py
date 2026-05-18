@@ -394,6 +394,7 @@ def hybrid_search(
     docs_index: bool | None = None,
     entity_boost: float = 1.0,
     repo_boost: dict[str, float] | None = None,
+    repo_prefix_boost: dict[str, float] | None = None,
 ) -> tuple[list[dict], str | None, int]:
     """Hybrid search: combine FTS5 keyword + vector similarity via RRF.
 
@@ -427,6 +428,11 @@ def hybrid_search(
     `repo_boost` (2026-05-18): per-repo score multiplier applied after RRF
     fusion. Used for frontend/backend query routing — e.g. boosting
     backoffice-web / hosted-fields when the query smells like UI work.
+
+    `repo_prefix_boost` (2026-05-18): per-repo-prefix score multiplier.
+    When a repo name starts with any of the given prefixes, its RRF score
+    is multiplied by the corresponding value. Used to boost backend repos
+    (grpc-, workflow-, express-api-, ...) for backend-focused queries.
 
     Returns (ranked_results, vector_error | None, total_candidates).
     """
@@ -551,6 +557,15 @@ def hybrid_search(
             repo = data.get("repo_name", "")
             if repo in repo_boost:
                 data["score"] *= repo_boost[repo]
+
+    # 2026-05-18: prefix-based repo boost for backend query routing.
+    if repo_prefix_boost:
+        for data in scores.values():
+            repo = data.get("repo_name", "")
+            for prefix, mult in repo_prefix_boost.items():
+                if repo.startswith(prefix):
+                    data["score"] *= mult
+                    break
 
     keyword_only_count = sum(1 for s in scores.values() if s.get("sources") == ["keyword"])
     vector_only_count = sum(1 for s in scores.values() if s.get("sources") == ["vector"])

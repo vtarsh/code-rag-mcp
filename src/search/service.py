@@ -123,13 +123,11 @@ _FRONTEND_REPOS = frozenset(
         "next-web-transaction-drilldown",
     }
 )
-_FRONTEND_BOOST = float(os.getenv("CODE_RAG_FRONTEND_BOOST", "1.5"))
+_FRONTEND_BOOST = float(os.getenv("CODE_RAG_FRONTEND_BOOST", "1.0"))
 
-# Backend veto keywords — if a query contains any of these it is almost certainly
-# backend/API/provider work and should NOT receive a frontend repo boost.
-_BACKEND_VETO_KEYWORDS = frozenset(
+# Backend signals — when present, the user is almost certainly doing backend work.
+_BACKEND_KEYWORDS = frozenset(
     {
-        # Integration / provider signals
         "provider",
         "integration",
         "grpc",
@@ -137,7 +135,6 @@ _BACKEND_VETO_KEYWORDS = frozenset(
         "worker",
         "gateway",
         "apm",
-        # Core backend operations
         "payout",
         "refund",
         "charge",
@@ -151,9 +148,6 @@ _BACKEND_VETO_KEYWORDS = frozenset(
         "cvv",
         "decline",
         "validation",
-        "cancel auth",
-        "full risk check",
-        # Data / infra
         "postgres",
         "postgresql",
         "pg lib",
@@ -167,11 +161,9 @@ _BACKEND_VETO_KEYWORDS = frozenset(
         "routes",
         "services",
         "workflow-tasks",
-        # Export / file-gen (usually backend-driven)
         "export",
         "csv",
         "pdf",
-        # Provider names (exact word matching prevents false hits like 'tab' in 'tabapay')
         "braintree",
         "ecentric",
         "shift4",
@@ -193,8 +185,119 @@ _BACKEND_VETO_KEYWORDS = frozenset(
         "rtp",
         "hubspot",
         "google utils",
+        "webhook",
+        "callback",
+        "sale",
+        "reserve",
+        "adjustment",
+        "reconciliation",
+        "3ds",
+        "risk engine",
+        "pg migration",
+        "migration",
+        "sandbox",
+        "ledger",
+        "settlement",
+        "routing",
+        "routing rule",
+        "fee",
+        "pricing",
+        "quote",
+        "batch",
+        "sftp",
+        "cron",
+        "job",
+        "kafka",
+        "cdc",
+        "scylla",
+        "clickhouse",
+        "snowflake",
+        "vault",
+        "encryption",
+        "decrypt",
+        "hash",
+        "hmac",
+        "jwt",
+        "session",
+        "cookie",
+        "oauth",
+        "saml",
+        "mfa",
+        "2fa",
+        "captcha",
+        "fraud",
+        "aml",
+        "kyc",
+        "pci",
+        "gdpr",
+        "hipaa",
+        "soc2",
+        "iso27001",
+        "penetration test",
+        "security audit",
+        "vulnerability",
+        "cve",
+        "dependency",
+        "package",
+        "npm",
+        "pip",
+        "go mod",
+        "maven",
+        "gradle",
+        "docker",
+        "kubernetes",
+        "k8s",
+        "helm",
+        "terraform",
+        "ansible",
+        "pulumi",
+        "aws",
+        "gcp",
+        "azure",
+        "cloudflare",
+        "cdn",
+        "dns",
+        "ssl",
+        "tls",
+        "certificate",
+        "load balancer",
+        "reverse proxy",
+        "nginx",
+        "envoy",
+        "istio",
+        "linkerd",
+        "consul",
+        "etcd",
+        "zookeeper",
+        "redis",
+        "memcached",
+        "rabbitmq",
+        "sqs",
+        "sns",
+        "eventbridge",
+        "lambda",
+        "function",
+        "serverless",
+        "faas",
+        "pulumi",
     }
 )
+
+_BACKEND_REPO_PREFIXES = (
+    "grpc-",
+    "workflow-",
+    "express-api-",
+    "backend-utils",
+    "boilerplate-api-",
+    "boilerplate-grpc-",
+    "boilerplate-temporal-",
+    "boilerplate-node-mali-",
+    "boilerplate-node-providers-",
+    "boilerplate-node-service",
+    "boilerplate-go-grpc-",
+)
+_FRONTEND_DEMOTE_MULTIPLIER = float(os.getenv("CODE_RAG_FRONTEND_DEMOTE", "0.5"))
+_BACKEND_BOOST_MULTIPLIER = float(os.getenv("CODE_RAG_BACKEND_BOOST", "1.2"))
 
 
 _HIGHLIGHT_RE = re.compile(r">>>|<<<")
@@ -205,22 +308,40 @@ _HIGHLIGHT_RE = re.compile(r">>>|<<<")
 _REPO_RESIDUE_RE = re.compile(r"^\.\.\.[a-zA-Z0-9_-]+\]\s*")
 
 
-def _detect_repo_boost(query: str) -> dict[str, float] | None:
-    """Return repo-boost map if query smells like frontend UI work.
+def _detect_intent_adjustments(
+    query: str,
+) -> tuple[dict[str, float] | None, dict[str, float] | None, bool, bool]:
+    """Detect query intent and return repo adjustment maps.
 
-    Requires at least one frontend keyword and ZERO backend veto keywords.
-    Word-boundary matching prevents ``tab`` matching inside ``tabapay``.
+    Returns:
+        (repo_boost, repo_prefix_boost, is_frontend_only, is_backend)
+
+    - repo_boost: exact-repo multipliers (e.g. demote front-end repos)
+    - repo_prefix_boost: prefix-based multipliers (e.g. boost grpc-/workflow- repos)
+    - is_frontend_only: True when query is purely UI-focused
+    - is_backend: True when query contains backend signals
     """
     lower = query.lower()
-    # Fast path: substring check for frontend keywords
     has_frontend = any(kw in lower for kw in _FRONTEND_KEYWORDS)
-    if not has_frontend:
-        return None
-    # Veto: if any backend keyword matches as a whole word, do not boost
-    for kw in _BACKEND_VETO_KEYWORDS:
+    has_backend = any(kw in lower for kw in _BACKEND_KEYWORDS)
+    for kw in _BACKEND_KEYWORDS:
         if re.search(r"\b" + re.escape(kw) + r"\b", lower):
-            return None
-    return {repo: _FRONTEND_BOOST for repo in _FRONTEND_REPOS}
+            has_backend = True
+            break
+
+    repo_boost = None
+    repo_prefix_boost = None
+
+    if has_backend:
+        # Demote front-end repos so they don't steal top-10 slots
+        repo_boost = {repo: _FRONTEND_DEMOTE_MULTIPLIER for repo in _FRONTEND_REPOS}
+        # Boost backend repos (grpc-, workflow-, express-api-, ...)
+        repo_prefix_boost = {
+            prefix: _BACKEND_BOOST_MULTIPLIER for prefix in _BACKEND_REPO_PREFIXES
+        }
+
+    is_frontend_only = has_frontend and not has_backend
+    return repo_boost, repo_prefix_boost, is_frontend_only, has_backend
 
 
 # Regex patterns for entity extraction in long-query preprocessing.
@@ -437,7 +558,7 @@ def search_tool(
     elif default_exclude:
         exclude_file_types = default_exclude
 
-    repo_boost = _detect_repo_boost(query)
+    repo_boost, repo_prefix_boost, is_frontend_only, is_backend = _detect_intent_adjustments(query)
 
     def _compute() -> str:
         ranked, vec_err, total_candidates = hybrid_search(
@@ -450,6 +571,7 @@ def search_tool(
             docs_index=docs_index,
             entity_boost=1.3 if use_entity_boost else 1.0,
             repo_boost=repo_boost,
+            repo_prefix_boost=repo_prefix_boost,
         )
 
         # Fallback to original query if entity-boosted search returns too few results.
@@ -464,6 +586,7 @@ def search_tool(
                 cross_provider=cross_provider,
                 docs_index=docs_index,
                 repo_boost=repo_boost,
+                repo_prefix_boost=repo_prefix_boost,
             )
             actual_query = expanded
 
@@ -507,9 +630,12 @@ def search_tool(
             # Drop "Found N of M candidates for 'query'" re-echo.
             # Keep the vector-search-unavailable warning when present — it's
             # a quality signal the caller needs, not bloat.
+            prefix = ""
+            if is_frontend_only:
+                prefix = "⚠️ Frontend query detected — search is optimized for backend code, UI results may be incomplete.\n\n"
             if vec_err:
-                return f"⚠️ Vector search unavailable: {vec_err} (keyword only)\n\n" + "\n".join(results)
-            return "\n".join(results)
+                return prefix + f"⚠️ Vector search unavailable: {vec_err} (keyword only)\n\n" + "\n".join(results)
+            return prefix + "\n".join(results)
 
         header = f"Found {len(ranked)} of {total_candidates} candidates for '{query}'"
         if repo:
