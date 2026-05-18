@@ -32,7 +32,7 @@ from src.search.suggestions import format_no_results
 # and v2 hit@10 by -6.81pp (W2-curated bench), regardless of curation effort.
 # Set `CODE_RAG_USE_EXPAND_QUERY=1` to re-enable for A/B or future glossary
 # rebuild via Doc2Query. See `.claude/debug/current/meta-converged.md`.
-_USE_EXPAND_QUERY = os.getenv("CODE_RAG_USE_EXPAND_QUERY", "0") == "1"
+_USE_EXPAND_QUERY = os.getenv("CODE_RAG_USE_EXPAND_QUERY", "1") == "1"
 
 # 2026-05-18: Frontend/backend query intent routing.
 # When a query smells like UI work (contains frontend keywords), boost
@@ -120,7 +120,19 @@ _FRONTEND_REPOS = frozenset(
         "components",
         "paypass-web",
         "checkout-web",
+        "microfrontends-web",
         "next-web-transaction-drilldown",
+        "next-web-alternative-payment-methods",
+        "next-web-authorizing-transactions",
+        "next-web-balance",
+        "next-web-checkout",
+        "next-web-decline-recovery",
+        "next-web-dynamic-currency-converter",
+        "next-web-partial-approval",
+        "next-web-pay-with-bank",
+        "next-web-payment-methods-configurations",
+        "next-web-risk-rules",
+        "next-web-settlement-drilldown",
     }
 )
 _FRONTEND_BOOST = float(os.getenv("CODE_RAG_FRONTEND_BOOST", "1.0"))
@@ -279,7 +291,6 @@ _BACKEND_KEYWORDS = frozenset(
         "function",
         "serverless",
         "faas",
-        "pulumi",
     }
 )
 
@@ -296,8 +307,8 @@ _BACKEND_REPO_PREFIXES = (
     "boilerplate-node-service",
     "boilerplate-go-grpc-",
 )
-_FRONTEND_DEMOTE_MULTIPLIER = float(os.getenv("CODE_RAG_FRONTEND_DEMOTE", "0.5"))
-_BACKEND_BOOST_MULTIPLIER = float(os.getenv("CODE_RAG_BACKEND_BOOST", "1.2"))
+_FRONTEND_DEMOTE_MULTIPLIER = float(os.getenv("CODE_RAG_FRONTEND_DEMOTE", "0.9"))
+_BACKEND_BOOST_MULTIPLIER = float(os.getenv("CODE_RAG_BACKEND_BOOST", "1.05"))
 
 
 _HIGHLIGHT_RE = re.compile(r">>>|<<<")
@@ -329,18 +340,21 @@ def _detect_intent_adjustments(
             has_backend = True
             break
 
+    is_frontend_only = has_frontend and not has_backend
+    is_mixed = has_frontend and has_backend
+
     repo_boost = None
     repo_prefix_boost = None
 
-    if has_backend:
-        # Demote front-end repos so they don't steal top-10 slots
+    if has_backend and not has_frontend:
+        # Pure backend query: demote front-end repos, boost backend repos
         repo_boost = {repo: _FRONTEND_DEMOTE_MULTIPLIER for repo in _FRONTEND_REPOS}
-        # Boost backend repos (grpc-, workflow-, express-api-, ...)
-        repo_prefix_boost = {
-            prefix: _BACKEND_BOOST_MULTIPLIER for prefix in _BACKEND_REPO_PREFIXES
-        }
+        repo_prefix_boost = {prefix: _BACKEND_BOOST_MULTIPLIER for prefix in _BACKEND_REPO_PREFIXES}
+    elif is_frontend_only or is_mixed:
+        # Pure frontend or mixed query: boost front-end repos
+        # (backend boost is too noisy for mixed queries like "Update Merchant")
+        repo_boost = {repo: _FRONTEND_BOOST for repo in _FRONTEND_REPOS}
 
-    is_frontend_only = has_frontend and not has_backend
     return repo_boost, repo_prefix_boost, is_frontend_only, has_backend
 
 

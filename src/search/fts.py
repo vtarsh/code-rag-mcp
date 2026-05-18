@@ -30,11 +30,11 @@ def expand_query_dictionary(query: str) -> str:
         return query
 
     tokens = query.split()
-    lower_tokens = {t.lower().strip(".,;:!?") for t in tokens}
+    lower_tokens = {t.lower().strip(".,;:!?\"'") for t in tokens}
     expansions: list[str] = []
 
     for token in tokens:
-        key = token.lower().strip(".,;:!?")
+        key = token.lower().strip(".,;:!?\"'")
         if key in DICTIONARY_ALIAS_MAP:
             for variant in DICTIONARY_ALIAS_MAP[key]:
                 if variant.lower() not in lower_tokens:
@@ -60,12 +60,12 @@ def expand_query(query: str) -> str:
     Example: "NT provider flow" -> "NT provider flow network token"
     """
     tokens = query.split()
-    lower_tokens = {t.lower().strip(".,;:!?") for t in tokens}
+    lower_tokens = {t.lower().strip(".,;:!?\"'") for t in tokens}
     expansions = []
 
     # Pass 1: single-token glossary
     for token in tokens:
-        key = token.lower().strip(".,;:!?")
+        key = token.lower().strip(".,;:!?\"'")
         if key in DOMAIN_GLOSSARY:
             expansions.append(DOMAIN_GLOSSARY[key])
 

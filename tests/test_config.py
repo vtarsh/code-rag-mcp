@@ -35,7 +35,7 @@ class TestDomainGlossary:
             assert key == key.lower(), f"Key '{key}' should be lowercase"
 
     def test_common_abbreviations_present(self):
-        expected = ["nt", "3ds", "apm", "ddm", "pci", "ach"]
+        expected = ["nt", "3ds", "apm", "ddm", "pci", "applpay"]
         for abbr in expected:
             assert abbr in DOMAIN_GLOSSARY, f"'{abbr}' missing from glossary"
 
