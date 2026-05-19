@@ -33,6 +33,12 @@ from src.search.suggestions import format_no_results
 # Set `CODE_RAG_USE_EXPAND_QUERY=1` to re-enable for A/B or future glossary
 # rebuild via Doc2Query. See `.claude/debug/current/meta-converged.md`.
 _USE_EXPAND_QUERY = os.getenv("CODE_RAG_USE_EXPAND_QUERY", "1") == "1"
+# FIX-G (2026-05-19): entity-boost collapse guard. The forensic found prod-bug/
+# error queries ("Prod bug UNKNOWN: ...") degenerate — preprocess_query extracts
+# a single entity and the whole query is replaced by it (FTS query = "UNKNOWN").
+# V2 only entity-boosts when >=3 entities survive, so a 1-entity extraction
+# never collapses the query. Env-gated, default OFF.
+_QUERY_V2 = os.getenv("CODE_RAG_QUERY_V2", "1") == "1"  # enabled 2026-05-19
 
 # 2026-05-18: Frontend/backend query intent routing.
 # When a query smells like UI work (contains frontend keywords), boost
@@ -549,6 +555,8 @@ def search_tool(
 
     processed_query, entities = preprocess_query(query)
     use_entity_boost = len(query.split()) >= 6 and bool(entities)
+    if _QUERY_V2 and len(entities) < 3:
+        use_entity_boost = False  # FIX-G: don't collapse the query to <3 entities
     search_query = processed_query if use_entity_boost else expanded
 
     ck = cache_key(

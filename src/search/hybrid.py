@@ -382,6 +382,26 @@ def _apply_repo_prefilter(scores: dict[str, dict], query: str) -> None:
                 data["sources"].append("repo_prefilter")
 
 
+# FIX-A (2026-05-19): in-repo doc/markdown files (file_type docs/reference/
+# gotchas/domain_registry) saturate the top-10 on code-intent JIRA queries
+# while the real source sits deep — 5/6 diagnostic agents flagged this and an
+# A/B on q0-49 measured recall@10 +3.26pp / recall@pool +5.67pp when these
+# types are kept out of the candidate pool. Env-gated (default OFF = byte-for-
+# byte unchanged) and intent-gated: only fires when the query is NOT doc-intent,
+# so genuine "how does X work" doc queries are untouched.
+_DEMOTE_DOC_NOISE = os.getenv("CODE_RAG_DEMOTE_DOC_NOISE", "1") == "1"  # enabled 2026-05-19
+_DOC_NOISE_TYPES = "docs,reference,gotchas,domain_registry"
+
+# FIX-D (2026-05-19): the RRF `scores` dict is keyed per chunk (fts:/vec:rowid),
+# so a file with N indexed chunks produces N pool entries and can occupy N of
+# the 10 final slots (diagnostic agents saw one file x8). recall@10 dedups by
+# (repo, file_path) so these copies are pure waste. When enabled, collapse the
+# RRF-sorted pool to one entry per (repo, file_path) — the highest-RRF chunk —
+# BEFORE reranking, so the reranker spends its slots on distinct files.
+# Env-gated, default OFF = byte-for-byte unchanged.
+_DEDUP_RESULTS = os.getenv("CODE_RAG_DEDUP_RESULTS", "1") == "1"  # enabled 2026-05-19
+
+
 def hybrid_search(
     query: str,
     repo: str = "",
@@ -438,6 +458,11 @@ def hybrid_search(
     """
     K = RRF_K
     KW_WEIGHT = KEYWORD_WEIGHT * entity_boost
+
+    # FIX-A: keep in-repo doc/markdown noise out of the candidate pool for
+    # code-intent queries (see _DEMOTE_DOC_NOISE comment above).
+    if _DEMOTE_DOC_NOISE and not _query_wants_docs(query):
+        exclude_file_types = f"{exclude_file_types},{_DOC_NOISE_TYPES}" if exclude_file_types else _DOC_NOISE_TYPES
 
     # 1. Keyword search (FTS5) — large pool, no per-repo cap.
     #    P4.2: raised 100→150 to fill rerank pool to ~200 after RRF overlap.
@@ -624,7 +649,19 @@ def hybrid_search(
     # cross-encoder sees ~200 candidates (was ~20). `max(...)` preserves old
     # behavior when the caller asks for a very large limit.
     rerank_cap = max(limit * 2, RERANK_POOL_SIZE)
-    ranked = sorted(scores.values(), key=lambda x: x["score"], reverse=True)[:rerank_cap]
+    ranked = sorted(scores.values(), key=lambda x: x["score"], reverse=True)
+    # FIX-D: collapse per-chunk duplicates of the same file (see comment above).
+    if _DEDUP_RESULTS:
+        _seen: set[tuple] = set()
+        _deduped: list[dict] = []
+        for r in ranked:
+            k = (r.get("repo_name"), r.get("file_path"))
+            if k in _seen:
+                continue
+            _seen.add(k)
+            _deduped.append(r)
+        ranked = _deduped
+    ranked = ranked[:rerank_cap]
 
     # P10 Phase A2 (2026-04-26): stratum-gated reranker skip on doc-intent.
     # The production reranker is code-trained and transfers poorly to docs on

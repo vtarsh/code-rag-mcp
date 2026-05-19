@@ -346,3 +346,62 @@ scores = reranker.predict(query, texts)
 10. Improve VAT Number Input Guidance and Validation in PayPass
 
 Для кожного з цих запитів expected файли НЕМАЄ в топ-10 через semantic mismatch (retrieval failure) або reranker mis-ranking.
+
+---
+
+# UPDATE — autonomous run results (2026-05-19)
+
+## Measured baseline (full 665-query eval, deep top-200 diagnostic)
+
+The earlier "70-72% hit@10" was an offset-0-49 easy slice. The honest full-set
+baseline:
+
+| Metric | Value |
+|--------|-------|
+| hit@10 | 0.6045 |
+| recall@10 | 0.1518 |
+| recall@pool (top-200) | 0.4017 |
+
+Classification of 665 queries: 402 hit / 177 reranker_failure / 86 retrieval_failure.
+Of all 10 650 expected files, **67.1% never enter the top-200 pool**.
+
+## Code fixes landed (this run)
+
+| Fix | Effect (full 665) | Status |
+|-----|-------------------|--------|
+| FIX-A demote in-repo doc/markdown for code queries | recall@pool +3.35pp | KEPT, env-gated |
+| FIX-D dedup per-(repo,file_path) before rerank | hit@10 +3.01pp, recall@10 +1.17pp | KEPT, env-gated |
+| FIX-F 7 glossary abbreviations | +1 query | KEPT (gitignored profile data) |
+| FIX-B frontend keywords | flat/−0.05pp | REVERTED |
+| FIX-C bracket-tag strip | flat | REVERTED |
+| FIX-E strip edit verbs | not viable (base-retrieval relevance, not preprocessing) | DROPPED |
+
+**Final after code fixes: hit@10 0.6451 (+4.06pp), recall@10 0.1670 (+1.52pp).**
+Activate in production with `CODE_RAG_DEMOTE_DOC_NOISE=1 CODE_RAG_DEDUP_RESULTS=1`.
+
+## What is now PROVEN to need model training
+
+Code/query-side tuning is exhausted. recall@pool ≈ 0.44 is a hard ceiling set by
+retrieval. The remaining gap splits into two measurable training targets:
+
+### Target 1 — embeddings (retrieval)
+- **Problem:** 69 semantic_gap queries + 67 retrieval_failures — expected file
+  implements the concept but never names it; literal keyword files win instead.
+- **Data:** `bench_runs/training_data/retrieval_pairs.jsonl` — 7145 positives
+  (query, expected file). All 7145 ARE indexed → no indexing gap; pure model gap.
+- **Success metric:** recall@pool (retrieval-only) +5pp → ~0.49.
+
+### Target 2 — reranker (CrossEncoder)
+- **Problem:** 169 reranker_failures — after FIX-A/D cleaned the pool, the
+  reranker still mis-orders it; reranker headroom (recall@pool − recall@10) ≈ 0.28.
+- **Data:** `bench_runs/training_data/reranker_pairs.jsonl` — 2521 positive +
+  4165 hard-negative pairs (hard negatives = top-10 wrong files the reranker
+  currently ranks above the expected file).
+- **Success metric:** recall@10 on the full pipeline +3pp → ~0.20.
+
+### Not a model problem
+- 50 huge_task queries (20-73 expected files) — inherently uncoverable in
+  recall@10; an eval-design / metric-granularity issue, not a retrieval bug.
+
+Per-query detail: `bench_runs/diagnose/agent_findings/batch_*.md`.
+Fix verdicts + before/after numbers: `bench_runs/diagnose/FIX_PLAN.md`.

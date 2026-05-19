@@ -242,7 +242,7 @@ class TestSearchTool:
             None,
             10,
         )
-        search_tool("ProviderError throw payout input validation for nuvei merchant")
+        search_tool("ProviderError TimeoutException payout for nuvei merchant validation")
         assert mock_hybrid.call_count == 1
         _, kwargs = mock_hybrid.call_args
         assert kwargs.get("entity_boost") == 1.3
@@ -328,10 +328,10 @@ class TestSearchTool:
                 10,
             ),
         ]
-        result = search_tool("ProviderError throw payout input validation for nuvei merchant")
+        result = search_tool("ProviderError TimeoutException payout for nuvei merchant validation")
         assert mock_hybrid.call_count == 2
         # Second call should use the original expanded query.
-        assert "ProviderError throw payout input validation for nuvei merchant" in mock_hybrid.call_args[0][0]
+        assert "ProviderError TimeoutException payout for nuvei merchant validation" in mock_hybrid.call_args[0][0]
         assert "Found 5 of 10 candidates" in result
 
     @patch("src.container.check_db_health", return_value=None)
@@ -392,7 +392,7 @@ class TestPreprocessQuery:
     def test_extracts_provider_names(self):
         from src.search.service import preprocess_query
 
-        processed, entities = preprocess_query("ProviderError throw payout input validation for nuvei merchant")
+        processed, entities = preprocess_query("ProviderError TimeoutException payout for nuvei merchant validation")
         assert "nuvei" in entities
         assert "ProviderError" in entities
         assert processed == " ".join(entities)

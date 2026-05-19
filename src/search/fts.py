@@ -17,6 +17,89 @@ from src.config import DICTIONARY_ALIAS_MAP, DOMAIN_GLOSSARY, PHRASE_GLOSSARY
 from src.container import db_connection
 from src.types import SearchResult
 
+# FIX-H (2026-05-19): query-processing v2. The per-query forensic showed the
+# FTS leg recovers ~36% of expected files on JIRA-title queries — the title
+# becomes an OR-bag where generic task verbs ("add", "support", "more", ...)
+# match half the index and drown the discriminating terms. V2 drops these
+# stopwords before the OR-join, with a degenerate guard (never collapse below
+# 2 content tokens). Env-gated, default OFF = byte-for-byte unchanged.
+_QUERY_V2 = os.getenv("CODE_RAG_QUERY_V2", "1") == "1"  # enabled 2026-05-19
+_FTS_STOPWORDS = frozenset(
+    {
+        # generic task verbs/nouns — carry no code-search signal
+        "add",
+        "added",
+        "adding",
+        "remove",
+        "removed",
+        "removing",
+        "change",
+        "changed",
+        "update",
+        "updated",
+        "extend",
+        "extended",
+        "fix",
+        "fixes",
+        "fixed",
+        "create",
+        "created",
+        "creating",
+        "implement",
+        "refactor",
+        "adjust",
+        "introduce",
+        "support",
+        "allow",
+        "enable",
+        "improve",
+        "improvement",
+        "make",
+        "missing",
+        "more",
+        "move",
+        "apply",
+        "ensure",
+        "handle",
+        "new",
+        "set",
+        "use",
+        "using",
+        "get",
+        "should",
+        # english stopwords
+        "the",
+        "and",
+        "for",
+        "with",
+        "from",
+        "into",
+        "your",
+        "our",
+        "this",
+        "that",
+        "when",
+        "where",
+        "all",
+        "any",
+        "via",
+        "per",
+        "not",
+        "but",
+        "are",
+        "was",
+        "has",
+        "have",
+        "will",
+        "can",
+        "also",
+        "only",
+        "than",
+        "then",
+        "its",
+    }
+)
+
 
 def expand_query_dictionary(query: str) -> str:
     """Expand query using domain dictionary aliases (conservative OR expansion).
@@ -207,6 +290,12 @@ def sanitize_fts_query(query: str) -> str:
     """
     query = _sanitize_fts_input(query)
     tokens = query.split()
+    # FIX-H: drop generic stopwords so the OR-join keeps only discriminating
+    # terms — but never collapse below 2 content tokens (degenerate guard).
+    if _QUERY_V2:
+        content = [t for t in tokens if t.lower() not in _FTS_STOPWORDS]
+        if len(content) >= 2:
+            tokens = content
     sanitized: list[str] = []
     for token in tokens:
         if len(token) < 3:

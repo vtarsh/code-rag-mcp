@@ -45,7 +45,9 @@ class TestHybridSearch:
     @patch("src.search.hybrid.vector_search", return_value=([], None))
     @patch("src.search.hybrid.fts_search")
     def test_keyword_only(self, mock_fts, mock_vec, mock_rerank):
-        mock_fts.return_value = [_make_sr(1), _make_sr(2)]
+        # distinct repos → distinct file_paths so FIX-D (repo,file_path) dedup
+        # does not collapse them (the _make_sr default shares one file_path).
+        mock_fts.return_value = [_make_sr(1, "repo-a"), _make_sr(2, "repo-c")]
         results, err, total = hybrid_search("payment")
         assert len(results) == 2
         assert err is None
@@ -55,7 +57,8 @@ class TestHybridSearch:
     @patch("src.search.hybrid.vector_search")
     @patch("src.search.hybrid.fts_search", return_value=[])
     def test_vector_only(self, mock_fts, mock_vec, mock_rerank):
-        mock_vec.return_value = ([_make_vr(10), _make_vr(11)], None)
+        # distinct repos → distinct file_paths (FIX-D dedup would otherwise collapse).
+        mock_vec.return_value = ([_make_vr(10, "repo-b"), _make_vr(11, "repo-d")], None)
         results, _err, total = hybrid_search("semantic query")
         assert len(results) == 2
         assert total == 2
