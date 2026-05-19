@@ -313,6 +313,18 @@ def sanitize_fts_query(query: str) -> str:
             sanitized.append(token)
     if os.getenv("CODE_RAG_USE_CAMELCASE_EXPAND", "0") == "1":
         sanitized.extend(_camelcase_variants(sanitized))
+    # FIX-I (2026-05-19): dedup OR-terms case-insensitively. ~7% of JIRA queries
+    # repeat a token ("merchant OR merchant", "Button OR button") — a repeated
+    # OR-term double-counts in BM25 and over-weights an (already common) term.
+    if _QUERY_V2 and sanitized:
+        _seen: set[str] = set()
+        _deduped: list[str] = []
+        for _t in sanitized:
+            _k = _t.lower()
+            if _k not in _seen:
+                _seen.add(_k)
+                _deduped.append(_t)
+        sanitized = _deduped
     return " OR ".join(sanitized) if sanitized else query
 
 

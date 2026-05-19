@@ -246,7 +246,22 @@ class DaemonHandler(BaseHTTPRequestHandler):
         _inflight_requests.inc()
         try:
             t0 = time.time()
-            result = TOOLS[tool_name](args)
+            try:
+                result = TOOLS[tool_name](args)
+            except KeyError as ke:
+                # A tool dispatch lambda did args["X"] for a missing required
+                # arg. Return a clean 400 with the arg name instead of an
+                # opaque HTTP 500 (which looked like a server crash to callers).
+                # Full traceback still logged so a genuine *internal* KeyError
+                # stays debuggable rather than silently downgraded.
+                duration_ms = (time.time() - t0) * 1000
+                missing = str(ke).strip("'\"")
+                log.warning(f"tool={tool_name} KeyError ({missing}):\n{traceback.format_exc()}")
+                _log_call(
+                    tool_name, args, "", duration_ms, error=f"missing arg: {missing}", source=source, session=session_id
+                )
+                self._json_response(400, {"error": f"missing required argument: {missing}"})
+                return
             duration_ms = (time.time() - t0) * 1000
             log.info(f"tool={tool_name} source={source} duration={duration_ms:.0f}ms")
             _log_call(tool_name, args, result, duration_ms, source=source, session=session_id)

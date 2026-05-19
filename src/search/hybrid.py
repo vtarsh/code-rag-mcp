@@ -390,7 +390,12 @@ def _apply_repo_prefilter(scores: dict[str, dict], query: str) -> None:
 # byte unchanged) and intent-gated: only fires when the query is NOT doc-intent,
 # so genuine "how does X work" doc queries are untouched.
 _DEMOTE_DOC_NOISE = os.getenv("CODE_RAG_DEMOTE_DOC_NOISE", "1") == "1"  # enabled 2026-05-19
-_DOC_NOISE_TYPES = "docs,reference,gotchas,domain_registry"
+# 2026-05-19 (agentic-eval finding): also covers provider_doc / package_usage /
+# dictionary. These were excluded only via the eval-time CODE_RAG_DEFAULT_EXCLUDE
+# env — production never set it, so a real agent's results were flooded with
+# vendor docs (stripe-docs, ilixium-docs, ...). Folding them into FIX-A makes
+# the production pipeline match what the eval measured.
+_DOC_NOISE_TYPES = "docs,reference,gotchas,domain_registry,provider_doc,package_usage,dictionary"
 
 # FIX-D (2026-05-19): the RRF `scores` dict is keyed per chunk (fts:/vec:rowid),
 # so a file with N indexed chunks produces N pool entries and can occupy N of
@@ -459,9 +464,12 @@ def hybrid_search(
     K = RRF_K
     KW_WEIGHT = KEYWORD_WEIGHT * entity_boost
 
-    # FIX-A: keep in-repo doc/markdown noise out of the candidate pool for
-    # code-intent queries (see _DEMOTE_DOC_NOISE comment above).
-    if _DEMOTE_DOC_NOISE and not _query_wants_docs(query):
+    # FIX-A: keep doc/vendor-doc noise out of the candidate pool unless the
+    # query is an EXPLICIT doc question. Gated on _DOC_QUERY_RE (strong "how-to/
+    # gotcha" signal), NOT _query_wants_docs — the latter routes any "X
+    # integration" task to docs, which disabled FIX-A on exactly the provider
+    # tasks where vendor-doc noise is worst (agentic-eval finding 2026-05-19).
+    if _DEMOTE_DOC_NOISE and not _DOC_QUERY_RE.search(query or ""):
         exclude_file_types = f"{exclude_file_types},{_DOC_NOISE_TYPES}" if exclude_file_types else _DOC_NOISE_TYPES
 
     # 1. Keyword search (FTS5) — large pool, no per-repo cap.

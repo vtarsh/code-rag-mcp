@@ -208,8 +208,9 @@ class TestToolEndpoint:
         assert responses[0]["status"] == 200
         assert data["result"] == "ok"
 
-    def test_missing_required_field_returns_500(self):
-        """Tool that expects a required field should fail with 500 on KeyError."""
+    def test_missing_required_field_returns_400(self):
+        """A missing required arg (KeyError in the dispatch lambda) returns a
+        clean 400 naming the arg — not an opaque 500 that looks like a crash."""
         mock_tools = {"search": lambda args: args["query"]}  # requires 'query'
         responses, data = _make_handler(
             "POST",
@@ -217,8 +218,8 @@ class TestToolEndpoint:
             body={},  # missing 'query'
             tools=mock_tools,
         )
-        assert responses[0]["status"] == 500
-        assert "error" in data
+        assert responses[0]["status"] == 400
+        assert "query" in data["error"]
 
 
 class TestToolNameExtraction:
