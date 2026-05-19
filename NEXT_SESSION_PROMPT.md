@@ -1,3 +1,7 @@
+> ⚠️ **SUPERSEDED 2026-05-19 — DO NOT FOLLOW.** This prompt sends a session to
+> chase recall@10 — a metric now retired (task-size-capped at ~0.77). A new
+> session must read **`ARCHITECTURE_STATUS.md`** instead. Kept as history.
+
 # Промпт для автономної сесії — покращення recall@10
 
 > Дата створення: 2026-05-19

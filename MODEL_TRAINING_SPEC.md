@@ -1,3 +1,9 @@
+> ⚠️ **SUPERSEDED 2026-05-19 — DO NOT FOLLOW.** This doc made reranker
+> fine-tuning "Target 1 / PRIMARY". That was tested and **rejected**: the
+> reranker is not the bottleneck and FT is not worth RunPod spend. Current
+> direction is in **`ARCHITECTURE_STATUS.md`** — read that. Kept only as a
+> record of the training-data extraction + the KNOWN DEAD ENDS section.
+
 # Model training spec — what's needed to push recall further
 
 > 2026-05-19. State AFTER all code fixes (A+D+F+G+H), full 665-query eval:

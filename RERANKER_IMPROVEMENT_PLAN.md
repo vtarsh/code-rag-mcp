@@ -1,3 +1,8 @@
+> ⚠️ **SUPERSEDED 2026-05-19 — DO NOT FOLLOW.** This doc chases recall@10 and
+> reranker fine-tuning. Both were tested and **rejected** (recall@10 is
+> task-size-capped; reranker FT is not worth it). Current direction:
+> **`ARCHITECTURE_STATUS.md`**. Kept as a historical record only.
+
 # План покращення recall@10 — висновки з аналізу
 
 > Дата: 2026-05-19

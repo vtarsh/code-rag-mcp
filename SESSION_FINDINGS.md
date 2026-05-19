@@ -1,3 +1,7 @@
+> ⚠️ **PARTIALLY SUPERSEDED 2026-05-19.** The diagnostic data below is valid,
+> but the recall@10 framing and the "model training" conclusion are outdated.
+> Current direction: **`ARCHITECTURE_STATUS.md`**.
+
 # SESSION_FINDINGS — recall@10 autonomous analysis
 
 > Session: 2026-05-19 (autonomous)
