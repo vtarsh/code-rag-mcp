@@ -136,7 +136,9 @@ def search(
         repo: Optional - filter by repo name (exact or partial match)
         file_type: Optional - filter by type: proto, docs, config, env, k8s, grpc_method, library, workflow, ci, gotchas
         exclude_file_types: Optional - comma-separated file types to exclude from results (e.g. "gotchas,task")
-        limit: Max results to return (default 10, max 20)
+        limit: Max results to return (default 10, max 50). When the limit is
+            reached and more candidates exist, the output ends with a coverage
+            hint — re-run with a higher limit for broad/multi-file tasks.
         brief: When True, drop "Found N of M candidates for 'query'" header
             (re-echoes query), strip >>><<< highlight markers, and drop
             [keyword+vector] source tags. Default False preserves current output.

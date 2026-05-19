@@ -80,7 +80,11 @@ from src.models import get_model_config  # noqa: E402
 
 _model_cfg = get_model_config(EMBEDDING_MODEL_KEY)
 DB_PATH = BASE_DIR / "db" / "knowledge.db"
-DB_TASKS_PATH = BASE_DIR / "db" / "tasks.db"
+# CODE_RAG_TASKS_DB override lets an honest (de-leaked) task_history be supplied
+# for benchmarking analyze_task — default is the production tasks.db.
+DB_TASKS_PATH = (
+    Path(os.environ["CODE_RAG_TASKS_DB"]) if os.environ.get("CODE_RAG_TASKS_DB") else BASE_DIR / "db" / "tasks.db"
+)
 LANCE_PATH = BASE_DIR / "db" / _model_cfg.lance_dir
 
 

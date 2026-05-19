@@ -39,6 +39,10 @@ _USE_EXPAND_QUERY = os.getenv("CODE_RAG_USE_EXPAND_QUERY", "1") == "1"
 # V2 only entity-boosts when >=3 entities survive, so a 1-entity extraction
 # never collapses the query. Env-gated, default OFF.
 _QUERY_V2 = os.getenv("CODE_RAG_QUERY_V2", "1") == "1"  # enabled 2026-05-19
+# Coverage hint: when the result list hits the requested `limit` and the pool
+# holds more, tell the (agent) caller it was truncated so it can re-query wider
+# instead of silently losing recall on broad/multi-file tasks.
+_COVERAGE_HINT = os.getenv("CODE_RAG_COVERAGE_HINT", "1") == "1"
 
 # 2026-05-18: Frontend/backend query intent routing.
 # When a query smells like UI work (contains frontend keywords), boost
@@ -525,7 +529,9 @@ def search_tool(
         repo: Optional - filter by repo name (exact or partial match)
         file_type: Optional - filter by type: proto, docs, config, env, k8s, grpc_method, library, workflow, ci, gotchas, reference, dictionary, flow_annotation, task, provider_doc, domain_registry
         exclude_file_types: Optional - comma-separated file types to exclude from results (e.g. "gotchas,task")
-        limit: Max results to return (default 10, max 20)
+        limit: Max results to return (default 10, max 50). The output ends with
+            a coverage hint when the limit is hit and the pool holds more —
+            re-run with a higher limit for broad/multi-file tasks.
         brief: When True, drop the "Found N of M candidates for 'query'" header
             (re-echoes query), strip >>><<< highlight markers (sub-agents don't
             render), and drop [keyword+vector] source tags. Preserves repo/path/
@@ -547,7 +553,7 @@ def search_tool(
             'Example: search(query="payment provider integration")'
         )
 
-    limit = min(max(1, limit), 20)
+    limit = min(max(1, limit), 50)
 
     expanded = expand_query(query) if _USE_EXPAND_QUERY else query
     if os.getenv("CODE_RAG_USE_DICTIONARY_EXPAND", "0") == "1":
@@ -651,6 +657,16 @@ def search_tool(
                     f"  {snippet[:300]}\n"
                 )
 
+        # Coverage hint — the result list hit the requested limit and the pool
+        # holds more; tell the caller so it can widen instead of silently
+        # losing recall on broad/multi-file tasks.
+        coverage = ""
+        if _COVERAGE_HINT and len(ranked) == limit and total_candidates > limit:
+            coverage = (
+                f"\n↳ limit of {limit} reached — {total_candidates} candidates in the pool. "
+                f"If this task spans many files, re-run with a higher `limit` (max 50)."
+            )
+
         if brief:
             # Drop "Found N of M candidates for 'query'" re-echo.
             # Keep the vector-search-unavailable warning when present — it's
@@ -659,8 +675,13 @@ def search_tool(
             if is_frontend_only:
                 prefix = "⚠️ Frontend query detected — search is optimized for backend code, UI results may be incomplete.\n\n"
             if vec_err:
-                return prefix + f"⚠️ Vector search unavailable: {vec_err} (keyword only)\n\n" + "\n".join(results)
-            return prefix + "\n".join(results)
+                return (
+                    prefix
+                    + f"⚠️ Vector search unavailable: {vec_err} (keyword only)\n\n"
+                    + "\n".join(results)
+                    + coverage
+                )
+            return prefix + "\n".join(results) + coverage
 
         header = f"Found {len(ranked)} of {total_candidates} candidates for '{query}'"
         if repo:
@@ -671,6 +692,6 @@ def search_tool(
             header += " (keyword only)"
             header += f"\n⚠️ Vector search unavailable: {vec_err}"
 
-        return header + "\n\n" + "\n".join(results)
+        return header + coverage + "\n\n" + "\n".join(results)
 
     return cache_or_compute(ck, _compute)
