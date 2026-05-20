@@ -1,0 +1,435 @@
+{
+  "aggregates": {
+    "n": 10,
+    "n_error": 0,
+    "n_hit": 8,
+    "n_full_recall": 1,
+    "mean_steps_to_first_hit": 2.125,
+    "mean_steps_to_full_recall": 5.0,
+    "mean_terminal_recall": 0.2454,
+    "full_recall_rate": 0.1,
+    "hit_rate_at_step": {
+      "1": 0.5,
+      "2": 0.6,
+      "3": 0.6,
+      "4": 0.6,
+      "5": 0.8
+    },
+    "mean_new_per_step": [
+      3.0,
+      3.0,
+      3.0,
+      3.0,
+      3.0
+    ]
+  },
+  "config": {
+    "n_steps": 5,
+    "k_read": 3,
+    "pool_limit": 200,
+    "exclude_file_types": "package_usage,provider_doc,dictionary",
+    "use_expand_query": true,
+    "no_rerank": false,
+    "no_vector": false
+  },
+  "eval_per_query": [
+    {
+      "id": "BO-1607",
+      "query": "Add Generic Routines Tab",
+      "n_expected": 25,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 5,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.04,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Add Generic Routines Tab",
+        "Add Generic Routines Tab lookupValue lookupKey",
+        "Add Generic Routines Tab lookupValue lookupKey",
+        "Add Generic Routines Tab BackofficePermissions containedPermissions",
+        "Add Generic Routines Tab BackofficePermissions containedPermissions"
+      ],
+      "found_at": [
+        {
+          "repo_name": "backoffice-web",
+          "file_path": "src/Pages/SettlementAccounts/SettlementAccountPage/SettlementAccountPage.tsx",
+          "step": 5
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "BO-885",
+      "query": "Alert Management - Add Customer ID on the Alerts table",
+      "n_expected": 10,
+      "n_steps_run": 5,
+      "steps_to_first_hit": null,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.0,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Alert Management - Add Customer ID on the Alerts table",
+        "Alert Management - Add Customer ID on the Alerts table merchantId companyId",
+        "Alert Management - Add Customer ID on the Alerts table merchantId companyId",
+        "Alert Management - Add Customer ID on the Alerts table merchantId companyId",
+        "Alert Management - Add Customer ID on the Alerts table merchantId companyId"
+      ],
+      "found_at": [],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "BO-920",
+      "query": "Refactor types of useParams for merchants pages",
+      "n_expected": 24,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 1,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.0833,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Refactor types of useParams for merchants pages",
+        "Refactor types of useParams for merchants pages merchantId companyId",
+        "Refactor types of useParams for merchants pages merchantId companyId",
+        "Refactor types of useParams for merchants pages merchantId companyId",
+        "Refactor types of useParams for merchants pages merchantId companyId"
+      ],
+      "found_at": [
+        {
+          "repo_name": "backoffice-web",
+          "file_path": "src/hooks/use-merchant-page-params.ts",
+          "step": 1
+        },
+        {
+          "repo_name": "backoffice-web",
+          "file_path": "src/Pages/Compliance/MerchantUnderwritingPage/Page/AssessmentForm/AssessmentForm.tsx",
+          "step": 5
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "BO-928",
+      "query": "Alert Management - No assignee when alerts are resolved or closed",
+      "n_expected": 3,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 1,
+      "steps_to_full_recall": 5,
+      "terminal_recall": 1.0,
+      "early_break": "full_recall",
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Alert Management - No assignee when alerts are resolved or closed",
+        "Alert Management - No assignee when alerts are resolved or closed RiskAlertStatus merchantId",
+        "Alert Management - No assignee when alerts are resolved or closed riskAlert statusList",
+        "Alert Management - No assignee when alerts are resolved or closed riskAlert statusList",
+        "Alert Management - No assignee when alerts are resolved or closed riskAlert statusList"
+      ],
+      "found_at": [
+        {
+          "repo_name": "backoffice-web",
+          "file_path": "src/Pages/Risk/RiskAlertsPage/RiskAlertPage/consts.ts",
+          "step": 1
+        },
+        {
+          "repo_name": "backoffice-web",
+          "file_path": "src/Pages/Risk/RiskAlertsPage/RiskAlertPage/Actions/RiskAlertStatusActions.tsx",
+          "step": 3
+        },
+        {
+          "repo_name": "backoffice-web",
+          "file_path": "src/Pages/Risk/RiskAlertsPage/RiskAlertPage/Actions/risk-alert-actions-logic.ts",
+          "step": 5
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "CORE-1751",
+      "query": "PPRO adjustments and IDEAL updates",
+      "n_expected": 41,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 1,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.122,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "PPRO adjustments and IDEAL updates",
+        "PPRO adjustments and IDEAL updates merchantId companyId",
+        "PPRO adjustments and IDEAL updates paymentMethodData consumerDetails",
+        "PPRO adjustments and IDEAL updates allowedValues transactionProperties",
+        "PPRO adjustments and IDEAL updates verifyPproCallbackSignature ProviderError"
+      ],
+      "found_at": [
+        {
+          "repo_name": "grpc-apm-ppro",
+          "file_path": "libs/compose-payment-method.js",
+          "step": 1
+        },
+        {
+          "repo_name": "grpc-apm-ppro",
+          "file_path": "env/consts.js",
+          "step": 1
+        },
+        {
+          "repo_name": "grpc-apm-ppro",
+          "file_path": "libs/get-transaction-payload.js",
+          "step": 2
+        },
+        {
+          "repo_name": "grpc-apm-ppro",
+          "file_path": "methods/initialize.js",
+          "step": 3
+        },
+        {
+          "repo_name": "grpc-apm-ppro",
+          "file_path": "libs/get-transaction-properties.js",
+          "step": 3
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "CORE-2167",
+      "query": "Add transaction error fallback workflow",
+      "n_expected": 10,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 1,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.2,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Add transaction error fallback workflow",
+        "Add transaction error fallback workflow errorMessage sendSlackNotification",
+        "Add transaction error fallback workflow cancelChargeResponse sendSlackNotification",
+        "Add transaction error fallback workflow sendSlackNotification errorMessage",
+        "Add transaction error fallback workflow sendSlackNotification errorMessage"
+      ],
+      "found_at": [
+        {
+          "repo_name": "workflow-transactions-error-fallback",
+          "file_path": "src/workflow.ts",
+          "step": 1
+        },
+        {
+          "repo_name": "workflow-transactions-error-fallback",
+          "file_path": "src/libs/get-notification-body.ts",
+          "step": 5
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "CORE-2175",
+      "query": "Adjustments to Transactions",
+      "n_expected": 16,
+      "n_steps_run": 5,
+      "steps_to_first_hit": null,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.0,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Adjustments to Transactions",
+        "Adjustments to Transactions amountToAdjust providerFeatures",
+        "Adjustments to Transactions providerFeatures reconciliationId",
+        "Adjustments to Transactions reconciliationId batchCount",
+        "Adjustments to Transactions reconciliationId batchCount"
+      ],
+      "found_at": [],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "CORE-2187",
+      "query": "Optimizations for v1 payouts, setup session and charge/holds actions",
+      "n_expected": 26,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 5,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.0385,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Optimizations for v1 payouts, setup session and charge/holds actions",
+        "Optimizations for v1 payouts, setup session and charge/holds actions payment_methods authenticationSession",
+        "Optimizations for v1 payouts, setup session and charge/holds actions paymentMethodOptionsOnCreateObject shippingDetailsObject",
+        "Optimizations for v1 payouts, setup session and charge/holds actions paymentMethodOptionsOnCreateObject shippingDetailsObject",
+        "Optimizations for v1 payouts, setup session and charge/holds actions payment_method_data payment_method"
+      ],
+      "found_at": [
+        {
+          "repo_name": "express-api-v1",
+          "file_path": "src/routes/sessions/setup.js",
+          "step": 5
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "CORE-2286",
+      "query": "Retry tokenize request to API",
+      "n_expected": 3,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 1,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.3333,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Retry tokenize request to API",
+        "Retry tokenize request to API tabapayCredentialsType transactionType",
+        "Retry tokenize request to API clientId ApiVersion",
+        "Retry tokenize request to API ConfigSource ConfigRef",
+        "Retry tokenize request to API google_calendar_auth java_outer_classname"
+      ],
+      "found_at": [
+        {
+          "repo_name": "cloudflare-workers-tokenize2",
+          "file_path": "src/index.js",
+          "step": 1
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "CORE-2299",
+      "query": "Remove <> from cardholder name on SIlverflow",
+      "n_expected": 11,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 2,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.6364,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Remove <> from cardholder name on SIlverflow",
+        "Remove <> from cardholder name on SIlverflow replaceAll paymentMethodDetails",
+        "Remove <> from cardholder name on SIlverflow paymentMethodDetails requestData",
+        "Remove <> from cardholder name on SIlverflow paymentMethodDetails authenticationData",
+        "Remove <> from cardholder name on SIlverflow paymentMethodOptions cardOrganization"
+      ],
+      "found_at": [
+        {
+          "repo_name": "grpc-providers-silverflow",
+          "file_path": "methods/verification.js",
+          "step": 2
+        },
+        {
+          "repo_name": "grpc-providers-silverflow",
+          "file_path": "libs/get-cardholder-name.js",
+          "step": 2
+        },
+        {
+          "repo_name": "grpc-providers-silverflow",
+          "file_path": "methods/payout.js",
+          "step": 2
+        },
+        {
+          "repo_name": "grpc-providers-silverflow",
+          "file_path": "libs/refund-sale.js",
+          "step": 3
+        },
+        {
+          "repo_name": "grpc-providers-silverflow",
+          "file_path": "libs/payload-builders/get-funding-charge-payload.js",
+          "step": 4
+        },
+        {
+          "repo_name": "grpc-providers-silverflow",
+          "file_path": "libs/payload-builders/get-charge-payload.js",
+          "step": 4
+        },
+        {
+          "repo_name": "grpc-providers-worldpay",
+          "file_path": "libs/xml-object-builders/get-authorisation-request.js",
+          "step": 5
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,387 @@
+{
+  "aggregates": {
+    "n": 10,
+    "n_error": 0,
+    "n_hit": 5,
+    "n_full_recall": 0,
+    "mean_steps_to_first_hit": 1.0,
+    "mean_steps_to_full_recall": 0.0,
+    "mean_terminal_recall": 0.1784,
+    "full_recall_rate": 0.0,
+    "hit_rate_at_step": {
+      "1": 0.5,
+      "2": 0.5,
+      "3": 0.5,
+      "4": 0.5,
+      "5": 0.5
+    },
+    "mean_new_per_step": [
+      3.0,
+      3.0,
+      3.0,
+      3.0,
+      3.0
+    ]
+  },
+  "config": {
+    "n_steps": 5,
+    "k_read": 3,
+    "pool_limit": 200,
+    "exclude_file_types": "package_usage,provider_doc,dictionary",
+    "use_expand_query": true,
+    "no_rerank": false,
+    "no_vector": false
+  },
+  "eval_per_query": [
+    {
+      "id": "PI-10",
+      "query": "paynt - adjust payout",
+      "n_expected": 13,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 1,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.0769,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "paynt - adjust payout",
+        "paynt - adjust payout paymentMethodDetails transactionId",
+        "paynt - adjust payout paymentMethodDetails transactionId",
+        "paynt - adjust payout paymentMethodDetails replaceAll",
+        "paynt - adjust payout paymentMethodDetails payoutResult"
+      ],
+      "found_at": [
+        {
+          "repo_name": "grpc-providers-paynt",
+          "file_path": "methods/payout.js",
+          "step": 1
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "PI-11",
+      "query": "braintree provider integration",
+      "n_expected": 29,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 1,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.2069,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "braintree provider integration",
+        "braintree provider integration braintreeTransactionId braintreeGateway",
+        "braintree provider integration transactionId processorTransactionId",
+        "braintree provider integration processorTransactionId transactionId",
+        "braintree provider integration processorTransactionId transactionId"
+      ],
+      "found_at": [
+        {
+          "repo_name": "grpc-providers-braintree",
+          "file_path": "libs/make-api-call.js",
+          "step": 1
+        },
+        {
+          "repo_name": "grpc-providers-braintree",
+          "file_path": "methods/cancellation.js",
+          "step": 1
+        },
+        {
+          "repo_name": "grpc-providers-braintree",
+          "file_path": "methods/authorization.js",
+          "step": 1
+        },
+        {
+          "repo_name": "grpc-providers-braintree",
+          "file_path": "methods/refund.js",
+          "step": 2
+        },
+        {
+          "repo_name": "grpc-providers-braintree",
+          "file_path": "methods/completion.js",
+          "step": 2
+        },
+        {
+          "repo_name": "grpc-providers-braintree",
+          "file_path": "methods/verification.js",
+          "step": 2
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "PI-12",
+      "query": "nexi provider integrations",
+      "n_expected": 4,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 1,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.25,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "nexi provider integrations",
+        "nexi provider integrations node_modules",
+        "nexi provider integrations node_modules testPathIgnorePatterns",
+        "nexi provider integrations testPathIgnorePatterns node_modules",
+        "nexi provider integrations testPathIgnorePatterns node_modules"
+      ],
+      "found_at": [
+        {
+          "repo_name": "grpc-providers-nexi",
+          "file_path": "env/consts.js",
+          "step": 1
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "PI-13",
+      "query": "Check CVV removal condition in all live providers",
+      "n_expected": 42,
+      "n_steps_run": 5,
+      "steps_to_first_hit": null,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.0,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Check CVV removal condition in all live providers",
+        "Check CVV removal condition in all live providers isExists newEncryptedValue",
+        "Check CVV removal condition in all live providers encryptedValue encryptedCvv",
+        "Check CVV removal condition in all live providers firstTwoDigits merchantId",
+        "Check CVV removal condition in all live providers cvvWhitelistOptions vaultCvv"
+      ],
+      "found_at": [],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "PI-15",
+      "query": "Validate old integration - gumballpay",
+      "n_expected": 35,
+      "n_steps_run": 5,
+      "steps_to_first_hit": null,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.0,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Validate old integration - gumballpay",
+        "Validate old integration - gumballpay newVatNumber InvalidDataError",
+        "Validate old integration - gumballpay InvalidDataError paymentMethodsOptions",
+        "Validate old integration - gumballpay InvalidDataError credentialsDataObject",
+        "Validate old integration - gumballpay InvalidDataError credentialsDataObject"
+      ],
+      "found_at": [],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "BO-1000",
+      "query": "Date Picker bug close on click new date",
+      "n_expected": 4,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 1,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.75,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Date Picker bug close on click new date",
+        "Date Picker bug close on click new date unavailableDates clearOnNewRange",
+        "Date Picker bug close on click new date errorMessage onChange",
+        "Date Picker bug close on click new date className errorMessage",
+        "Date Picker bug close on click new date className errorMessage"
+      ],
+      "found_at": [
+        {
+          "repo_name": "components",
+          "file_path": "src/Components/DatePickerRange/DatePickerRange.tsx",
+          "step": 1
+        },
+        {
+          "repo_name": "components",
+          "file_path": "src/Components/DatePickerRange/DatePickerRange.types.tsx",
+          "step": 1
+        },
+        {
+          "repo_name": "components",
+          "file_path": "src/Components/DatePickerRange/DatePickerRangePanel.tsx",
+          "step": 2
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "PI-16",
+      "query": "Provider Integration - Ecentric",
+      "n_expected": 4,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 1,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.5,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Provider Integration - Ecentric",
+        "Provider Integration - Ecentric node_modules",
+        "Provider Integration - Ecentric node_modules testPathIgnorePatterns",
+        "Provider Integration - Ecentric testPathIgnorePatterns node_modules",
+        "Provider Integration - Ecentric testPathIgnorePatterns node_modules"
+      ],
+      "found_at": [
+        {
+          "repo_name": "grpc-providers-ecentric",
+          "file_path": "env/consts.js",
+          "step": 1
+        },
+        {
+          "repo_name": "grpc-providers-ecentric",
+          "file_path": "methods/index.js",
+          "step": 1
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "PI-17",
+      "query": "Validate old integration - Shift4 (formerly credorax)",
+      "n_expected": 18,
+      "n_steps_run": 5,
+      "steps_to_first_hit": null,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.0,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Validate old integration - Shift4 (formerly credorax)",
+        "Validate old integration - Shift4 (formerly credorax) newVatNumber errorMessage",
+        "Validate old integration - Shift4 (formerly credorax) errorMessage passwordArray",
+        "Validate old integration - Shift4 (formerly credorax) passwordArray errorMessage",
+        "Validate old integration - Shift4 (formerly credorax) errorMessage mockValidateParams"
+      ],
+      "found_at": [],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "BO-1006",
+      "query": "Merchant Status Button in button",
+      "n_expected": 3,
+      "n_steps_run": 5,
+      "steps_to_first_hit": null,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.0,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Merchant Status Button in button",
+        "Merchant Status Button in button IconButton merchantApplication",
+        "Merchant Status Button in button className IconButton",
+        "Merchant Status Button in button IconButton className",
+        "Merchant Status Button in button className IconButton"
+      ],
+      "found_at": [],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "BO-1016",
+      "query": "Prod bug UNKNOWN: Metadata string value \"Error: Code: 60. DB::Exception",
+      "n_expected": 3,
+      "n_steps_run": 5,
+      "steps_to_first_hit": null,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.0,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Prod bug UNKNOWN: Metadata string value \"Error: Code: 60. DB::Exception",
+        "Prod bug UNKNOWN: Metadata string value \"Error: Code: 60. DB::Exception matchedCountryCode CountryAlpha2Union",
+        "Prod bug UNKNOWN: Metadata string value \"Error: Code: 60. DB::Exception primaryKeysParams transformedOptions",
+        "Prod bug UNKNOWN: Metadata string value \"Error: Code: 60. DB::Exception maybeError matchedCountryCode",
+        "Prod bug UNKNOWN: Metadata string value \"Error: Code: 60. DB::Exception isNullish eventName"
+      ],
+      "found_at": [],
+      "strata": [
+        "jira"
+      ]
+    }
+  ]
+}

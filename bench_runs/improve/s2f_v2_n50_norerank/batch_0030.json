@@ -1,0 +1,488 @@
+{
+  "aggregates": {
+    "n": 10,
+    "n_error": 0,
+    "n_hit": 6,
+    "n_full_recall": 0,
+    "mean_steps_to_first_hit": 1.0,
+    "mean_steps_to_full_recall": 0.0,
+    "mean_terminal_recall": 0.3116,
+    "full_recall_rate": 0.0,
+    "hit_rate_at_step": {
+      "1": 0.6,
+      "2": 0.6,
+      "3": 0.6,
+      "4": 0.6,
+      "5": 0.6
+    },
+    "mean_new_per_step": [
+      3.0,
+      3.0,
+      3.0,
+      3.0,
+      3.0
+    ]
+  },
+  "config": {
+    "n_steps": 5,
+    "k_read": 3,
+    "pool_limit": 200,
+    "exclude_file_types": "package_usage,provider_doc,dictionary",
+    "use_expand_query": true,
+    "no_rerank": true,
+    "no_vector": false
+  },
+  "eval_per_query": [
+    {
+      "id": "HS-244",
+      "query": "Visa click to pay",
+      "n_expected": 90,
+      "n_steps_run": 5,
+      "steps_to_first_hit": null,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.0,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Visa click to pay",
+        "Visa click to pay merchantId visaDpaClientId",
+        "Visa click to pay merchantId createMerchantResponse",
+        "Visa click to pay merchantId createMerchantResponse",
+        "Visa click to pay acquirerMid merchantId"
+      ],
+      "found_at": [],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "HS-252",
+      "query": "Support products in partial approve",
+      "n_expected": 10,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 1,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.4,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Support products in partial approve",
+        "Support products in partial approve PartialApprovalProducts showNumberWithCurrency",
+        "Support products in partial approve showNumberWithCurrency approvedProduct",
+        "Support products in partial approve transactionStatus approvedAmount",
+        "Support products in partial approve approvedAmount amountToCapture"
+      ],
+      "found_at": [
+        {
+          "repo_name": "next-web-partial-approval",
+          "file_path": "src/utils/helpers.ts",
+          "step": 1
+        },
+        {
+          "repo_name": "next-web-partial-approval",
+          "file_path": "src/i18n/i18n.ts",
+          "step": 1
+        },
+        {
+          "repo_name": "next-web-partial-approval",
+          "file_path": "src/components/ApprovedProductBanners.tsx",
+          "step": 2
+        },
+        {
+          "repo_name": "next-web-partial-approval",
+          "file_path": "src/app/page.tsx",
+          "step": 2
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "HS-257",
+      "query": "Headless function not validating allowd PMs",
+      "n_expected": 3,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 1,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.6667,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Headless function not validating allowd PMs",
+        "Headless function not validating allowd PMs isPaymentMethodId",
+        "Headless function not validating allowd PMs paymentMethodData AddBlacklistItemForm",
+        "Headless function not validating allowd PMs AddBlacklistItemFormType useNavigateBack",
+        "Headless function not validating allowd PMs useNavigateBack navigateBack"
+      ],
+      "found_at": [
+        {
+          "repo_name": "hosted-fields",
+          "file_path": "packages/js-internal/src/utils/analytic-events/sendAnalyticEvent.types.ts",
+          "step": 1
+        },
+        {
+          "repo_name": "hosted-fields",
+          "file_path": "packages/js/src/checkout/headless/headless.ts",
+          "step": 2
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "HS-262",
+      "query": "applpay button fixes",
+      "n_expected": 4,
+      "n_steps_run": 5,
+      "steps_to_first_hit": null,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.0,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "applpay button fixes",
+        "applpay button fixes startIcon isLoading",
+        "applpay button fixes className startIcon",
+        "applpay button fixes className TooltipTextUpdateOnAction",
+        "applpay button fixes tooltipState initialText"
+      ],
+      "found_at": [],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "HS-273",
+      "query": "Setup Session - allow continue with default",
+      "n_expected": 7,
+      "n_steps_run": 5,
+      "steps_to_first_hit": null,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.0,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Setup Session - allow continue with default",
+        "Setup Session - allow continue with default paymentMethodOptionsOnCreateObject billingDetailsObject",
+        "Setup Session - allow continue with default payment_method_data payment_method",
+        "Setup Session - allow continue with default grpc_call validateCustomerIp",
+        "Setup Session - allow continue with default merchantId grpc_call"
+      ],
+      "found_at": [],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "HS-278",
+      "query": "Radio: fix \"more apms\" button overflow",
+      "n_expected": 19,
+      "n_steps_run": 5,
+      "steps_to_first_hit": null,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.0,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Radio: fix \"more apms\" button overflow",
+        "Radio: fix \"more apms\" button overflow initApmResponse redirectUrl",
+        "Radio: fix \"more apms\" button overflow className AddCountriesRadioType",
+        "Radio: fix \"more apms\" button overflow className AddCountriesRadioType",
+        "Radio: fix \"more apms\" button overflow className deposit_page_content"
+      ],
+      "found_at": [],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "HS-283",
+      "query": "support \"inlineRedirect\" feature flag",
+      "n_expected": 5,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 1,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.6,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "support \"inlineRedirect\" feature flag",
+        "support \"inlineRedirect\" feature flag apmConfig fullInitData",
+        "support \"inlineRedirect\" feature flag initApmResponse redirectUrl",
+        "support \"inlineRedirect\" feature flag createFeatureFlag deleteFeatureFlag",
+        "support \"inlineRedirect\" feature flag className merchantFeatureFlags"
+      ],
+      "found_at": [
+        {
+          "repo_name": "hosted-fields",
+          "file_path": "packages/js/src/checkout/headless/headless-apm.ts",
+          "step": 1
+        },
+        {
+          "repo_name": "hosted-fields",
+          "file_path": "packages/js-internal/src/methods/apms/render-apm-button.ts",
+          "step": 2
+        },
+        {
+          "repo_name": "hosted-fields",
+          "file_path": "packages/js-internal/src/methods/apms/pay-apm.ts",
+          "step": 2
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "HS-286",
+      "query": "redirectMobile / redirectDesktop",
+      "n_expected": 8,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 1,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.625,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "redirectMobile / redirectDesktop",
+        "redirectMobile / redirectDesktop paymentMethodType gridSelectedBackgroundColor",
+        "redirectMobile / redirectDesktop paymentMethodType paymentMethod",
+        "redirectMobile / redirectDesktop paymentMethodType paymentMethod",
+        "redirectMobile / redirectDesktop paymentMethodType paymentMethods"
+      ],
+      "found_at": [
+        {
+          "repo_name": "hosted-fields",
+          "file_path": "packages/js-internal/src/methods/apms/render-apm-button.ts",
+          "step": 1
+        },
+        {
+          "repo_name": "grpc-apm-configurations",
+          "file_path": "methods/create.js",
+          "step": 1
+        },
+        {
+          "repo_name": "grpc-apm-configurations",
+          "file_path": "methods/update.js",
+          "step": 1
+        },
+        {
+          "repo_name": "hosted-fields",
+          "file_path": "packages/js/src/checkout/headless/headless-apm.ts",
+          "step": 3
+        },
+        {
+          "repo_name": "grpc-apm-configurations",
+          "file_path": "proto/service.proto",
+          "step": 4
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "HS-294",
+      "query": "OKTO CASH - princess skin",
+      "n_expected": 14,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 1,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.5,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "OKTO CASH - princess skin",
+        "OKTO CASH - princess skin className brandTitles",
+        "OKTO CASH - princess skin HydrateOktoCashAtom transactionId",
+        "OKTO CASH - princess skin useAtomValue appDataAtom",
+        "OKTO CASH - princess skin workflowParsedData OktoApproveTerms"
+      ],
+      "found_at": [
+        {
+          "repo_name": "next-web-alternative-payment-methods",
+          "file_path": "src/components/okto-cash/okto-cash.consts.ts",
+          "step": 1
+        },
+        {
+          "repo_name": "next-web-alternative-payment-methods",
+          "file_path": "src/components/okto-cash/screens/OktoApproveTerms/OktoApproveTerms.tsx",
+          "step": 1
+        },
+        {
+          "repo_name": "next-web-alternative-payment-methods",
+          "file_path": "src/components/okto-cash/screens/OktoApproveTerms/OktoCashHowItWorks.tsx",
+          "step": 1
+        },
+        {
+          "repo_name": "next-web-alternative-payment-methods",
+          "file_path": "src/app/okto-cash/deposit/layout.tsx",
+          "step": 2
+        },
+        {
+          "repo_name": "next-web-alternative-payment-methods",
+          "file_path": "src/components/okto-cash/OktoCashPageHeader.tsx",
+          "step": 3
+        },
+        {
+          "repo_name": "next-web-alternative-payment-methods",
+          "file_path": "src/components/okto-cash/screens/OktoDisplayCode/OktoDisplayCode.tsx",
+          "step": 3
+        },
+        {
+          "repo_name": "next-web-alternative-payment-methods",
+          "file_path": "src/app/okto-cash/deposit/page.tsx",
+          "step": 4
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    },
+    {
+      "id": "PI-1",
+      "query": "Rapyd providers integrations",
+      "n_expected": 37,
+      "n_steps_run": 5,
+      "steps_to_first_hit": 1,
+      "steps_to_full_recall": null,
+      "terminal_recall": 0.3243,
+      "early_break": null,
+      "new_per_step": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "queries_used": [
+        "Rapyd providers integrations",
+        "Rapyd providers integrations MdFullyAuthenticated MdNotEnrolled",
+        "Rapyd providers integrations getTerminalAndAgreementNumber rapydIsMultiApiKey",
+        "Rapyd providers integrations rapydIsMultiApiKey finalCurrencyExponentByCurrency",
+        "Rapyd providers integrations cardBrand finalCurrencyExponentByCurrency"
+      ],
+      "found_at": [
+        {
+          "repo_name": "grpc-providers-rapyd",
+          "file_path": "env/consts.js",
+          "step": 1
+        },
+        {
+          "repo_name": "grpc-providers-rapyd",
+          "file_path": "libs/payload-builders/get-payment-method-details.js",
+          "step": 1
+        },
+        {
+          "repo_name": "grpc-providers-rapyd",
+          "file_path": "libs/make-api-call.js",
+          "step": 2
+        },
+        {
+          "repo_name": "grpc-providers-rapyd",
+          "file_path": "libs/payload-builders/get-cancellation-payload.js",
+          "step": 2
+        },
+        {
+          "repo_name": "grpc-providers-rapyd",
+          "file_path": "libs/payload-builders/get-collective-payload.js",
+          "step": 2
+        },
+        {
+          "repo_name": "grpc-providers-rapyd",
+          "file_path": "libs/payload-builders/get-completion-payload.js",
+          "step": 3
+        },
+        {
+          "repo_name": "grpc-providers-credentials",
+          "file_path": "libs/rapyd/validation-strategy.js",
+          "step": 3
+        },
+        {
+          "repo_name": "grpc-providers-rapyd",
+          "file_path": "libs/get-credentials.js",
+          "step": 4
+        },
+        {
+          "repo_name": "grpc-providers-rapyd",
+          "file_path": "libs/payload-builders/get-refund-payload.js",
+          "step": 4
+        },
+        {
+          "repo_name": "grpc-providers-rapyd",
+          "file_path": "libs/payload-builders/get-payout-payload.js",
+          "step": 4
+        },
+        {
+          "repo_name": "grpc-providers-rapyd",
+          "file_path": "methods/cancellation.js",
+          "step": 5
+        },
+        {
+          "repo_name": "grpc-providers-rapyd",
+          "file_path": "methods/completion.js",
+          "step": 5
+        }
+      ],
+      "strata": [
+        "jira"
+      ]
+    }
+  ]
+}

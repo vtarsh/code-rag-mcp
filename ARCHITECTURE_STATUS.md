@@ -252,6 +252,60 @@ has no discriminating compounds (config / JSON files).
 (b) check whether the metric distinguishes the reranker question from the
 debate. If green → full n=665 baseline + arm.
 
+### Step 1 v2 — n=50 baseline + rerank-OFF arm DONE 2026-05-20 late
+
+Direct test of the debate residual ("does the reranker's −14.1pp single-shot
+hit@10 transfer to a multi-shot iterating agent?"). Same first 50 tasks
+(BO 17 / CORE 16 / HS 9 / PI 8). v2 policy. Trace enabled both arms — 250
+entries each, 0 vec_errs / 0 fts_zero / 0 vec_zero (pipeline clean).
+
+| Metric | rerank ON | rerank OFF | Δ |
+|---|---|---|---|
+| n_hit | 33/50 | 33/50 | **0** |
+| hit_rate@step 5 | 66% | 66% | **0** |
+| hit_rate@step 1 | 50% | 54% | **+4pp (OFF better!)** |
+| mean_terminal_recall | 20.8% | 18.5% | −2.3pp |
+| full_recall_rate | 2% | 0% | −2pp |
+
+**ANSWER to the debate residual:** single-shot −14.1pp DOES NOT transfer to
+iterating-agent any-hit rate. Both arms reach 66% by step 5. B-team's claim
+confirmed — rerank rescues files iteration recovers anyway. Where rerank still
+earns its keep: terminal_recall completeness on multi-file tasks (BO-928
+100%→33%, CORE-2299 64%→18%) — NOT foothold.
+
+**Stratum split — where rerank helps vs HURTS:**
+- BO: 6 wins ON, 2 wins OFF → reranker helps
+- CORE: 7 wins ON, 5 wins OFF → mixed lean ON
+- **HS: 0 wins ON, 3 wins OFF → reranker HURTS HS** (new finding)
+- **PI: 3 wins ON, 2 wins OFF → mixed with strong individual losses**
+
+Extends [[project_p10_a2_landed_2026_04_26]] stratum-gated rerank-skip pattern
+to HS strata.
+
+**Causal mechanism (from queries_used trace):** reformulation policy is identical
+in both arms; the flip happens because rerank changes WHICH top-1-NEW file is
+returned per step → different content-token extraction → cascading divergence.
+
+- **HS-283** (rerank=0% / off=60%): ON's top-1 was generic feature-flag file →
+  tokens `featureFlagsList merchantProvider` (off-topic). OFF's top-1 was an
+  APM file → `apmConfig initApmResponse redirectUrl` (precisely on-topic, APM
+  files ARE the GT zone).
+- **PI-15** (rerank=0% / off=11%): ON drifted to generic `InvalidDataError`;
+  OFF picked up `gumballpayPayoutCredentials endpointGroupId` from the
+  provider-specific repo at step 2.
+- **BO-1593** (rerank=20% / off=0%): without rerank, top-1 step-1 was a Jest
+  test config → `testPathIgnorePatterns clickhouse_compiled` → cascade collapse.
+- **CORE-2299** (rerank=64% / off=18%): without rerank, top-1 was literally the
+  `sanitize-cardholder-name` file → first hit step 1. Rerank DEMOTED the right
+  file.
+
+Metric is honest and arm-discriminating. Next: full n=665 baseline + rerank-OFF
+arm to produce stratum-specific rerank-skip policy on full corpus.
+
+### Step 1 v2 — n=665 baseline + rerank-OFF arm — RUNNING
+
+Full eval. ~3-4 h baseline + ~40 min rerank-OFF wall. Traces archived per arm.
+
 ## Source data
 
 - `bench_runs/diagnose/fixI/` — current hybrid baseline (all fixes, vector+reranker ON)
