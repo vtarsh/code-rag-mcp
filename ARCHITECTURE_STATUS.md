@@ -21,7 +21,8 @@ hybrid as-is; stop chasing fine-tuning.** A full agentic-grep rebuild is a
 - ❌ Do **not** optimize single-shot **recall@10**. It is capped at ~0.77 by task
   size alone (many JIRA tasks change 20-180 files). Retired as a primary metric.
 - ❌ Do **not** delete the vector (LanceDB) leg "to simplify" — **measured**, it
-  earns +8pp hit@10. It is not baggage.
+  earns ~+5pp recall@pool (stable; the hit@10 delta is a noisy −3.6/−8.3pp
+  test-retest pair — see 2026-05-20 correction). It is not baggage.
 - ❌ Do **not** trust `MODEL_TRAINING_SPEC.md` / `RERANKER_IMPROVEMENT_PLAN.md` /
   `NEXT_SESSION_PROMPT.md` — superseded, they point the wrong way.
 
@@ -31,7 +32,7 @@ hybrid as-is; stop chasing fine-tuning.** A full agentic-grep rebuild is a
 |------|--------|
 | Code fixes shipped (commits `22a996b`, `3eebeda`) | hit@10 0.605→0.714, recall@10 0.152→0.182. Env-gated, default ON. |
 | Head-to-head, 15 tasks: MCP hybrid (single-shot) vs plain grep-agent (full loop) | ≈ tied. file-recall 0.19 vs 0.18; foothold 0.63 vs 0.51 (hybrid slightly ahead). |
-| FTS-only (vector OFF) | hit@10 −8.3pp, recall@pool −7.3pp, retrieval_failures ×2 → **vector earns its keep**. |
+| vector OFF (paired full-665, two runs of the same `CODE_RAG_NO_VECTOR` config) | hit@10 −3.6 to −8.3pp (test-retest spread; noisy), recall@pool −5.2 to −7.3pp (**stable**), retrieval_failures ×2 → **vector earns its keep on reach**. |
 | reranker-OFF (raw RRF order) | hit@10 **−14.1pp**, recall@10 −3.6pp → **reranker is the single biggest contributor**. |
 | Deep research (industry SOTA) | direction = agentic grep-first; but its headline "drop vector = free win" FAILED our test of its own criterion. |
 
@@ -103,23 +104,153 @@ task_history with the 665 eval rows removed).
   ADD noise. Do not implement it. (`bench_runs/improve/analyze_task_audit.md` P2
   is stale on this point.)
 
-### Prioritized next steps
+### MEASURED 2026-05-20 — recall@pool diagnosis + zero-recall root-cause + BM25 dead
 
-1. **analyze_task routing is genuinely hard for CORE** — no cheap template win.
-   Remaining real option: P1 (specificity-weight keyword matches — ranking-only,
-   low-risk, modest). The structural answer for CORE is agent iteration, not a
-   static prior.
-2. **`ast-grep` structural-search tool** — additive, no risk, separate feature
-   (`bench_runs/improve/ast_search_design.md`). ~2.5 days.
-3. **Embedding-model SWAP bench** (not FT) — the one defensible RunPod spend;
-   recall@pool 0.48 is the reach ceiling. Low priority.
-4. GT: optionally drop the 122 noise paths. Trivial, not blocking.
+Two fact diagnostics (`scripts/eval/diagnose_pool_reach.py`,
+`diagnose_query_gap.py`) + a 43-task case-by-case audit by 3 parallel agents
+(`.claude/debug/current/misses_slice{1,2,3}.md`):
 
-Honest framing: the consumer is an **iterating agent**. "Good results" = the
-agent gets a foothold + navigates well, not a perfect single-shot top-10. The
-session shipped the biggest jump (+10.4pp hit@10) + the coverage hint; the
-remaining gains are modest. The headline routing fix (CORE template) was tested
-and does not hold — analyze_task routing for CORE is intrinsically hard.
+- **recall@pool 0.48 is a STRUCTURAL ceiling, not a bug.** 100% of 10,650
+  expected files ARE indexed — the deep-research "corpus reach" claim is
+  FALSIFIED. Ceiling = task-size cap (recall@pool 0.58 @1-5 → 0.31 @41+ files)
+  + lexical gap (32% of misses share zero query tokens with expected content) +
+  ranking crowd-out (68% have tokens but lose the 200-pool race).
+- **BM25 column-weight lever — TESTED, DEAD.** `CODE_RAG_BM25_PATH_WEIGHT`
+  (boost file_path, zero metadata cols): +0.24pp recall@pool / −1.14pp hit@10
+  on n=350. Reverted. Retrieval-layer ranking tweaks are exhausted (3rd
+  independent confirmation).
+- **Zero-recall (43 tasks, recall@pool=0) failure modes:**
+  - **generic-term-drowned** (~15) FIXABLE — token-poor expected files lose to
+    token-dense siblings. IDF/rare-token weighting, per-token candidate union,
+    repo-balanced pooling.
+  - **title↔code vocabulary gap / opaque-symptom titles** (~14) INTRINSIC —
+    bug error strings, "Audit all", "Refactoring … flow", version-bump titles
+    carry no code signal. Only the JIRA *body* (not title) recovers these.
+  - **camelCase tokenizer split** (BO-1234/904/1474) FIXABLE — `porter
+    unicode61` splits `toColumnDefinitions`→`column/definitions`. Index whole
+    identifier forms alongside split forms.
+  - **proper-noun / dependency symbol absent** (PI-47, BO-1289, CORE-2566)
+    PARTLY FIXABLE — index `package.json` + import-alias maps.
+  - **wrong-repo steering by provider proper-noun** (PI-37, CORE-2412, PI-41)
+    FIXABLE — proper-noun→repo routing.
+  - **tag-prefix steering** (`[CSV]`, `[API]`) FIXABLE — strip in
+    `_sanitize_fts_input`.
+  - **GT-noise (~5-6 of 43) — NOT retrieval failures.** Pipeline returned the
+    on-topic file at rank 1-3 (BO-937 use-copy-to-clipboard, CORE-2353
+    scylla/database.ts, CORE-2468 evaluate-and-cancel-auth.js) but GT lists
+    incidental merge-diff files. The metric is biased by counting these.
+- **Frontend under-retrieval bias** — token-poor JSX components consistently
+  lose to token-dense backend `.js` files. 13/15 in slice 1.
+
+### Prioritized next steps (updated 2026-05-20)
+
+1. **Pipeline tracing** (`CODE_RAG_TRACE=1`) — `src/search/trace.py` +
+   `emit_trace(...)` at the end of `hybrid_search`. Per-query JSONL with
+   fts/vec counts, pool size, rerank-skip flag, final count. Default OFF.
+   **SHIPPED this session**. Catches silent bugs (cf. the historic 28.4% FTS5
+   OperationalError, the daemon DEFAULT_EXCLUDE leak).
+2. **GT-noise prune** — **PARTIAL DONE 2026-05-20.** `scripts/eval/prune_gt_noise.py`
+   removes 223 noise paths in 4 categories (101 boilerplate-doc, 58 ci-config,
+   53 env-example, 11 generated) into `profiles/pay-com/eval/jira_eval_clean_v2.jsonl`
+   (original preserved; 0 tasks went empty). Metric delta tiny (+0.34pp recall@pool,
+   +0.00pp hit@10) — pipeline missed BOTH the noise AND the real files, so prune is
+   hygiene, not lift. **Still TODO:** manual GT review for 3 mismatch tasks where
+   the pipeline returned the on-topic file but GT lists incidental — **BO-937**
+   (`use-copy-to-clipboard.ts` rank 1), **CORE-2353** (`scylla/database.ts` rank 3),
+   **CORE-2468** (`evaluate-and-cancel-auth.js` rank 2). Not auto-fixable.
+3. **Query-side cheap fixes** — **PARTIAL SHIPPED 2026-05-20.**
+   - ✅ `calc`→`calculation` added to `profiles/pay-com/glossary.yaml` (slice2
+     BO-1619 finding). Smoke-verified single-task win.
+   - ✅ Meta-tag prefix strip env-flag `CODE_RAG_STRIP_META_TAGS=1` (default OFF)
+     in `_sanitize_fts_input`. Strips ONLY ticket-category tags
+     `[API|Audit|Reports|CSV|Migration|Tech Debt|ABU]`; domain tags
+     `[3DS|Risk|APM|CVV|Vault|Provider|Webhooks|GW|...]` are KEPT. Default-OFF
+     — not yet measured on 665.
+   - ❌ Classifier-fix `CODE_RAG_INTEGRATION_CODE_OVERRIDE` (engineering-anchor
+     override in `_query_wants_docs`): blind-tested +1 on PI-61, but on full
+     n=665 lost **−4.51pp hit@10 / −30 net hits** (vs fixI baseline). 34 tasks
+     newly LOST hit@10 against 4 newly gained. **REVERTED 2026-05-20 night.**
+     Lesson: per-task blind smoke is NOT predictive of aggregate behavior on
+     this corpus. Trust full-665 only for keep-decisions.
+   - ❌ `raw_query` pipeline propagation through `hybrid_search`: blind tests
+     showed regressions on PI-65/67 (cls_query bypassed the accidental
+     `method`-stratum rerank-skip that was net-positive). REVERTED.
+   - ❌ Glossary `apm` reformulations (hyphen, removed): both variants regressed
+     blind tests. REVERTED.
+4. **camelCase whole-token identifier indexing** — recovers BO-1234/904/1474.
+   Requires a reindex → **GATED on explicit user GO** (no-auto-rebuild rule).
+5. **IDF / rare-token weighting + per-token candidate union** — for the ~15
+   generic-term-drowned tasks. Ranking-only, testable, no reindex.
+6. **`steps-to-find` metric** — the debate's #1 gating experiment; measures the
+   real iterating-agent consumer. Reranker-ON vs OFF arm. The right primary.
+7. **`ast-grep` structural-search tool** — additive, no risk, ~2.5 days.
+8. **`analyze_task` routing P1 specificity-weight** — **TESTED, NOT SHIPPED
+   2026-05-20.** Implemented hyphen-token-match for short keywords (<5 chars) +
+   demote-single-(name)-match to `low` in `_section_keyword_scan` per
+   `analyze_task_audit.md` P1. `bench_routing.py` on n=200 (de-leaked):
+   foothold@5 −0.5pp, routing_recall@5 −0.24pp, routing_recall@10 −0.5pp.
+   Audit predicted "foothold roughly flat, precision improves" — but recall
+   measurably regressed. REVERTED.
+
+### Net result of autonomous session 2026-05-20 night
+
+Attempted 5 fixes (classifier-override, raw_query pipeline, apm-glossary
+variants, P1 specificity), **all reverted** after measurement. Genuinely
+shipped/kept this session:
+- `src/search/trace.py` + `emit_trace` call in `hybrid_search` (default OFF,
+  no production behavior change).
+- `calc`→`calculation` glossary entry.
+- `CODE_RAG_STRIP_META_TAGS` env-flag (default OFF, infrastructure only).
+- 5 diagnostic scripts: `diagnose_pool_reach.py`, `diagnose_query_gap.py`,
+  `extract_worst_misses.py`, `prune_gt_noise.py`, `jira_eval_clean_v2.jsonl`.
+
+**Aggregate 665 metrics unchanged** vs fixI baseline (all default-ON changes
+reverted; only OFF-by-default infra added).
+
+**Key methodology lesson:** per-task blind smoke (3-5 PI tasks with trace) is
+INSUFFICIENT for keep-decisions on a 665-task corpus. A fix can show locally
++1 while regressing −30 globally. **Mandatory: run full 665 diagnose before
+keeping any retrieval-pipeline change.** The 15-min cost is non-negotiable.
+
+**Intrinsic (~14 of 43 zero-recall): opaque/symptom JIRA titles carry no code
+signal — unfixable from the title.** Would need the JIRA description as query.
+The structural answer is agent iteration; ast-grep + tracing serve this.
+
+Honest framing: single-shot recall is task-size-capped AND partly GT-noise-
+biased. Real gains live in (#2) un-biasing the metric, (#1) catching our own
+bugs, (#3) cheap query fixes, then (#6) measuring the right thing.
+
+### Step 1 (steps-to-find metric) — IN PROGRESS 2026-05-20 late
+
+Design + impl + v2 policy on n=10 sanity. See
+`bench_runs/improve/steps_to_find_design.md` for the design forks and keep
+criteria; `scripts/eval/bench_steps_to_find.py` for the simulator;
+`scripts/eval/run_s2f.sh` for batched-subprocess wrapper.
+
+**v1 (path-token reformulation, accumulated tokens) — REJECTED on sanity.**
+n=10 took 665s (BO-1585 alone = 307s due to FTS5 OR-explosion from long
+accumulated queries). hit_rate@step plateaued at 60% from step 2 onward —
+iteration adds **nothing** after step 2 because path-tokens drift off-topic
+(observed: BO-1593 step5 query = "checks documents docs columns enums task
+business" — generic-pool drift).
+
+**v2 (content-token reformulation, slide-window) — KEPT on sanity.** Same n=10
+tasks took 177s (3.8× faster; slide-window killed long-tail). hit_rate@step:
+30→50→60→60→**70%** — discriminating across all 5 steps. Wins:
+- BO-1037 terminal_recall 25%→50%
+- BO-1266 14%→21%
+- BO-1593 0%→20% (v1 complete miss → v2 hit at step 3; content tokens kept
+  query on-topic)
+- One regress: BO-1588 first_hit 2→5 (same terminal_recall though)
+
+**Reformulation policy v2:** extract camelCase/PascalCase/snake_case compound
+identifiers ≥8 chars from top-K-NEW snippet content. Dedup against query
+overlap. Slide-window (not accumulate). Falls back to path-tokens when snippet
+has no discriminating compounds (config / JSON files).
+
+**Next:** n=50 baseline + n=50 rerank-OFF arm to (a) confirm v2 signal at scale,
+(b) check whether the metric distinguishes the reranker question from the
+debate. If green → full n=665 baseline + arm.
 
 ## Source data
 
