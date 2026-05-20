@@ -365,6 +365,58 @@ keep-decisions on this 665-task corpus.
 Next priorities (from Plan B): Step 2 (refined JIRA body enrichment),
 Step 3 (provider-scaffolding tool), Step 4 (camelCase whole-token indexing).
 
+### Step 1 closing — test-retest noise + fix-#1 falsification (2026-05-21)
+
+**Test-retest noise floor on pod GPU: ZERO.** Re-ran the baseline n=665
+bench on a fresh pod with identical config/env. Result: bit-identical to
+4 decimal places across all metrics, 0/665 tasks differ, 0 hit-state flips.
+
+| Metric | Run 1 | Run 2 | Δ |
+|---|---|---|---|
+| n_hit | 433 | 433 | 0 |
+| mean_terminal_recall | 0.1809 | 0.1809 | 0.0000 |
+| hit_rate@step 5 | 0.6511 | 0.6511 | 0.0000 |
+| per-task differ | — | — | **0/665** |
+
+**Implication:** any +/-Xpp delta from a fix evaluated on pod-vs-pod is
+**real signal, not noise** — even +0.6pp is measurable. Earlier concern
+from [[project_recall_pool_diagnosis_2026_05_19]] about 4pp test-retest
+spread applied to vector-ablation tests on different pod hardware, NOT to
+s2f on same hardware. Cross-platform (pod GPU vs Mac CPU) divergence
+remains real — that's a separate concern.
+
+**Fix #1 (rerank-skip on compound code identifier) FALSIFIED on n=30 local:**
+
+Implementation: env-gated `CODE_RAG_SKIP_RERANK_ON_IDENT=1` in
+`hybrid_rerank.py`. Detects camelCase ≥6 / PascalCase ≥6 / snake_case ≥6
+in query and skips reranker if present.
+
+| Metric | Baseline (no fix) | With fix #1 | Δ |
+|---|---|---|---|
+| n_hit | 23/30 | 20/30 | **−3** |
+| mean_terminal_recall | 21.75% | 15.97% | **−5.8pp** |
+| hit_rate@step 5 | 76.67% | 66.67% | **−10pp** |
+| full_recall_rate | 3.33% | 0% | −3pp |
+
+Catastrophic per-task losses: BO-928 100%→33% (rerank rescued it), BO-1588
+33%→0% (full miss), BO-1593 20%→0% (full miss), BO-1037 50%→25%.
+
+**Root cause of fix failure:** the bench's reformulation policy (content-
+token extraction) ADDS compound identifiers to the query on step 2+. So
+the fix triggers on nearly every task at step 2+, effectively becoming
+"rerank only at step 1, raw RRF after" — too aggressive.
+
+**Implementation reverted** (commits to follow). The hypothesis
+"skip rerank when query has identifier" doesn't generalize across
+iteration steps; the detection signal would need to filter to ORIGINAL
+title text only (before reformulation augmentation), or use task-level
+metadata (ticket prefix). Deferred.
+
+**Saved artifacts** (`bench_runs/improve/`):
+- `s2f_baseline_n30.json` — local baseline before fix
+- `s2f_fix1_withfix_n30_FAILED.json` — falsifying evidence
+- `s2f_v2_n665_baseline_retest/` — pod test-retest confirming zero noise
+
 ## Source data
 
 - `bench_runs/diagnose/fixI/` — current hybrid baseline (all fixes, vector+reranker ON)
