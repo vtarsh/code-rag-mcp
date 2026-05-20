@@ -302,9 +302,68 @@ returned per step → different content-token extraction → cascading divergenc
 Metric is honest and arm-discriminating. Next: full n=665 baseline + rerank-OFF
 arm to produce stratum-specific rerank-skip policy on full corpus.
 
-### Step 1 v2 — n=665 baseline + rerank-OFF arm — RUNNING
+### Step 1 v2 — n=665 baseline + rerank-OFF arm DONE 2026-05-20 late
 
-Full eval. ~3-4 h baseline + ~40 min rerank-OFF wall. Traces archived per arm.
+Ran on RunPod RTX 4090 (l8xsgfwkzzqhcn, EU-RO-1, ~$2 cost) — baseline 22 min,
+rerank-OFF 16 min wall. Trace enabled both arms (3317 + 3311 entries, 0 vec_errs,
+0 vec_zero, 14 fts_zero in BOTH arms = same pipeline behavior). Per
+`feedback_check_trace_between_runs` — pipeline clean, no silent bugs.
+
+**Full corpus ARM COMPARISON:**
+
+| Metric | rerank ON | rerank OFF | Δ |
+|---|---|---|---|
+| n_hit (step 5) | 433/665 (65.1%) | 399/665 (60.0%) | **−5.1pp** |
+| hit_rate@step 1 | 49.32% | 42.41% | −6.9pp |
+| hit_rate@step 2 | 56.54% | 49.32% | −7.2pp |
+| hit_rate@step 3 | 60.6% | 53.83% | −6.8pp |
+| hit_rate@step 4 | 63.31% | 57.44% | −5.9pp |
+| **hit_rate@step 5** | **65.11%** | **60.00%** | **−5.1pp** |
+| mean_terminal_recall | 18.09% | 16.10% | −2.0pp |
+| n_full_recall | 8 | 7 | −1 |
+
+**REVISED debate-residual answer (corrects n=50 finding):**
+
+| Context | Δ rerank |
+|---|---|
+| Single-shot (prior bench) | −14.1pp hit@10 |
+| **s2f@step 5 (n=665)** | **−5.1pp** |
+| s2f@step 5 (n=50 subset) | 0 (sample artifact) |
+
+Iteration recovers **~64% of single-shot reranker advantage** (14.1pp → 5.1pp),
+but **NOT all of it**. Rerank still earns 5.1pp irreducible value at step 5.
+
+**A-team's "keep rerank" position confirmed for iterating consumer.**
+B-team's "iteration-redundant" claim was overstated by the n=50 sample.
+
+**STRATA breakdown on full 665 — surprises:**
+
+| Stratum | n | rerank-ON hits | rerank-OFF hits | Δ hit | Verdict |
+|---|---|---|---|---|---|
+| **BO** | 361 (54%) | 237 | 201 | **−10.0pp** | rerank **STRONGLY HELPS** |
+| **CORE** | 236 (35%) | 143 | **147** | **+1.7pp** | rerank **HURTS** |
+| HS | 28 (4%) | 20 | 18 | −7.1pp | helps (noisy small sample) |
+| PI | 40 (6%) | 33 | 33 | 0 | neutral |
+
+Flips: rerank-ON wins 227, rerank-OFF wins 141, unchanged 297.
+
+**KEY METHODOLOGY LESSON — n=50 sub-sample inverted the truth.** n=50 said
+"rerank HURTS HS, helps BO" — full 665 says "rerank STRONGLY HELPS BO, HURTS
+CORE, helps HS". The n=50 sample (BO 17, CORE 16, HS 9, PI 8) was too small to
+expose CORE's pattern and misrepresented HS. Reinforces
+[[feedback_blind_smoke_insufficient]] — n=50 isn't enough for stratum-level
+keep-decisions on this 665-task corpus.
+
+**Decisions:**
+- **KEEP rerank ON globally** — biggest stratum BO loses 10pp without it.
+- **Consider stratum-gated rerank-skip for CORE** — could recover +1.7pp (4 hits)
+  on 236 CORE tasks. Extends [[project_p10_a2_landed_2026_05_20]] strata-gating
+  pattern (currently PI-substrata) to CORE.
+- **Step 1 (steps-to-find) is DONE.** Metric is honest, reproducible, and
+  discriminates arms at the corpus level.
+
+Next priorities (from Plan B): Step 2 (refined JIRA body enrichment),
+Step 3 (provider-scaffolding tool), Step 4 (camelCase whole-token indexing).
 
 ## Source data
 
