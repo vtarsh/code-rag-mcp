@@ -171,6 +171,12 @@ def expand_query(query: str) -> str:
     return query
 
 
+_META_TAG_RE = re.compile(
+    r"^\s*\[(?:API|Audit|Reports?|CSV|Migration|Tech\s+Debt|ABU)\]\s*",
+    re.IGNORECASE,
+)
+
+
 def _sanitize_fts_input(query: str) -> str:
     """Remove FTS5 special operators + syntax-breaking chars from user input.
 
@@ -186,7 +192,17 @@ def _sanitize_fts_input(query: str) -> str:
     vector-only fallback (which heavily biases toward provider docs).
     `/` is replaced with space (not stripped) so token boundaries inside
     paths like `applepay/googlepay` survive as two tokens.
+
+    Meta-tag prefix strip (CODE_RAG_STRIP_META_TAGS=1, default OFF):
+    Slice-3 audit 2026-05-20 found that ticket-category prefixes like `[API]`,
+    `[Audit]`, `[CSV]`, `[Reports]`, `[Migration]`, `[Tech Debt]`, `[ABU]` are
+    metadata — they steer the pool toward literally-named files
+    (`create-csv-report.ts`, route files) rather than the actual GT. Domain
+    tags (`[3DS]`, `[Risk]`, `[APM]`, `[CVV]`, `[Provider]`, `[Vault]`, etc.)
+    are NOT stripped — they carry real signal.
     """
+    if os.getenv("CODE_RAG_STRIP_META_TAGS", "0") == "1":
+        query = _META_TAG_RE.sub("", query)
     for op in ("AND", "OR", "NOT", "NEAR"):
         query = re.sub(rf"\b{op}\b", " ", query)
     # Strip FTS5 operators + syntax-breaking chars

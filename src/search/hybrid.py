@@ -62,6 +62,7 @@ from src.search.hybrid_rerank import (  # noqa: F401
     _should_skip_rerank,
     rerank,
 )
+from src.search.trace import emit_trace
 from src.search.vector import vector_search
 
 # chains. 82% of reformulation chains end with identical result_len and 56% of
@@ -718,6 +719,22 @@ def hybrid_search(
 
     # Inject similar repo annotations
     ranked = _annotate_similar_repos(ranked)
+
+    # Per-query pipeline trace (CODE_RAG_TRACE=1, default OFF — no-op overhead
+    # when disabled). Catches silent bugs: empty FTS pools, vector errors,
+    # filter collapse. Historic examples — 28.4% silent FTS OperationalError;
+    # daemon DEFAULT_EXCLUDE leak (paypal-docs returning 0 for any query).
+    emit_trace(
+        {
+            "query": query,
+            "fts_count": len(keyword_results),
+            "vec_count": len(vector_results),
+            "vec_err": vec_err,
+            "pool_size": total_candidates,
+            "final_count": len(ranked),
+            "exclude_file_types": exclude_file_types,
+        }
+    )
 
     return ranked, vec_err, total_candidates
 
