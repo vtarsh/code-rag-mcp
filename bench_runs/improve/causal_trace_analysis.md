@@ -151,6 +151,111 @@ Implementation sketch:
    "CORE schema/proto change" vs "CORE business-logic change") might do
    better. Worth measuring before shipping.
 
+## Replay-validated miss mechanism (4 tasks, 2026-05-20)
+
+After the per-task analysis above we ran `scripts/eval/replay_miss.py` on
+4 miss cases to expose the actual top-10 pool composition per step and the
+ranks at which GT files appeared. The replay confirms the mechanism but
+also reveals **GPU vs CPU rerank non-determinism for borderline-ranked
+files** — some pod-misses replay differently on local Mac.
+
+### BO miss mechanism — replay CONFIRMS pod result
+
+**BO-1491 OFF** (pod terminal_recall = 0, replay locally matches miss):
+- Step 1 query `Prevent Duplicate Individual Relations` returns 167-result
+  pool. **GT files ARE in the pool** at ranks 23, 40, 43, 113, 117.
+- Top-10 (raw RRF, no rerank): `onboarding-portal-web/BeneficialOwnerField`,
+  `onboarding-portal/BeneficialOwnerField`, `graphql/resolvers/individual/queries`,
+  `grpc-onboarding-individuals/methods/...`. All have stronger FTS+vector
+  signal on "Individual" + "Relations" because their snippets contain
+  `IndividualWithRelations` / `createIndividualWithRelation` patterns at
+  higher token density than the BO UI components do.
+- Agent reads top-3 → none are GT → content-token extraction yields
+  `residentialAddress dateOfBirth` (onboarding domain).
+- Step 2 query drifts further into onboarding stack; GT files move FARTHER
+  to ranks 74, 97, 108, 114. Cascade collapse.
+- Conclusion: **raw RRF without rerank places onboarding-portal repos above
+  backoffice-web in this query domain. The reranker is what flips
+  backoffice-web/Components/Individuals/... to top-3.** Replay matches the
+  miss faithfully.
+
+**BO-1109 OFF** (pod terminal_recall = 0, replay locally matches miss):
+- Step 1 query `Mercant Drilldown > "Finance configurations" tab` — GT
+  `MerchantPage.tsx` at **rank 11** (just outside top-10). Other GTs at
+  rank 115 (`authorization/consts.ts`) and not surfaced.
+- Top-10 raw RRF: `next-web-payment-methods-configurations`, `space-web/Finance`,
+  `next-web-settlement-drilldown`, etc. — all repos that match "Finance" +
+  "drilldown" + "Configurations" tokens but are wrong repos for this BO task.
+- Agent reads top-3 → off-topic. Token extraction → `useState FeatureFlagName`
+  (from useParentFrameFeatureFlagValue.ts).
+- Step 2 cascades into next-web-*-drilldown FeatureFlag stack. GT
+  `MerchantPage.tsx` drops to rank 36, never recovers.
+- Conclusion: same pattern as BO-1491 — GT just outside top-10 in raw RRF,
+  rerank is the mechanism that promotes it into the readable window.
+
+### CORE miss mechanism — replay PARTIALLY matches pod (platform divergence)
+
+**CORE-2328 ON** (pod terminal_recall = 0; **local replay finds GT at rank 1**):
+- Pod said rerank-ON missed; local CPU replay shows GT
+  `clean-external-trace-headers.js` at rank 1 step 1.
+- Means: on POD GPU, the rerank scored this file slightly lower (or scored
+  some other file slightly higher), pushing GT below top-3 enough for the
+  agent to miss. On local CPU, the rerank scores the right file at rank 1.
+- **GPU vs CPU float-precision in CrossEncoder scoring matters on
+  borderline-rank tasks.** Same model, same data, different platform =
+  different top-3 in tightly-contested rankings.
+
+**CORE-2492 ON** (pod terminal_recall = 0, local replay also misses):
+- Step 1: GT `get-transaction-partition-key-generic.ts` at rank 22, GT
+  `consts.ts` at rank 27. Out of reach for top-3.
+- Top-3: `get-date-range-partition-keys.js` (sibling repo, NOT GT) +
+  `get-transaction-partition-key.ts` (BULK / non-generic version, NOT GT).
+- Even with rerank, GT generic-version stays below the bulk/specific
+  sibling versions. The reranker doesn't distinguish between sibling
+  partition-key variants well.
+- Step 2 query gets `companyId currentDateObj` from rank 1 sibling. Step 2
+  pool actually elevates GT generic-version to rank 7 — almost in reach.
+  But K_READ=3 means ranks 1-3 are read, and ranks 1-6 are sibling/already-seen.
+  Just-out-of-reach pattern. Cascade drifts further.
+- Conclusion: not "rerank hurts" exactly — more like "rerank doesn't help
+  enough on intra-repo sibling-file ambiguity". The K_READ=3 cap is part
+  of the failure here.
+
+**CORE-2170 ON** (pod terminal_recall = 0.20, local replay = 5+ GT visible):
+- Step 1 local replay: **GT files at ranks 1, 3, 4, 5, 7, 8, 9** — 7 of 10
+  GT files in top-9! If agent had K_READ=8, would have found all 7.
+- But pod found only 2/10. Means pod rerank promoted BO-style files
+  (`backoffice-web/Pages/Compliance/...Business/...`) into top-3,
+  displacing the grpc-core-entity files that local rerank kept at top.
+  Confirmed: by step 2 even local replay shows BO files at rank 1-4
+  (`MerchantUnderwritingPage/Page/Business/...` + `onboarding-portal/UsRegion`).
+- Conclusion: **the BO-bias of the reranker is robust across platforms —
+  the question is just WHICH step it takes effect.** On pod it triggered
+  step 1, on local step 2.
+
+### Platform divergence — implications
+
+The pod (GPU) and local (CPU) inference of the SAME reranker model
+`Tarshevskiy/pay-com-rerank-l12-ft-run1` produces:
+- **Identical scores in the limit / for clearly-aligned tasks.** BO misses
+  replay faithfully (BO-1491, BO-1109).
+- **Borderline-rank ordering can flip.** For tasks where rerank candidates
+  are within a few points of each other (CORE-2328, CORE-2170 step 1), the
+  ranks 1-5 can shuffle, which then drives different content-token
+  extraction → different cascading divergence.
+
+**This means:** the n=665 aggregate (BO rerank-helps, CORE rerank-hurts)
+is a real signal, but **specific per-task examples might not 1:1 replay
+on different platforms**. The MECHANISM is robust; the specific timing
+isn't. When we report "task X missed on rerank-OFF", that's
+platform-anchored evidence — re-running locally may show different per-step
+top-K.
+
+For the actionable recommendation (CORE stratum-gated rerank-skip), this
+means **we should validate it on the same platform where it'll ship**.
+Decision can't rest on a single per-task example; it needs the aggregate
+pattern on the target platform (pod GPU in our case).
+
 ## Tasks NOT re-analyzed (lower-magnitude flips)
 
 Below are flips with |Δterminal_recall| < 0.30 that we did NOT investigate
