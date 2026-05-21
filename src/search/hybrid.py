@@ -35,7 +35,7 @@ from src.config import (
 from src.container import db_connection
 from src.search.code_facts import code_facts_search, fetch_chunks_for_files
 from src.search.env_vars import env_var_search
-from src.search.fts import fts_search, sanitize_fts_query
+from src.search.fts import fts_search, fts_search_per_token, sanitize_fts_query
 
 # Re-export query analysis for backward compatibility
 from src.search.hybrid_query import (  # noqa: F401
@@ -408,9 +408,10 @@ _DOC_NOISE_TYPES = "docs,reference,gotchas,domain_registry,provider_doc,package_
 _DEDUP_RESULTS = os.getenv("CODE_RAG_DEDUP_RESULTS", "1") == "1"  # enabled 2026-05-19
 
 # Step 2 (2026-05-21): JIRA body enrichment — separate FTS-only pass on
-# code-anchored body tokens, RRF-merged with the title pass. Default OFF;
-# bench gates the same env in scripts/eval/bench_steps_to_find.py.
-_TASK_BODY_ENRICH = os.getenv("CODE_RAG_TASK_BODY_ENRICH", "0") == "1"
+# code-anchored body tokens, RRF-merged with the title pass. Default ON
+# since 2026-05-21 night after pod n=665 keep-decision PASSED (+3.31pp
+# s2f@step5, +22 n_hit, +5 full_recall). Set env to "0" to disable.
+_TASK_BODY_ENRICH = os.getenv("CODE_RAG_TASK_BODY_ENRICH", "1") == "1"
 # RRF k constant for body merge — same value as the FTS/vector RRF inside
 # hybrid_search (`RRF_K`). Kept as a local default so the body weight can
 # evolve independently without rebalancing the keyword/vector RRF.
@@ -428,6 +429,18 @@ _BODY_FTS_LIMIT = int(os.getenv("CODE_RAG_BODY_FTS_LIMIT", "50"))
 # (pure RRF merge). N=5 protects the agent's K_READ=3 step window with a
 # safety margin (s2f bench reads top-3 per step).
 _BODY_PROTECT_TOP_N = int(os.getenv("CODE_RAG_BODY_PROTECT_TOP_N", "5"))
+
+# Step 3 (2026-05-21): per-token candidate union for the FTS pool. Targets
+# "generic-term-drowned" zero-recall tasks where rare-token expected files
+# lose the BM25 race to token-dense siblings. Running one FTS5 query per
+# content token guarantees each token contributes files. Env-gated default
+# OFF — when ON, augments the FTS keyword pool (not the body pool) so it
+# composes orthogonally with Step 2 body enrichment.
+_PER_TOKEN_UNION = os.getenv("CODE_RAG_PER_TOKEN_UNION", "0") == "1"
+# Per-token FTS pool size. 10 x 10 tokens = +100 candidates worst case,
+# keeping the keyword_results pool <= 150 + 100 = 250 (under the 300 ceiling).
+_PT_LIMIT = int(os.getenv("CODE_RAG_PT_LIMIT", "10"))
+_PT_MAX_TOKENS = int(os.getenv("CODE_RAG_PT_MAX_TOKENS", "10"))
 
 
 def hybrid_search(
@@ -499,6 +512,29 @@ def hybrid_search(
     # 1. Keyword search (FTS5) — large pool, no per-repo cap.
     #    P4.2: raised 100→150 to fill rerank pool to ~200 after RRF overlap.
     keyword_results = fts_search(query, repo, file_type, exclude_file_types, limit=150)
+
+    # Step 3 (per-token candidate union): rare-token rescue for
+    # generic-term-drowned queries. Appends per-token candidates to the
+    # FTS pool AFTER the global FTS call, so they land at lower ranks
+    # (RRF positional weight is smaller) — they only win when the
+    # downstream reranker or vector co-hit promotes them. Bit-identical
+    # to baseline when env unset.
+    per_token_count = 0
+    if _PER_TOKEN_UNION:
+        extra = fts_search_per_token(
+            query,
+            repo,
+            file_type,
+            exclude_file_types,
+            per_token_limit=_PT_LIMIT,
+            max_tokens=_PT_MAX_TOKENS,
+        )
+        seen_ids = {sr.rowid for sr in keyword_results}
+        for sr in extra:
+            if sr.rowid not in seen_ids:
+                keyword_results.append(sr)
+                seen_ids.add(sr.rowid)
+                per_token_count += 1
 
     # 2. Vector search — two-tower routing.
     #
@@ -778,6 +814,7 @@ def hybrid_search(
             "exclude_file_types": exclude_file_types,
             "body_query": body_query_str,
             "body_fts_count": body_pass_hits,
+            "per_token_added": per_token_count,
         }
     )
 

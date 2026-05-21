@@ -55,10 +55,10 @@ sys.path.insert(0, str(REPO_ROOT))
 EVAL_PATH = REPO_ROOT / "profiles" / "pay-com" / "eval" / "jira_eval_clean_v2.jsonl"
 TASKS_DB_PATH = REPO_ROOT / "db" / "tasks.db"
 
-# Step 2 (2026-05-21): body-enrichment env-gate. Off by default keeps the
-# bench bit-identical to the Step 1 baseline. When on, fetch the JIRA body
-# once per task from tasks.db and pass it to hybrid_search on every step.
-_BODY_ENRICH = os.getenv("CODE_RAG_TASK_BODY_ENRICH", "0") == "1"
+# Step 2 (2026-05-21): body-enrichment env-gate. Default ON since 2026-05-21
+# night after pod n=665 keep-decision PASSED (+3.31pp s2f@step5). Set env
+# to "0" to disable for ablation runs.
+_BODY_ENRICH = os.getenv("CODE_RAG_TASK_BODY_ENRICH", "1") == "1"
 
 
 def _fetch_body(ticket_id: str) -> str:
@@ -522,6 +522,7 @@ def main() -> int:
             "no_rerank": os.getenv("CODE_RAG_NO_RERANK", "0") == "1",
             "no_vector": os.getenv("CODE_RAG_NO_VECTOR", "0") == "1",
             "task_body_enrich": _BODY_ENRICH,
+            "per_token_union": os.getenv("CODE_RAG_PER_TOKEN_UNION", "0") == "1",
         },
         "eval_per_query": per_query,
     }

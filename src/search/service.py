@@ -129,6 +129,17 @@ _FRONTEND_REPOS = frozenset(
 )
 _FRONTEND_BOOST = float(os.getenv("CODE_RAG_FRONTEND_BOOST", "1.3"))
 
+# Step 3-v3 (2026-05-21): default-FE soft boost for generic queries.
+# 7/13 FE-bias misses (per .claude/debug/current/misses_slice1.md) had
+# queries with NEITHER explicit FE keywords (button, modal, layout) NOR
+# explicit BE keywords (resolver, mutation, grpc). Current logic gives
+# them no boost → token-poor JSX components lose BM25 to token-dense
+# .js siblings. Soft boost (1.2x default, conservatively below the
+# 1.3x explicit-FE boost) lifts FE repos when the query is signal-free.
+# Env-gated default OFF so we can pod-bench it cleanly vs baseline.
+_FE_DEFAULT_BOOST = os.getenv("CODE_RAG_FE_DEFAULT_BOOST", "0") == "1"
+_FE_DEFAULT_BOOST_MULT = float(os.getenv("CODE_RAG_FE_DEFAULT_BOOST_MULT", "1.2"))
+
 # Backend repos that don't match the standard prefixes (grpc-, workflow-, express-api-)
 # but are still backend/infrastructure repos that should receive backend boosts.
 _BACKEND_REPOS = frozenset(
@@ -367,6 +378,14 @@ def _detect_intent_adjustments(
         repo_boost = {repo: _FRONTEND_BOOST for repo in _FRONTEND_REPOS}
         repo_boost.update({repo: _BACKEND_BOOST_MULTIPLIER for repo in _BACKEND_REPOS if repo})
         repo_prefix_boost = {prefix: _BACKEND_BOOST_MULTIPLIER for prefix in _BACKEND_REPO_PREFIXES}
+    elif _FE_DEFAULT_BOOST and not has_backend and not has_frontend:
+        # Generic query, no FE/BE signal. 7/13 FE-bias zero-recall tasks
+        # land here. Apply soft FE boost (default 1.2x) to lift token-poor
+        # JSX components against token-dense backend siblings. Env-gated
+        # because backend-only repos in this branch get neither boost nor
+        # demote — non-zero risk we accidentally lift FE when the GT is in
+        # graphql/grpc.
+        repo_boost = {repo: _FE_DEFAULT_BOOST_MULT for repo in _FRONTEND_REPOS}
 
     return repo_boost, repo_prefix_boost, is_frontend_only, has_backend
 

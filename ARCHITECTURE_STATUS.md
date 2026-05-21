@@ -478,10 +478,10 @@ files in favour of BO-style infrastructure files). Body enrichment rescues
 correct CORE repo (e.g. CORE-2522 body extracts `grpc-payment-gateway` —
 which is literally the GT repo).
 
-**Default-OFF retained.** Brief explicitly mandates env-gating; production
-flip pending separate decision. The feature is validated and ready —
-flipping default to ON in `src/search/hybrid.py` (one-line change) is the
-next-action when ready to ship.
+**Default flipped to ON 2026-05-21 night.** After pod n=665 keep-decision
+PASSED, the env-flag default was flipped from `"0"` → `"1"` in both
+`src/search/hybrid.py:_TASK_BODY_ENRICH` and `scripts/eval/bench_steps_to_find.py:_BODY_ENRICH`.
+Set `CODE_RAG_TASK_BODY_ENRICH=0` to disable for ablation runs.
 
 **Local sanity preceding pod (`bench_runs/improve/s2f_step2_smoke/`):**
 - `core30_off.json` / `core30_on*.json` — CORE offset=440 n=30 mixed signal
@@ -512,6 +512,52 @@ next-action when ready to ship.
 - Body query is FTS-only (no vector, no rerank) — keeping it lightweight
   matches the brief's "auxiliary signal" framing. Adding rerank-with-title
   on body candidates would be a future experiment.
+
+### Step 3 v1 — per-token candidate union NO-OP 2026-05-21 night
+
+Plan B Step 3 (revised from "provider-scaffolding" — see decision rationale
+below) attempted IDF / rare-token rescue via per-token FTS5 union into the
+keyword pool. Implementation (env-gated default OFF):
+
+- `src/search/fts.py::fts_search_per_token` — splits query into content
+  tokens (≥3 chars, non-stopword), sorts by length desc as rarity proxy,
+  caps at `_PT_MAX_TOKENS=10`, calls `fts_search(token, limit=_PT_LIMIT=10)`
+  per token, unions into a single dedup'd list.
+- `src/search/hybrid.py` — env `CODE_RAG_PER_TOKEN_UNION=1`. Appends
+  per-token results to `keyword_results` AFTER the main `fts_search(query,
+  limit=150)` call.
+- `tests/test_fts_per_token.py` — 10 unit tests.
+
+**Result on local n=30 (offset=0):** ZERO change vs OFF baseline.
+- n_hit 23 → 23 (Δ=0)
+- hit_rate@step5 76.7% → 76.7% (Δ=0)
+- terminal_recall 21.75% → 21.75% (Δ=0)
+- mean_steps_to_first 1.78 → 1.78 (Δ=0)
+- 30/30 NEUTRAL on per-task TR.
+
+**Why it failed (RRF math):** v1 appends per-token candidates AFTER the
+main FTS pool. They land at ranks 151-250, getting RRF score
+`2.0/(40+151+1)=0.0104` — vs top vector candidate at
+`1.0/(40+0+1)=0.0244`. Per-token contribution is dominated by every other
+leg. FIX-D dedup (chunk → file) further trims duplicates of files already
+in pool. Per-token-only candidates never reach the reranker top-200 read
+window in any meaningful position.
+
+**Why "provider-scaffolding" was deferred:** the brief's Step 3 was
+"provider-scaffolding tool", but recon found only 3/43 zero-recall tasks
+are provider-related (PI-37, PI-41, PI-47). PI strata already hit 82.5%
+(best stratum). PI-47 "Payhub" is unfixable without external mapping
+(brand name 0-chunks in index). Estimated lift was <1pp.
+
+**Why per-token failed concretely:** smoke on 5 BO/CORE tasks the design
+agent picked (BO-1041, BO-1139, BO-1224, CORE-2507, CORE-2609) showed all
+5 had ZERO overlap between query tokens and GT-file content (vocab-gap
+failure mode, NOT generic-term-drowned). Per-token union can only rescue
+files that have AT LEAST ONE query token — these had none.
+
+**Status:** v1 code committed env-gated default OFF (zero production impact).
+v2 redesign (per-token as separate RRF leg with comparable weight to keyword
+leg) is under research — see `tasks/research_v2_*.md` for agent reports.
 
 ## Source data
 
