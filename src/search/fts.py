@@ -327,7 +327,11 @@ def sanitize_fts_query(query: str) -> str:
             sanitized.append(f'"{token}"')
         else:
             sanitized.append(token)
-    if os.getenv("CODE_RAG_USE_CAMELCASE_EXPAND", "0") == "1":
+    # 2026-05-22: camelCase expand default ON after pod n=665 keep-decision.
+    # Baseline: hit=454, recall@pool=0.4708. With camel: hit=459 (+5), recall@pool=0.4846
+    # (+1.38pp), retrieval_failures 58->52 (-6). Composes orthogonally with Step 2
+    # body enrichment. Set CODE_RAG_USE_CAMELCASE_EXPAND=0 to disable.
+    if os.getenv("CODE_RAG_USE_CAMELCASE_EXPAND", "1") == "1":
         sanitized.extend(_camelcase_variants(sanitized))
     # FIX-I (2026-05-19): dedup OR-terms case-insensitively. ~7% of JIRA queries
     # repeat a token ("merchant OR merchant", "Button OR button") — a repeated

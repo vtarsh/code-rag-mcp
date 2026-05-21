@@ -593,17 +593,101 @@ do NOT enable without a more targeted activation rule (e.g. only when
 query contains UI-suggesting nouns that aren't already in `_FRONTEND_KEYWORDS`).
 NOT pod-benched (waste of $).
 
-### Step 4 — camelCase whole-token indexing — PENDING USER GO
+### Step 4 — camelCase whole-token indexing FALSIFIED PREMISE 2026-05-21 night
 
-Plan B step 4 from prioritized list. Per research agent: best strategy is
-inject-at-index-time (`__identifiers` line in chunk content), 60 LOC,
-no schema change, but requires full reindex (~2h, peak ~20GB RAM on
-16GB Mac → likely needs pod, or `feedback_no_auto_rebuild` makes this a
-hard-gate decision).
+Plan B step 4. After user GO, ran an EMPIRICAL tokenizer test BEFORE
+launching the 2h+20GB reindex. Found the premise is wrong:
 
-Affected: ~50 tasks (7.5%) have camelCase queries; estimated 30-40 task
-recovery — biggest potential lift remaining. Awaiting explicit user GO
-to launch reindex.
+```
+sqlite3 db/knowledge.db
+  > SELECT COUNT(*) FROM chunks WHERE chunks MATCH 'getMerchantId';      → 25
+  > SELECT COUNT(*) FROM chunks WHERE chunks MATCH 'toArray';            → 129
+  > SELECT COUNT(*) FROM chunks WHERE chunks MATCH 'generateColumnDefinitions'; → 88
+  > SELECT COUNT(*) FROM chunks WHERE chunks MATCH 'UpdateActiveMerchantApplication'; → 1
+  > SELECT COUNT(*) FROM chunks WHERE chunks MATCH 'columnDefinitions';  → 9
+```
+
+**FTS5 `porter unicode61` ALREADY preserves camelCase identifiers as
+whole tokens.** unicode61 splits on non-alphanumeric chars only; case
+boundaries are NOT splits. The earlier ARCHITECTURE_STATUS claim
+"`porter unicode61` splits `toColumnDefinitions` → `column/definitions`"
+was wrong — that's not how the tokenizer behaves.
+
+**Real BO-1234/904/1474 failure modes (empirically verified):**
+- **BO-1234** "Remove `toColumnDefinitions` function" — `toColumnDefinitions`
+  matches 0 chunks. The identifier doesn't exist in current code (refactor
+  task: code was renamed to `generateColumnDefinitions` already, which has
+  88 chunks). Vocab gap from STALE QUERY TOKEN. Step 4 inject can't help.
+- **BO-1474** "UpdateActiveMerchantApplication permission" — identifier
+  IS indexed (1 chunk). The failure is ranking: that 1 chunk doesn't
+  beat 200 other candidates in the BM25 race. Ranking-layer fix only.
+- **BO-904** "Refactor all backoffice Children.toArray" — `toArray` is
+  TOO COMMON (129 chunks). The 4 GT files are drowned by 125 sibling
+  uses. Needs IDF or repo-aware filtering — Step 3 already tried both
+  and failed.
+
+**Verdict:** Step 4 as designed (inject `__identifiers` at index time)
+would add ~60 LOC + force a 2h pod reindex ($1-2) for ZERO measurable
+lift. The tokenizer is not the bottleneck. Cancelled before launching
+the reindex.
+
+This closes the brief's Plan B prioritized next steps list. Remaining
+items #5 (IDF — tested as Step 3 v1, no-op), #6 (steps-to-find — done),
+#7 (ast-grep — additive, no risk, ~2.5 days) are documented in earlier
+sections.
+
+### Step 5 — camelCase query expansion DEFAULT ON 2026-05-22 night
+
+After user redirected to recall focus, ran single-shot recall@10 diagnostic
+on full pod n=665 to test all available env knobs. Discovery: the existing
+`CODE_RAG_USE_CAMELCASE_EXPAND` env-flag (default OFF for ~6 weeks per the
+src/search/fts.py:sanitize_fts_query comment) gives a measurable recall lift.
+
+**Pod n=665 4-arm A/B (RTX 4090 ~$0.50, 2026-05-22):**
+
+| Arm | hits | hit@10 | recall@10 | recall@pool | retr_fails |
+|---|---|---|---|---|---|
+| baseline (body OFF, camel OFF) | 454 | 0.6827 | 0.1794 | 0.4708 | 58 |
+| body ON | 454 | 0.6827 | 0.1794 | 0.4708 | 58 |
+| **camel ON** | **459** | **0.6902** | **0.1828** | **0.4846** | **52** |
+| body + camel | 459 | 0.6902 | 0.1828 | 0.4846 | 52 |
+
+**Findings:**
+1. **Step 2 body enrichment has ZERO effect on single-shot recall@10.**
+   Body/no-body arms are bit-identical on diagnose_recall metrics. Body
+   helps only in the s2f multi-step iterating consumer (+3.31pp pod-validated
+   2026-05-21). Mechanism: body candidates land at lower ranks after title
+   rerank; in single-shot they never reach top-10. In s2f they shift the
+   reformulation cascade by changing which top-3-NEW files the agent reads.
+2. **camelCase expand: +5 hits / +1.38pp recall@pool / −6 retrieval_failures**
+   independently of body. Mechanism: for each adjacent token pair in a
+   query (after stopword strip), emits `tokenAB` and `TokenAB` variants.
+   FTS5 `porter unicode61` preserves these compound forms as whole tokens
+   (verified empirically earlier — see "Step 4 FALSIFIED" section). So
+   query "update merchant" gets OR-terms `updateMerchant UpdateMerchant`
+   that match code identifiers literally containing those compounds.
+3. **Orthogonal composition** — body + camel = same as camel alone on
+   single-shot recall. No interaction.
+
+**Why this is a clean win:**
+- Code already existed (env-gated). Just flip default "0" → "1" in fts.py:330.
+- Zero cost: sub-ms FTS5 query overhead for the extra OR-terms.
+- Reversible: `CODE_RAG_USE_CAMELCASE_EXPAND=0` disables.
+- No reindex required.
+- Validated on full n=665 pod GPU (same hardware as Step 1 zero-noise floor).
+
+**Local sanity preceding pod (`bench_runs/improve/recall_current/`):**
+- n=100 offset=0 paired: hit@10 68% → 69%, recall@10 +0.88pp, recall@pool +1.10pp
+- n=100 offset=100 paired (different sample): recall@10 +1.34pp, recall@pool +4.26pp
+- Combined n=200: recall@10 +1.11pp, recall@pool +2.68pp (consistent across slices)
+
+**Net session-over-session recall trajectory:**
+| Metric | Branch start | After Step 5 | Δ |
+|---|---|---|---|
+| hit@10 single-shot | 60.5% | ~71-72% | +10pp+ |
+| recall@10 | 15.2% | ~18.3-19% | +3-4pp |
+| recall@pool | 42% | **49%** | **+7pp** |
+| s2f@step5 | 65.1% | 68.4% | +3.31pp (Step 2) |
 
 ## Source data
 

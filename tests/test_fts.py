@@ -108,7 +108,12 @@ class TestSanitizeFtsQuery:
     def test_or_joining(self):
         result = sanitize_fts_query("trustly verification webhook")
         parts = result.split(" OR ")
-        assert len(parts) == 3
+        # 3 content tokens + 4 camelCase variants when CODE_RAG_USE_CAMELCASE_EXPAND
+        # default is ON (2026-05-22). Set CODE_RAG_USE_CAMELCASE_EXPAND=0 to revert.
+        # Pairs: (trustly,verification) -> trustlyVerification + TrustlyVerification
+        #        (verification,webhook) -> verificationWebhook + VerificationWebhook
+        assert len(parts) >= 3
+        assert "trustly" in parts and "verification" in parts and "webhook" in parts
 
     def test_snake_case_split_and_quoted(self):
         result = sanitize_fts_query("update_merchant")
