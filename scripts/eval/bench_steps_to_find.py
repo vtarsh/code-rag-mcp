@@ -37,6 +37,7 @@ import json
 import os
 import re
 import resource
+import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -52,6 +53,32 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 EVAL_PATH = REPO_ROOT / "profiles" / "pay-com" / "eval" / "jira_eval_clean_v2.jsonl"
+TASKS_DB_PATH = REPO_ROOT / "db" / "tasks.db"
+
+# Step 2 (2026-05-21): body-enrichment env-gate. Off by default keeps the
+# bench bit-identical to the Step 1 baseline. When on, fetch the JIRA body
+# once per task from tasks.db and pass it to hybrid_search on every step.
+_BODY_ENRICH = os.getenv("CODE_RAG_TASK_BODY_ENRICH", "0") == "1"
+
+
+def _fetch_body(ticket_id: str) -> str:
+    """Return task_history.description for `ticket_id` or '' on miss/error.
+
+    Bench-side helper — production lookups happen elsewhere. Errors swallowed
+    silently so a missing tasks.db just disables enrichment for the run.
+    """
+    if not ticket_id or not TASKS_DB_PATH.exists():
+        return ""
+    try:
+        with sqlite3.connect(str(TASKS_DB_PATH)) as con:
+            row = con.execute(
+                "SELECT description FROM task_history WHERE ticket_id=?",
+                (ticket_id,),
+            ).fetchone()
+            return (row[0] or "") if row else ""
+    except sqlite3.Error:
+        return ""
+
 
 # --- Identifier extraction --------------------------------------------------
 
@@ -246,6 +273,10 @@ def simulate_one(
     expected = [_key(ep["repo_name"], ep["file_path"]) for ep in row.get("expected_paths", [])]
     expected_set = set(expected)
     n_exp = max(1, len(expected_set))
+    # Step 2: stable body string passed to every hybrid_search call. Env-gated
+    # at module-load so the lookup happens once per task at most. Empty string
+    # is a valid no-signal value — hybrid_search treats it as no body.
+    task_body = _fetch_body(row.get("id", "")) if _BODY_ENRICH else ""
 
     read_set: set[tuple[str, str]] = set()
     found_at: dict[tuple[str, str], int] = {}
@@ -279,6 +310,7 @@ def simulate_one(
                 entity_boost=1.3 if use_entity_boost else 1.0,
                 repo_boost=repo_boost,
                 repo_prefix_boost=repo_prefix_boost,
+                body=task_body,
             )
             if use_entity_boost and len(ranked) < 5:
                 ranked, *_ = hybrid_search(
@@ -291,6 +323,7 @@ def simulate_one(
                     docs_index=None,
                     repo_boost=repo_boost,
                     repo_prefix_boost=repo_prefix_boost,
+                    body=task_body,
                 )
         except Exception as exc:
             return {"id": row.get("id", ""), "query": base_query, "error": repr(exc), "step_failed": step}
@@ -488,6 +521,7 @@ def main() -> int:
             "use_expand_query": use_expand,
             "no_rerank": os.getenv("CODE_RAG_NO_RERANK", "0") == "1",
             "no_vector": os.getenv("CODE_RAG_NO_VECTOR", "0") == "1",
+            "task_body_enrich": _BODY_ENRICH,
         },
         "eval_per_query": per_query,
     }
