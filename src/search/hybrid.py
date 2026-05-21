@@ -407,6 +407,28 @@ _DOC_NOISE_TYPES = "docs,reference,gotchas,domain_registry,provider_doc,package_
 # Env-gated, default OFF = byte-for-byte unchanged.
 _DEDUP_RESULTS = os.getenv("CODE_RAG_DEDUP_RESULTS", "1") == "1"  # enabled 2026-05-19
 
+# Step 2 (2026-05-21): JIRA body enrichment — separate FTS-only pass on
+# code-anchored body tokens, RRF-merged with the title pass. Default OFF;
+# bench gates the same env in scripts/eval/bench_steps_to_find.py.
+_TASK_BODY_ENRICH = os.getenv("CODE_RAG_TASK_BODY_ENRICH", "0") == "1"
+# RRF k constant for body merge — same value as the FTS/vector RRF inside
+# hybrid_search (`RRF_K`). Kept as a local default so the body weight can
+# evolve independently without rebalancing the keyword/vector RRF.
+_BODY_RRF_K = 60
+# Body weight relative to title weight (1.0). Below 1.0 keeps title dominant
+# while still letting a strong body-anchored signal override borderline-ranked
+# title candidates. 0.5 mirrors common two-retriever RRF defaults.
+_BODY_RRF_WEIGHT = float(os.getenv("CODE_RAG_BODY_RRF_WEIGHT", "0.5"))
+# FTS pool size for the body pass. Lower than title FTS (150) — body signal
+# is auxiliary, no need to scan deep.
+_BODY_FTS_LIMIT = int(os.getenv("CODE_RAG_BODY_FTS_LIMIT", "50"))
+# Top-N title slots protected from body-pass displacement. The first
+# `_BODY_PROTECT_TOP_N` items from the title-pass keep their positions;
+# body candidates compete only for slots N..limit. 0 disables the guard
+# (pure RRF merge). N=5 protects the agent's K_READ=3 step window with a
+# safety margin (s2f bench reads top-3 per step).
+_BODY_PROTECT_TOP_N = int(os.getenv("CODE_RAG_BODY_PROTECT_TOP_N", "5"))
+
 
 def hybrid_search(
     query: str,
@@ -421,6 +443,7 @@ def hybrid_search(
     entity_boost: float = 1.0,
     repo_boost: dict[str, float] | None = None,
     repo_prefix_boost: dict[str, float] | None = None,
+    body: str | None = None,
 ) -> tuple[list[dict], str | None, int]:
     """Hybrid search: combine FTS5 keyword + vector similarity via RRF.
 
@@ -700,6 +723,26 @@ def hybrid_search(
         # Rerank with cross-encoder (eval path may override with a specific model)
         ranked = rerank(query, ranked, limit, reranker_override=reranker_override)
 
+    # Step 2 (2026-05-21): JIRA body enrichment — RRF-merge a code-anchored
+    # body pass into the reranked title list. Default OFF; no-op without a
+    # body string. Body candidates that ALREADY appear in `ranked` get a
+    # small RRF boost; body-only candidates are injected so a strong body
+    # signal can lift a file the title pass missed entirely. Title weight
+    # is 1.0, body weight is `_BODY_RRF_WEIGHT` (default 0.5) — title still
+    # dominates on tasks with healthy titles, body matters when the title
+    # is opaque (~14 of the 43 zero-recall tasks per the 2026-05-20 audit).
+    body_query_str: str | None = None
+    body_pass_hits = 0
+    if _TASK_BODY_ENRICH and body:
+        from src.tools.task_context import build_body_query  # local to keep import graph light
+
+        body_query_str = build_body_query(body, query)
+        if body_query_str:
+            body_fts = fts_search(body_query_str, repo, file_type, exclude_file_types, limit=_BODY_FTS_LIMIT)
+            if body_fts:
+                ranked = _rrf_merge_body(ranked, body_fts, limit)
+                body_pass_hits = len(body_fts)
+
     # Cross-provider fan-out (post-rerank). When opted in and the query matches
     # {provider} {topic_verb}, prepend a grouped header with top-1 analogous
     # chunk from up to 6 sibling provider repos. This targets 56% of observed
@@ -733,10 +776,101 @@ def hybrid_search(
             "pool_size": total_candidates,
             "final_count": len(ranked),
             "exclude_file_types": exclude_file_types,
+            "body_query": body_query_str,
+            "body_fts_count": body_pass_hits,
         }
     )
 
     return ranked, vec_err, total_candidates
+
+
+def _rrf_merge_body(
+    title_ranked: list[dict],
+    body_fts: list,
+    limit: int,
+) -> list[dict]:
+    """RRF-merge title pass (reranked) and body pass (FTS-only).
+
+    Treats title and body as two retrievers. RRF score is positional:
+        rrf = title_weight / (K + title_rank) + body_weight / (K + body_rank)
+    Body weight defaults to 0.5 of title weight; title still dominates when a
+    title-pass top candidate isn't in the body pool, but body lifts borderline
+    title candidates and lets body-only matches enter the final `limit` slots.
+
+    Top-N protection (`_BODY_PROTECT_TOP_N`, default 5): the first N entries of
+    `title_ranked` keep their positions verbatim — body can only compete for
+    slots N..limit. This prevents body's generic-payment-domain tokens (e.g.
+    `expiry_month`, `company_id`) from displacing title's correct top-3 on
+    tasks where title already has good signal. Set the env var to 0 to disable.
+
+    Args:
+        title_ranked: reranked list from the title-pass pipeline. Each dict has
+            `repo_name`, `file_path`, `snippet`, `score`, `combined_score`, etc.
+        body_fts: FTS-only candidates from the body pass (list of SearchResult).
+        limit: max results to return.
+
+    Returns:
+        Re-ordered list of length ≤ limit. Body-only candidates carry a
+        `from_body_pass = True` marker so the trace / debugger can tell them
+        apart from rerank-promoted hits.
+    """
+    by_key: dict[tuple[str, str], dict] = {}
+    k = _BODY_RRF_K
+    title_w = 1.0
+    body_w = _BODY_RRF_WEIGHT
+
+    for rank, t in enumerate(title_ranked):
+        key = (t.get("repo_name", ""), t.get("file_path", ""))
+        item = dict(t)
+        item["_rrf_merge_score"] = title_w / (k + rank + 1)
+        item["_title_rank"] = rank
+        by_key[key] = item
+
+    for rank, b in enumerate(body_fts):
+        key = (b.repo_name, b.file_path)
+        boost = body_w / (k + rank + 1)
+        if key in by_key:
+            by_key[key]["_rrf_merge_score"] += boost
+            sources = by_key[key].setdefault("sources", [])
+            if "body" not in sources:
+                sources.append("body")
+        else:
+            by_key[key] = {
+                "score": 0.0,
+                "rerank_score": 0.0,
+                "combined_score": 0.0,
+                "penalty": 0.0,
+                "repo_name": b.repo_name,
+                "file_path": b.file_path,
+                "file_type": b.file_type,
+                "chunk_type": b.chunk_type,
+                "snippet": b.snippet,
+                "sources": ["body"],
+                "from_body_pass": True,
+                "_rrf_merge_score": boost,
+                "_title_rank": None,  # body-only, no original title position
+            }
+
+    # Top-N protect: keep title_ranked[:N] verbatim, then fill the rest by RRF.
+    protect_n = max(0, min(_BODY_PROTECT_TOP_N, limit))
+    if protect_n > 0 and title_ranked:
+        protected_keys: set[tuple[str, str]] = set()
+        protected: list[dict] = []
+        for t in title_ranked[:protect_n]:
+            key = (t.get("repo_name", ""), t.get("file_path", ""))
+            if key in by_key and key not in protected_keys:
+                protected.append(by_key[key])
+                protected_keys.add(key)
+        rest = [v for k, v in by_key.items() if k not in protected_keys]
+        rest.sort(key=lambda x: x.get("_rrf_merge_score", 0.0), reverse=True)
+        merged = protected + rest
+    else:
+        merged = sorted(by_key.values(), key=lambda x: x.get("_rrf_merge_score", 0.0), reverse=True)
+
+    for item in merged:
+        item.pop("_rrf_merge_score", None)
+        item.pop("_title_rank", None)
+    return merged[:limit]
 
 
 def _expand_siblings(results: list[dict], max_siblings: int = 2) -> list[dict]:
