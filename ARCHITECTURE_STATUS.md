@@ -302,9 +302,216 @@ returned per step → different content-token extraction → cascading divergenc
 Metric is honest and arm-discriminating. Next: full n=665 baseline + rerank-OFF
 arm to produce stratum-specific rerank-skip policy on full corpus.
 
-### Step 1 v2 — n=665 baseline + rerank-OFF arm — RUNNING
+### Step 1 v2 — n=665 baseline + rerank-OFF arm DONE 2026-05-20 late
 
-Full eval. ~3-4 h baseline + ~40 min rerank-OFF wall. Traces archived per arm.
+Ran on RunPod RTX 4090 (l8xsgfwkzzqhcn, EU-RO-1, ~$2 cost) — baseline 22 min,
+rerank-OFF 16 min wall. Trace enabled both arms (3317 + 3311 entries, 0 vec_errs,
+0 vec_zero, 14 fts_zero in BOTH arms = same pipeline behavior). Per
+`feedback_check_trace_between_runs` — pipeline clean, no silent bugs.
+
+**Full corpus ARM COMPARISON:**
+
+| Metric | rerank ON | rerank OFF | Δ |
+|---|---|---|---|
+| n_hit (step 5) | 433/665 (65.1%) | 399/665 (60.0%) | **−5.1pp** |
+| hit_rate@step 1 | 49.32% | 42.41% | −6.9pp |
+| hit_rate@step 2 | 56.54% | 49.32% | −7.2pp |
+| hit_rate@step 3 | 60.6% | 53.83% | −6.8pp |
+| hit_rate@step 4 | 63.31% | 57.44% | −5.9pp |
+| **hit_rate@step 5** | **65.11%** | **60.00%** | **−5.1pp** |
+| mean_terminal_recall | 18.09% | 16.10% | −2.0pp |
+| n_full_recall | 8 | 7 | −1 |
+
+**REVISED debate-residual answer (corrects n=50 finding):**
+
+| Context | Δ rerank |
+|---|---|
+| Single-shot (prior bench) | −14.1pp hit@10 |
+| **s2f@step 5 (n=665)** | **−5.1pp** |
+| s2f@step 5 (n=50 subset) | 0 (sample artifact) |
+
+Iteration recovers **~64% of single-shot reranker advantage** (14.1pp → 5.1pp),
+but **NOT all of it**. Rerank still earns 5.1pp irreducible value at step 5.
+
+**A-team's "keep rerank" position confirmed for iterating consumer.**
+B-team's "iteration-redundant" claim was overstated by the n=50 sample.
+
+**STRATA breakdown on full 665 — surprises:**
+
+| Stratum | n | rerank-ON hits | rerank-OFF hits | Δ hit | Verdict |
+|---|---|---|---|---|---|
+| **BO** | 361 (54%) | 237 | 201 | **−10.0pp** | rerank **STRONGLY HELPS** |
+| **CORE** | 236 (35%) | 143 | **147** | **+1.7pp** | rerank **HURTS** |
+| HS | 28 (4%) | 20 | 18 | −7.1pp | helps (noisy small sample) |
+| PI | 40 (6%) | 33 | 33 | 0 | neutral |
+
+Flips: rerank-ON wins 227, rerank-OFF wins 141, unchanged 297.
+
+**KEY METHODOLOGY LESSON — n=50 sub-sample inverted the truth.** n=50 said
+"rerank HURTS HS, helps BO" — full 665 says "rerank STRONGLY HELPS BO, HURTS
+CORE, helps HS". The n=50 sample (BO 17, CORE 16, HS 9, PI 8) was too small to
+expose CORE's pattern and misrepresented HS. Reinforces
+[[feedback_blind_smoke_insufficient]] — n=50 isn't enough for stratum-level
+keep-decisions on this 665-task corpus.
+
+**Decisions:**
+- **KEEP rerank ON globally** — biggest stratum BO loses 10pp without it.
+- **Consider stratum-gated rerank-skip for CORE** — could recover +1.7pp (4 hits)
+  on 236 CORE tasks. Extends [[project_p10_a2_landed_2026_05_20]] strata-gating
+  pattern (currently PI-substrata) to CORE.
+- **Step 1 (steps-to-find) is DONE.** Metric is honest, reproducible, and
+  discriminates arms at the corpus level.
+
+Next priorities (from Plan B): Step 2 (refined JIRA body enrichment),
+Step 3 (provider-scaffolding tool), Step 4 (camelCase whole-token indexing).
+
+### Step 1 closing — test-retest noise + fix-#1 falsification (2026-05-21)
+
+**Test-retest noise floor on pod GPU: ZERO.** Re-ran the baseline n=665
+bench on a fresh pod with identical config/env. Result: bit-identical to
+4 decimal places across all metrics, 0/665 tasks differ, 0 hit-state flips.
+
+| Metric | Run 1 | Run 2 | Δ |
+|---|---|---|---|
+| n_hit | 433 | 433 | 0 |
+| mean_terminal_recall | 0.1809 | 0.1809 | 0.0000 |
+| hit_rate@step 5 | 0.6511 | 0.6511 | 0.0000 |
+| per-task differ | — | — | **0/665** |
+
+**Implication:** any +/-Xpp delta from a fix evaluated on pod-vs-pod is
+**real signal, not noise** — even +0.6pp is measurable. Earlier concern
+from [[project_recall_pool_diagnosis_2026_05_19]] about 4pp test-retest
+spread applied to vector-ablation tests on different pod hardware, NOT to
+s2f on same hardware. Cross-platform (pod GPU vs Mac CPU) divergence
+remains real — that's a separate concern.
+
+**Fix #1 (rerank-skip on compound code identifier) FALSIFIED on n=30 local:**
+
+Implementation: env-gated `CODE_RAG_SKIP_RERANK_ON_IDENT=1` in
+`hybrid_rerank.py`. Detects camelCase ≥6 / PascalCase ≥6 / snake_case ≥6
+in query and skips reranker if present.
+
+| Metric | Baseline (no fix) | With fix #1 | Δ |
+|---|---|---|---|
+| n_hit | 23/30 | 20/30 | **−3** |
+| mean_terminal_recall | 21.75% | 15.97% | **−5.8pp** |
+| hit_rate@step 5 | 76.67% | 66.67% | **−10pp** |
+| full_recall_rate | 3.33% | 0% | −3pp |
+
+Catastrophic per-task losses: BO-928 100%→33% (rerank rescued it), BO-1588
+33%→0% (full miss), BO-1593 20%→0% (full miss), BO-1037 50%→25%.
+
+**Root cause of fix failure:** the bench's reformulation policy (content-
+token extraction) ADDS compound identifiers to the query on step 2+. So
+the fix triggers on nearly every task at step 2+, effectively becoming
+"rerank only at step 1, raw RRF after" — too aggressive.
+
+**Implementation reverted** (commits to follow). The hypothesis
+"skip rerank when query has identifier" doesn't generalize across
+iteration steps; the detection signal would need to filter to ORIGINAL
+title text only (before reformulation augmentation), or use task-level
+metadata (ticket prefix). Deferred.
+
+**Saved artifacts** (`bench_runs/improve/`):
+- `s2f_baseline_n30.json` — local baseline before fix
+- `s2f_fix1_withfix_n30_FAILED.json` — falsifying evidence
+- `s2f_v2_n665_baseline_retest/` — pod test-retest confirming zero noise
+
+### Step 2 — refined JIRA body enrichment LANDED 2026-05-21
+
+Plan B Step 2: separate FTS-only retrieval pass on code-anchored JIRA body
+tokens, RRF-merged with the title pass. Default OFF; env
+`CODE_RAG_TASK_BODY_ENRICH=1` enables. Pod n=665 RTX A100-80GB cost ~$1.50.
+
+**Components (commits `7e25763` + `35cbdab`):**
+- `src/tools/task_context.py` — sanitize_body (strips URLs/JWTs/credentials/
+  hex-hashes/markdown/FTS5-breakers), extract_code_anchored (PascalCase /
+  camelCase / snake_case ≥6, hyphenated ≥6, file paths, non-stopword
+  ALL_CAPS abbrevs), build_body_query (drops tokens whose word-parts are
+  fully in title — catches `payment_method_options` vs "payment method
+  options").
+- `src/search/hybrid.py` — body kwarg; FTS-only body pass (top-50, no
+  vector, no rerank); RRF merge with weight 0.5 vs title's 1.0;
+  CODE_RAG_BODY_PROTECT_TOP_N=5 guards title's top-N from body
+  displacement so body can rescue zero-recall tasks without hurting
+  good-title ones. Top-5 protect was the critical fix — naive RRF without
+  it lost 10/30 CORE-opaque tasks on local sanity.
+- `scripts/eval/bench_steps_to_find.py` — fetches body from
+  `db/tasks.db.task_history.description` per ticket_id, passes to every
+  hybrid_search call. Same env gate.
+- `tests/test_task_context.py` — 20 unit tests.
+
+**Pod n=665 keep-decision (both arms on A100-80GB, same hardware):**
+
+| Metric | OFF | ON | Δ |
+|---|---|---|---|
+| n_hit (any GT in 5 steps) | 433 | **455** | **+22** |
+| n_full_recall | 8 | 13 | +5 |
+| hit_rate@step1 | 0.4932 | 0.4932 | 0.00pp |
+| hit_rate@step2 | 0.5654 | 0.5729 | +0.75pp |
+| hit_rate@step3 | 0.6060 | 0.6316 | +2.56pp |
+| hit_rate@step4 | 0.6331 | 0.6677 | +3.46pp |
+| **hit_rate@step5** | **0.6511** | **0.6842** | **+3.31pp** |
+| mean_terminal_recall | 0.1809 | 0.1922 | +1.13pp |
+| mean_steps_to_first | 1.4711 | 1.5429 | +0.07 |
+| full_recall_rate | 0.0120 | 0.0195 | +0.75pp |
+
+**Keep criterion (both required by NEXT_SESSION_STEP2.md):**
+1. ✓ +Δ on s2f@step5: **+3.31pp** (target: positive)
+2. ✓ Non-regression on n_hit: 433 → 455 (+22)
+
+Per-task: 70 wins / 37 losses, **26 rescues** (None→hit) vs 4 lost.
+
+**Strata breakdown — CORE wins biggest, as predicted by causal_trace_analysis:**
+
+| Stratum | n | OFF | ON | Δhit | rescues | lost | wins | loss |
+|---|---|---|---|---|---|---|---|---|
+| **CORE** | 236 | 60.6% | **68.6%** | **+19** | **22** | 3 | 41 | 22 |
+| BO | 361 | 65.7% | 66.5% | +3 | 4 | 1 | 24 | 14 |
+| HS | 28 | 71.4% | 71.4% | 0 | 0 | 0 | 4 | 0 |
+| PI | 40 | 82.5% | 82.5% | 0 | 0 | 0 | 1 | 1 |
+
+CORE was the stratum where `causal_trace_analysis.md` documented the
+reranker's BO-bias hurting CORE tasks (`l12-ft-run1` demotes CORE-relevant
+files in favour of BO-style infrastructure files). Body enrichment rescues
+22 CORE zero-recall tasks because the JIRA body typically names the
+correct CORE repo (e.g. CORE-2522 body extracts `grpc-payment-gateway` —
+which is literally the GT repo).
+
+**Default-OFF retained.** Brief explicitly mandates env-gating; production
+flip pending separate decision. The feature is validated and ready —
+flipping default to ON in `src/search/hybrid.py` (one-line change) is the
+next-action when ready to ship.
+
+**Local sanity preceding pod (`bench_runs/improve/s2f_step2_smoke/`):**
+- `core30_off.json` / `core30_on*.json` — CORE offset=440 n=30 mixed signal
+  on early-design variants (w=0.5 lost 5/30, w=0.25 marginal); validated
+  CODE_RAG_BODY_PROTECT_TOP_N=5 as the load-bearing fix (5W/4L → 7W/4L on
+  that slice, ultimately +1 n_hit / +3.3pp hit@5).
+- `bo30_off.json` / `bo30_on_protect5.json` — BO offset=0 n=30 confirmed
+  no regression on healthy-title strata (5W/2L, 2 rescues).
+
+**Pod artifacts (`bench_runs/improve/s2f_step2_pod/`):**
+- `s2_off_n665.json` — OFF baseline, bit-identical to Step 1 baseline
+  (n_hit=433, hit@5=0.6511) confirming default-OFF is no-op.
+- `s2f_on_n665.json` — ON arm, keep-decision PASSED.
+- `trace_s2_off.jsonl` / `trace_s2_on.jsonl` — per-query traces with
+  body_query + body_fts_count fields (added in this step).
+- `s2_off.log` / `s2_on.log` — full bench stdout.
+
+**Methodology notes (post-mortem):**
+- Local n=30 on CORE-opaque cluster initially looked mixed (5W/10L on
+  naive RRF, then 4W/5L on w=0.25). Brief warned `feedback_blind_smoke_
+  insufficient` and the warning held: pod n=665 revealed strong CORE
+  signal that local n=30 sample undersaturated.
+- The CODE_RAG_BODY_PROTECT_TOP_N=5 guard was the load-bearing fix —
+  without it, body's generic-payment-domain tokens (`expiry_month`,
+  `company_id`, `three_ds_challenge`) would displace correct title hits.
+  Top-5 protect lets body fill ranks 6-10 (rescue path) without competing
+  for ranks 1-5 (where title's correct top-3 lives).
+- Body query is FTS-only (no vector, no rerank) — keeping it lightweight
+  matches the brief's "auxiliary signal" framing. Adding rerank-with-title
+  on body candidates would be a future experiment.
 
 ## Source data
 
