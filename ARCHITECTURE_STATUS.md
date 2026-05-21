@@ -559,6 +559,52 @@ files that have AT LEAST ONE query token — these had none.
 v2 redesign (per-token as separate RRF leg with comparable weight to keyword
 leg) is under research — see `tasks/research_v2_*.md` for agent reports.
 
+### Step 3 v3 — FE-default-boost FALSIFIED 2026-05-21 night
+
+After Step 3 v1 no-op, attempted a different angle from a research agent
+report: 7/13 FE-bias zero-recall tasks (per `.claude/debug/current/misses_slice1.md`)
+have queries with NEITHER explicit FE keywords NOR BE keywords. Current
+`_detect_intent_adjustments` gives them `repo_boost=None`. Hypothesis:
+soft 1.2x boost on FE repos for these signal-free queries would lift
+token-poor JSX components.
+
+Implementation: env-gated `CODE_RAG_FE_DEFAULT_BOOST=1` + new branch in
+`src/search/service.py::_detect_intent_adjustments` (`elif not has_backend
+and not has_frontend`).
+
+**Result on local n=30 (offset=0, body-enrich ON baseline = current best):**
+- n_hit 25 → 23 (**−2**)
+- hit_rate@step5 83.33% → 76.67% (**−6.66pp**)
+- terminal_recall 22.44% → 19.03% (**−3.41pp**)
+- 7 LOSSES / 0 WINS
+
+**Per-task losses:**
+- BO-928 100% → 67%, BO-1588 33% → 0%, BO-1266 29% → 14%,
+  CORE-2167 30% → 20%, CORE-1751 17% → 12%, CORE-2362 12% → 9%, BO-1041 3% → 0%
+
+**Why it failed:** 1.2x boost on 19 FE repos shifts ranking → kicks out
+previously-correct rank-3 GT → cascade divergence (same pattern as
+causal_trace_analysis.md). The "indiscriminate boost helps everyone equally"
+assumption is wrong: CORE tasks have GT in graphql/grpc, not FE repos, so
+FE boost demotes their actual GT by relative ranking.
+
+**Status:** code retained env-gated default OFF (zero production impact);
+do NOT enable without a more targeted activation rule (e.g. only when
+query contains UI-suggesting nouns that aren't already in `_FRONTEND_KEYWORDS`).
+NOT pod-benched (waste of $).
+
+### Step 4 — camelCase whole-token indexing — PENDING USER GO
+
+Plan B step 4 from prioritized list. Per research agent: best strategy is
+inject-at-index-time (`__identifiers` line in chunk content), 60 LOC,
+no schema change, but requires full reindex (~2h, peak ~20GB RAM on
+16GB Mac → likely needs pod, or `feedback_no_auto_rebuild` makes this a
+hard-gate decision).
+
+Affected: ~50 tasks (7.5%) have camelCase queries; estimated 30-40 task
+recovery — biggest potential lift remaining. Awaiting explicit user GO
+to launch reindex.
+
 ## Source data
 
 - `bench_runs/diagnose/fixI/` — current hybrid baseline (all fixes, vector+reranker ON)
