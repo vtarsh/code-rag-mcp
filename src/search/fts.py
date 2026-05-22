@@ -327,7 +327,11 @@ def sanitize_fts_query(query: str) -> str:
             sanitized.append(f'"{token}"')
         else:
             sanitized.append(token)
-    if os.getenv("CODE_RAG_USE_CAMELCASE_EXPAND", "0") == "1":
+    # 2026-05-22: camelCase expand default ON after pod n=665 keep-decision.
+    # Baseline: hit=454, recall@pool=0.4708. With camel: hit=459 (+5), recall@pool=0.4846
+    # (+1.38pp), retrieval_failures 58->52 (-6). Composes orthogonally with Step 2
+    # body enrichment. Set CODE_RAG_USE_CAMELCASE_EXPAND=0 to disable.
+    if os.getenv("CODE_RAG_USE_CAMELCASE_EXPAND", "1") == "1":
         sanitized.extend(_camelcase_variants(sanitized))
     # FIX-I (2026-05-19): dedup OR-terms case-insensitively. ~7% of JIRA queries
     # repeat a token ("merchant OR merchant", "Button OR button") — a repeated
@@ -411,3 +415,73 @@ def fts_search(
 
         except sqlite3.OperationalError:
             return []
+
+
+def fts_search_per_token(
+    query: str,
+    repo: str = "",
+    file_type: str = "",
+    exclude_file_types: str = "",
+    per_token_limit: int = 10,
+    max_tokens: int = 10,
+) -> list[SearchResult]:
+    """Run one FTS5 call per content token and union the pools.
+
+    Targets the "generic-term-drowned" failure mode (~15 zero-recall tasks per
+    the 2026-05-20 audit): when a query has both common terms (`payment`,
+    `merchant`) and rare terms (`rangeItem`), BM25 globally lets token-dense
+    siblings drown token-poor target files. Running one FTS5 query per token
+    guarantees each token contributes some files to the pool — rare tokens
+    surface their entire postings list cheaply because there's no in-document
+    competition.
+
+    Token selection:
+      - Sanitize via `_sanitize_fts_input` for safety
+      - Drop tokens <3 chars and any in `_FTS_STOPWORDS`
+      - Sort by length desc (rarity proxy — longer tokens skew rare in code)
+      - Cap at `max_tokens` (default 10)
+
+    Per token: call `fts_search(token, repo, file_type, exclude_file_types,
+    limit=per_token_limit)`. Single-term so the OR-join is identity; FTS5
+    BM25 ranks within that token's postings list only.
+
+    Dedup by rowid, preserving the highest-ranked occurrence (smallest rank
+    across any token's pool). Returns merged list sorted by best-rank asc.
+
+    Default-OFF in hybrid_search (env `CODE_RAG_PER_TOKEN_UNION=1` enables).
+    Standalone helper; callers without the env flag won't trigger it.
+    """
+    if not query:
+        return []
+    cleaned = _sanitize_fts_input(query)
+    if not cleaned:
+        return []
+    raw_tokens = cleaned.split()
+    content = [t for t in raw_tokens if len(t) >= 3 and t.lower() not in _FTS_STOPWORDS]
+    if not content:
+        return []
+    # Sort by length desc as a cheap rarity proxy, then alpha for determinism.
+    content.sort(key=lambda t: (-len(t), t))
+    # Dedup case-insensitive (FTS5 is case-folding anyway).
+    seen_lower: set[str] = set()
+    tokens: list[str] = []
+    for t in content:
+        key = t.lower()
+        if key in seen_lower:
+            continue
+        seen_lower.add(key)
+        tokens.append(t)
+        if len(tokens) >= max_tokens:
+            break
+    if not tokens:
+        return []
+
+    best_rank: dict[int, int] = {}
+    by_rowid: dict[int, SearchResult] = {}
+    for tok in tokens:
+        results = fts_search(tok, repo, file_type, exclude_file_types, limit=per_token_limit)
+        for rank, sr in enumerate(results):
+            if sr.rowid not in best_rank or rank < best_rank[sr.rowid]:
+                best_rank[sr.rowid] = rank
+                by_rowid[sr.rowid] = sr
+    return [by_rowid[rid] for rid in sorted(best_rank, key=lambda r: best_rank[r])]
