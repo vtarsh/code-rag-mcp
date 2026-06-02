@@ -107,15 +107,19 @@ print(','.join(changed))
 
   echo ""
   echo "[2/7] Extracting artifacts..."
-  python3 "$SCRIPTS_DIR/extract_artifacts.py" $REPOS_FLAG 2>&1 | tail -3
+  # 2026-05-23: paths updated after scripts/ refactor moved these into
+  # scripts/scrape/ and scripts/build/. Cron was silently broken since the
+  # refactor (~May 5) — index DB frozen May 16, vector index Apr 24.
+  # PI-57 (Apr 29 merge) and PI-65 (May 20) failed to index because of this.
+  python3 "$SCRIPTS_DIR/scrape/extract_artifacts.py" $REPOS_FLAG 2>&1 | tail -3
 
   echo ""
   echo "[3/7] Building search index..."
-  python3 "$SCRIPTS_DIR/build_index.py" $REPOS_FLAG 2>&1 | tail -3
+  python3 "$SCRIPTS_DIR/build/build_index.py" $REPOS_FLAG 2>&1 | tail -3
 
   echo ""
   echo "[4/7] Building dependency graph..."
-  python3 "$SCRIPTS_DIR/build_graph.py" 2>&1 | tail -3
+  python3 "$SCRIPTS_DIR/build/build_graph.py" 2>&1 | tail -3
 
   if [[ "${SKIP_VECTORS:-}" == "1" ]]; then
     echo ""
@@ -148,7 +152,7 @@ print(','.join(changed))
     echo ""
     echo "[5b/7] Syncing doc vectors (missing + orphan cleanup)..."
     bash "$SCRIPTS_DIR/run_with_timeout.sh" 10800 \
-        python3 "$SCRIPTS_DIR/embed_missing_vectors.py" --model=coderank 2>&1 | tail -10 || \
+        python3 "$SCRIPTS_DIR/data/embed_missing_vectors.py" --model=coderank 2>&1 | tail -10 || \
         echo "  ⚠️ sync failed or timed out — chunks/vectors will reconcile next run"
 
     echo ""
@@ -159,19 +163,19 @@ print(','.join(changed))
     elif [[ -n "$REPOS_FLAG" ]]; then
       DOCS_ARGS+=("$REPOS_FLAG")
     fi
-    python3 "$SCRIPTS_DIR/build_docs_vectors.py" "${DOCS_ARGS[@]}" 2>&1 | tail -6 || \
+    python3 "$SCRIPTS_DIR/build/build_docs_vectors.py" "${DOCS_ARGS[@]}" 2>&1 | tail -6 || \
         echo "  ⚠️ docs tower build failed — router will fall back to code tower only"
   fi
 
   echo ""
   echo "[6/7] Building shadow types..."
-  if [[ -f "$SCRIPTS_DIR/build_shadow_types.py" ]]; then
+  if [[ -f "$SCRIPTS_DIR/build/build_shadow_types.py" ]]; then
     PROFILE_PATH="$BASE_DIR/profiles/$ACTIVE_PROFILE"
     if [[ -d "$PROFILE_PATH/provider_types" ]]; then
       for yaml_file in "$PROFILE_PATH/provider_types"/*.yaml; do
         [[ -f "$yaml_file" ]] || continue
         provider=$(basename "$yaml_file" .yaml)
-        python3 "$SCRIPTS_DIR/build_shadow_types.py" --provider "$provider" 2>&1 | tail -1
+        python3 "$SCRIPTS_DIR/build/build_shadow_types.py" --provider "$provider" 2>&1 | tail -1
       done
     else
       echo "  Skipping — no provider_types/ directory in profile"
@@ -184,13 +188,13 @@ print(','.join(changed))
   echo "[7/7] Running diagnostics..."
 
   echo "  Benchmark (synthetic):"
-  python3 "$SCRIPTS_DIR/benchmark_queries.py" 2>&1 | grep "Average\|PASS"
+  python3 "$SCRIPTS_DIR/bench/benchmark_queries.py" 2>&1 | grep "Average\|PASS"
 
   echo "  Benchmark (real-world):"
-  python3 "$SCRIPTS_DIR/benchmark_realworld.py" 2>&1 | grep "Average\|PASS"
+  python3 "$SCRIPTS_DIR/bench/benchmark_realworld.py" 2>&1 | grep "Average\|PASS"
 
   echo "  Blind spot detection:"
-  python3 "$SCRIPTS_DIR/detect_blind_spots.py" 2>&1 | grep "Visibility\|Blind spots"
+  python3 "$SCRIPTS_DIR/analysis/detect_blind_spots.py" 2>&1 | grep "Visibility\|Blind spots"
 
   echo ""
   echo "=========================================="
@@ -206,7 +210,7 @@ fi
 echo ""
 echo "[post] Regenerating repo facts + staleness report..."
 python3 "$SCRIPTS_DIR/gen_repo_facts.py" 2>&1 | tail -3
-python3 "$SCRIPTS_DIR/detect_doc_staleness.py" 2>&1 | tail -3
+python3 "$SCRIPTS_DIR/analysis/detect_doc_staleness.py" 2>&1 | tail -3
 
 echo ""
 echo "[post] Appending health check to history..."
@@ -226,3 +230,22 @@ tail -n 4000 "$HEALTH_LOG" > "$HEALTH_LOG.tmp" && mv "$HEALTH_LOG.tmp" "$HEALTH_
 rm -f "$STATE_BEFORE"
 
 ls -t "$LOG_DIR"/update_*.log 2>/dev/null | tail -n +31 | xargs rm -f 2>/dev/null || true
+
+# 2026-05-22: post-rebuild search-quality smoke. Runs after the index +
+# vectors are fresh. ~60s wall on local CPU. Result appended to a dedicated
+# log so a human can spot regressions next morning. Non-fatal — rebuild
+# already succeeded, smoke failures are advisory.
+SMOKE_LOG="$LOG_DIR/post_rebuild_smoke.log"
+echo ""
+echo "[post] Running search quality smoke suite..."
+{
+  echo "=== $(date -Iseconds) post-rebuild smoke ==="
+  # macOS doesn't ship GNU `timeout`; use the project's own run_with_timeout.sh
+  cd "$(dirname "$SCRIPTS_DIR")" && \
+    bash "$SCRIPTS_DIR/run_with_timeout.sh" 600 \
+        python3 -m pytest tests/smoke_search.py -v --no-header 2>&1 || \
+    echo "[smoke] FAILED or timed out — see $SMOKE_LOG for details"
+  echo ""
+} >> "$SMOKE_LOG" 2>&1
+# Keep last 30 smoke runs (~30k lines)
+tail -n 30000 "$SMOKE_LOG" > "$SMOKE_LOG.tmp" 2>/dev/null && mv "$SMOKE_LOG.tmp" "$SMOKE_LOG" 2>/dev/null || true

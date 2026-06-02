@@ -203,6 +203,70 @@ The setup wizard registers MCP for **Claude Code** automatically. For **Claude D
 
 Replace `/path/to/code-rag-mcp` with your actual install path (e.g. `/Users/you/.code-rag-mcp`) and `my-org` with your profile name. Restart Claude Desktop after saving.
 
+### Recommended search-quality env (2026-05-23)
+
+After landing several search-quality fixes (Steps 6-8 — see `ARCHITECTURE_STATUS.md`),
+the following env vars are recommended in production for better recall and less noise:
+
+```json
+"env": {
+  "CODE_RAG_HOME": "/path/to/code-rag-mcp",
+  "ACTIVE_PROFILE": "my-org",
+  "CODE_RAG_QUERY_V2": "1",
+  "CODE_RAG_USE_EXPAND_QUERY": "1",
+  "CODE_RAG_USE_CAMELCASE_EXPAND": "1",
+  "CODE_RAG_DEFAULT_EXCLUDE": "package_usage,provider_doc,dictionary",
+  "CODE_RAG_DEMOTE_TEST_PATHS": "1",
+  "CODE_RAG_DEMOTE_TOOLING_REPOS": "1",
+  "CODE_RAG_HARD_FILTER": "1",
+  "CODE_RAG_SCOPE_WARNING": "1"
+}
+```
+
+**Per-flag rationale:**
+- `QUERY_V2=1` — keep entity-boost protection (don't collapse 6+ word queries to a single token)
+- `USE_EXPAND_QUERY=1` — glossary-based query expansion
+- `USE_CAMELCASE_EXPAND=1` — pair tokens get camelCase/PascalCase OR-variants (Step 5, +5 hits / n=665 pod)
+- `DEFAULT_EXCLUDE` — drop noisy package-map / provider-doc / dictionary file types
+- `DEMOTE_TEST_PATHS=1` — `.spec.js`/`tests/`/etc demoted 0.5x for non-test queries (Q3 win)
+- `DEMOTE_TOOLING_REPOS=1` — `github-*-action`/lint configs demoted 0.2x for product queries (Q1 win)
+- `HARD_FILTER=1` — when query mentions a provider, restrict pool to provider-touching repos (Step 7 PI-56 fix, pool 320→69, rank 0→1)
+- `SCOPE_WARNING=1` — prepend hint when pool spans too many repos (UX)
+
+**Do NOT enable** (falsified on pod n=665):
+- `CODE_RAG_PER_TOKEN_UNION=1` — REJECTED (-7 hits @ w=0.5, -4 @ w=0.25)
+- `CODE_RAG_FE_DEFAULT_BOOST=1` — REJECTED (-2 hits, +7 losses on n=30)
+
+**Caller-side hint** (orchestrator-only, e.g. Claude Code agent):
+- Pass `task_hint="frontend"` (or `"backend"`/`"backoffice"`) on `search_tool()` calls when you
+  know the task domain. Routes JIRA prefix → repo boost. See `src/search/service.py:_apply_task_hint()`.
+
+## Search quality regression suite
+
+`tests/smoke_search.py` — 12 canonical queries with expected top-3 file
+assertions. Runs in ~60s and catches regressions when env tweaks accidentally
+break a known-good search.
+
+```bash
+python3 -m pytest tests/smoke_search.py -v
+```
+
+Wired into `scripts/full_update.sh` tail — after every cron rebuild, smoke
+runs and result appends to `logs/post_rebuild_smoke.log`. Check that file
+next morning to spot regressions early.
+
+## Ops / cron
+
+The nightly + weekly rebuilds (`scripts/full_update.sh`) ARE scheduled via
+launchd plists at `~/Library/LaunchAgents/com.code-rag-mcp.*.plist`. Daily
+at 03:00 = incremental (~30 min, low RAM), weekly Sat 04:00 = `--full`
+(hours, peak ~20GB RAM — risky on 16GB Macs even with memory guards).
+
+If MCP returns stale results on recently-merged tasks, check:
+1. `logs/launchd_stdout.log` tail for cron errors
+2. `stat -f %Sm db/knowledge.db` (should be < 24h old)
+3. `logs/post_rebuild_smoke.log` (latest result + any FAILED test names)
+
 ## Architecture
 
 ```

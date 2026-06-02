@@ -34,6 +34,7 @@ tests/
 ├── test_train_reranker_ce.py
 ├── test_validate_provider_paths.py
 ├── test_vector.py
+├── smoke_search.py          # 2026-05-22: search-quality regression baseline (12 tests, 60s wall)
 └── ... (30+ more)
 ```
 
@@ -46,6 +47,7 @@ tests/
 | `test_benchmark_doc_intent.py` | 25+ | `scripts/bench/benchmark_doc_intent.py` |
 | `test_build_combined_train.py` | 15 | `scripts/build/build_combined_train.py` |
 | `test_vector.py` | 10 | `src/search/vectors.py` |
+| `smoke_search.py` | 12 | End-to-end search quality (loads DB + reranker) |
 
 ## Running Tests
 
@@ -54,7 +56,21 @@ make test                    # Full suite
 pytest tests/ -q             # Quiet mode
 pytest tests/test_search_service.py -v   # Single file
 pytest tests/ --collect-only             # List without running
+pytest tests/smoke_search.py -v          # Quality regression baseline (60s)
 ```
+
+## Search quality smoke suite (`tests/smoke_search.py`)
+
+12 canonical queries asserting expected top-3 files for real engineering
+tasks (paypal disputes, webhook signature, merchant onboarding, etc.) plus
+2 negative-noise sanity tests + 1 PI-56 hard-filter regression test.
+
+Built 2026-05-22 as a baseline so future env tweaks can be measured against
+known-good behavior. Wired into `scripts/full_update.sh` tail — runs after
+every cron rebuild and logs to `logs/post_rebuild_smoke.log`.
+
+If a test fails after a code change, the output shows actual top-5 → diff
+makes the regression obvious.
 
 ## Conventions
 

@@ -21,7 +21,8 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# 2026-05-24: moved into scripts/data/, repo root is 3 levels up
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from scripts._common import pause_daemon, setup_paths
 
 _BASE_DIR = setup_paths()

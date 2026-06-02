@@ -689,11 +689,211 @@ src/search/fts.py:sanitize_fts_query comment) gives a measurable recall lift.
 | recall@pool | 42% | **49%** | **+7pp** |
 | s2f@step5 | 65.1% | 68.4% | +3.31pp (Step 2) |
 
+### Step 3 v2 — per-token as separate RRF leg FALSIFIED 2026-05-22
+
+After Step 3 v1 (per-token append-to-FTS) was NO-OP, redesigned as separate
+RRF leg with own `pt:{rowid}` scores dict key + `CODE_RAG_PT_RRF_WEIGHT=0.5`.
+Pool widens (+0.28pp recall@pool) but reranker picks per-token candidates over
+true positives at boundary ranks → net **-7 hits at w=0.5, -4 at w=0.25**.
+
+Monotonic: lower weight reduces both wins and losses proportionally — no
+sweet spot under current reranker. Code kept env-gated default OFF.
+
+**Same pattern as Step 3 v1, STRIP_META_TAGS, H5 FE_DEMOTE attempts: any
+PRE-rerank pool-composition tweak gets overridden by the reranker.**
+
+### STRIP_META_TAGS NEUTRAL 2026-05-22
+
+Tested `CODE_RAG_STRIP_META_TAGS=1` (existing flag, never bench'd on n=665).
+20/665 queries match the regex (3% coverage). Result: 0 hit@10 flips, +0.06pp
+recall@pool — neutral. Mechanism analysis showed 11/20 affected tasks have
+prefix token IN GT path (e.g. `[API]` → `express-api-v1/`), so strip removes
+positive routing signal for some while removing noise for others. Cancellation.
+Code unchanged.
+
+### QUERY_V2 bench/prod parity BUG FIXED 2026-05-22
+
+`scripts/eval/diagnose_recall.py:89` had `CODE_RAG_QUERY_V2` defaulting to
+`"0"`, while `src/search/service.py:_QUERY_V2` defaults to `"1"` (FIX-G, ON
+since 2026-05-19). All prior bench runs (Step 2, Step 3 v1/v2/v3, Step 5,
+STRIP_META) measured an OLDER entity-boost code path that collapses 6+ word
+queries to a single entity token. **23/665 bench retrieval_failures are
+bench-only artifacts** — production never had the collapse.
+
+n=8 local smoke confirmed: +25pp hit@10, +18pp recall@pool, trace shows
+"Replace JSON Viewer with Monaco Editor" → "JSON" (1 word) in OFF arm vs
+full 6-word query in ON arm.
+
+**Fix:** `scripts/eval/diagnose_recall.py:89` default flipped to `"1"`.
+**Implication:** all prior bench numbers (recall trajectory 60.5% → 71-72%
+hit@10) are LOWER bounds vs production. Re-baselining on full pod n=665
+deferred — RunPod budget exhausted.
+
+### H5 ARCHITECTURAL FINDING (2026-05-22)
+
+154 reranker_failures (pool reached GT but rank > 10) cluster heavily in BO
+prefix (86/154 = 56%). Of those, 5 are TRUE BUGS where the intent classifier
+mis-routes BO tasks as `backend` (via keywords `export`/`csv`/`microservice`)
+→ `_FRONTEND_DEMOTE_MULTIPLIER` demotes `backoffice-web` 0.9x → GT files
+in bo-web lose ranking. Affected: BO-1078, BO-1433, BO-1579, BO-831, BO-941.
+
+Tested 5 narrow keyword-removal sets — all NET NEGATIVE (regress more
+correctly-classified backend tasks than fix BO ones). Tested aggressive
+boosts via env (FE_DEMOTE 0.9→1.0→1.3) — moves rank by ~2 positions only,
+never crosses top-10. Tested post-rerank cluster rescue heuristic — lifts
+wrong repo on BO-1579 (cluster threshold catches grpc-onboarding-pricing
+NOT backoffice-web). **No simple fix.**
+
+### Step 6 — task_hint LANDED 2026-05-22
+
+Opt-in `task_hint: str | None` param on `search_tool()`:
+- `"frontend"` / `"backoffice"` → 2.0x boost on FRONTEND_REPOS
+- `"backend"` → 2.0x boost on BACKEND_REPOS + prefixes
+- Default `None` → byte-identical to baseline
+
+Verified A/B on 5 H5 BO + 3 BO controls:
+- 3/5 H5 lift into top-10 (BO-1078 25→10, BO-1433 11→1, BO-1579 14→1)
+- 1/5 H5 expected regression (BO-941 mixed FE+BE GT)
+- 0/3 controls regress
+- NET **+4 GT files into top-10**
+
+Pool composition byte-identical between arms — pure post-fusion RRF
+multiplier. **Falsifies "magnitude ceiling" assumption from H5**: 2.0x boost
+crosses rerank ceiling where 1.3x doesn't.
+
+Env: `CODE_RAG_TASK_HINT_BOOST=2.0`. Default OFF (caller opt-in via param).
+MCP orchestrator routes on JIRA prefix: `BO-*` → `"frontend"`, `PI-*` →
+`"backend"`. Plus `_auto_task_hint_from_query()` that regex-extracts prefix
+from query string (env `CODE_RAG_AUTO_TASK_HINT=1`, default OFF).
+
+### Step 6 — search noise demote LANDED 2026-05-22
+
+`src/search/hybrid.py` POST-rerank score adjustments:
+- `CODE_RAG_DEMOTE_TEST_PATHS=1` → 0.5x on `/tests/`, `/__tests__/`, `.spec.`, `.test.`
+- `CODE_RAG_DEMOTE_TOOLING_REPOS=1` → 0.2x on `github-*-action`, `*-eslint-config`, `*-prettier-config`, `lint-*`, `config-*`
+
+Suppressed when query has matching keyword (`test`/`spec`/`ci`/`action`/etc).
+EXCLUDES `boilerplate-*` from tooling pattern — those are templates users
+actually consult for "how to add new X" queries.
+
+**Key insight: PRE-rerank score adjustments bounce off the reranker** —
+moving the demote AFTER `rerank()` returns + re-sorting by `combined_score`
+is the only place pool-composition tweaks actually move final results.
+
+Verified A/B on 3 realistic dev queries:
+- Q1 "how to add new provider integration": github-run-e2e-action rank 3 → 8
+- Q2 "webhook signature validation": byte-identical (already perfect)
+- Q3 "merchant onboarding flow": 3 `.spec.js` files moved from #2,3,5 → #6,7,8
+
+25-query stratified noise audit: **1.6% noise rate in top-5** (was higher
+before). Today's demote fixes generalize broadly.
+
+### Step 7 — HARD_FILTER + SCOPE_WARNING LANDED 2026-05-23
+
+**HARD_FILTER (`CODE_RAG_HARD_FILTER=1`):** when query mentions a known
+provider name (paypal/nuvei/stripe/etc), drop pool entries whose repo is
+NOT in the provider-relevant set BEFORE rerank. Implementation: new
+`repo_allow_list` + `repo_allow_prefixes` params on `hybrid_search()`,
+deleted from `scores` dict before rerank input.
+
+Verified on user's real PI-56 deploy ("Nuvei expired payment handling"):
+- baseline: 0 hits in top-10 (reranker confused with workflow-dispute-expiration)
+- fix: **5 hits in top-10, rank 1 = `workflow-provider-webhooks/handle-activities.js`** (PR target file)
+- pool 320 → 69 (78% reduction of cross-workflow noise)
+
+Non-provider queries byte-identical (zero regression on 3 control queries).
+
+**SCOPE_WARNING (`CODE_RAG_SCOPE_WARNING=1`):** prepend warning when top-N
+spans many repos for short query (vague intent). Fires on `settlement`
+(1w, 9 repos), `add prettier plugin tailwindcss` (4w, 10 repos), but NOT on
+focused queries (`paypal webhook signature verification` → 1 distinct repo).
+
+12-test smoke suite (`tests/smoke_search.py`) including a real PI-56
+regression test. 12/12 pass.
+
+### Step 8 — CRON SILENTLY BROKEN FIXED 2026-05-23..25
+
+User reported MCP returning stale results on tasks merged weeks ago. Root
+cause: `scripts/full_update.sh` referenced scripts at OLD paths after a
+refactor moved them into subdirectories.
+
+**Broken paths (4 in full_update.sh):**
+- `extract_artifacts.py` → `scripts/scrape/`
+- `build_index.py` → `scripts/build/`
+- `build_graph.py` → `scripts/build/`
+- `embed_missing_vectors.py` → `scripts/data/`
+- `build_docs_vectors.py` → `scripts/build/`
+- `build_shadow_types.py` → `scripts/build/`
+- `benchmark_queries.py` → `scripts/bench/`
+- `benchmark_realworld.py` → `scripts/bench/`
+- `detect_blind_spots.py` → `scripts/analysis/`
+- `detect_doc_staleness.py` → `scripts/analysis/`
+
+**Plus PYTHONPATH bug in 6 moved scripts** — they used
+`Path(__file__).parent.parent` which after move pointed at `scripts/` (not
+repo root). Fixed: all changed to `.parent.parent.parent`.
+
+**Plus `build_vectors.py` regex aborted on `.github` dot-prefix repo** —
+added filter to skip dot-prefix repos with warning.
+
+**Plus smoke trigger used GNU `timeout`** (not available on macOS) —
+switched to project's own `run_with_timeout.sh`.
+
+**Index freshness BEFORE FIX:**
+- `knowledge.db`: May 16 (1 week old)
+- `vectors.lance.coderank/`: Apr 24 (1 MONTH old)
+- Cron had been silently failing at step 2/7 since ~May 5
+
+**AFTER FIX:**
+- All 7 steps execute successfully
+- knowledge.db: May 24 (fresh)
+- Vector index: 81688 chunks, 81605 → 81688 delta (new content embedded)
+- `grpc-apm-inpay`: 1 file → 34 files (PI-65 PR now indexed)
+
+**Post-rebuild smoke trigger** added to `scripts/full_update.sh` tail —
+runs `pytest tests/smoke_search.py` after every rebuild, logs to
+`logs/post_rebuild_smoke.log` for next-morning review.
+
+### Net branch trajectory after Steps 6-8
+
+| Metric | Branch start | After Step 5 | After Step 8 |
+|---|---|---|---|
+| hit@10 single-shot | 60.5% | ~71-72% | ~71-72% (no aggregate movement; reranker still ceiling) |
+| recall@10 | 15.2% | 18.3% | 18.3% (no full re-bench post-cron-fix) |
+| recall@pool | 42% | 49% | 49% |
+| PI-56 NUVEI top-10 hits | 0 (reranker miss) | 0 (still wrong workflow) | **5 (rank 1 with HARD_FILTER)** |
+| PI-65 INPAY visible | 0 (stale index) | 0 (stale index) | **34 files indexed (post-cron-fix)** |
+| Noise rate top-5 | ~10% | ~5% | **1.6%** (25-query audit) |
+| Smoke suite | none | none | **12/12 PASS** |
+
+### Honest limits remaining
+
+- **Reranker remains binding constraint** on hit@10 for queries WITHOUT
+  provider name + WITHOUT explicit task_hint. Architectural fix would need
+  alt reranker (jina-v2 / mxbai-v2 — license + pod budget) or post-rerank
+  rescue (not yet implemented).
+- **Full pod n=665 validation deferred** — RunPod budget exhausted.
+  Production env should opt-in: HARD_FILTER + SCOPE_WARNING +
+  DEMOTE_TEST_PATHS + DEMOTE_TOOLING_REPOS = recommended.
+- **State-file forgiveness:** when cron breaks for weeks, state file thinks
+  changed repos are "processed" even though extract failed. To force
+  re-index after such drift: clear `repo_state.json` entries for affected
+  repos before next run.
+
 ## Source data
 
 - `bench_runs/diagnose/fixI/` — current hybrid baseline (all fixes, vector+reranker ON)
 - `bench_runs/diagnose/ftsonly/` — vector OFF
 - `bench_runs/diagnose/norerank/` — reranker OFF
 - `bench_runs/headtohead/` — MCP hybrid vs plain grep-agent
+- `bench_runs/improve/step3v2/` — Step 3 v2 FALSIFIED on pod n=665
+- `bench_runs/improve/stripmeta/` — STRIP_META_TAGS neutral
+- `bench_runs/improve/queryv2_local/` — QUERY_V2 parity bug finding
+- `bench_runs/improve/agent_task_prefix/` — task_hint A/B (8-task panel)
+- `bench_runs/improve/auto_hint/` — auto-task-hint A/B
+- `bench_runs/improve/noise_fix/` — test/tooling demote A/B
+- `bench_runs/improve/noise_audit/` — 25-query stratified noise audit
+- `bench_runs/improve/hard_filter/` — HARD_FILTER PI-56 A/B
+- `tests/smoke_search.py` — 12-test quality regression baseline
 - `DEEPRESEARCH_PROMPT.md` — the deep-research brief
 - `.claude/autonomous/PROGRESS.md` — full chronological log

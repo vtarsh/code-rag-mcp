@@ -129,6 +129,65 @@ _FRONTEND_REPOS = frozenset(
 )
 _FRONTEND_BOOST = float(os.getenv("CODE_RAG_FRONTEND_BOOST", "1.3"))
 
+# 2026-05-22: Task-hint repo boost (Option A).
+# Reranker is the binding constraint on H5 BO-* tasks where the intent
+# classifier mis-routes "Audits export csv" / "Add Statuses to Onboarding
+# Pricing" to the backend branch (the keywords "csv" / "pricing" win over
+# absent FE keywords), and GT in `backoffice-web` sinks to rank 14-25. Local
+# A/B (bench_runs/improve/agent_task_prefix/) shows a 2.0x FE-repo boost
+# lifts 3/5 H5 tasks (BO-1078, BO-1433, BO-1579) into top-10 while leaving
+# 3/3 BO controls (BO-1041, BO-1042, BO-1266) byte-identical. BO-941 with
+# GT split across FE+BE regresses because boosting FE demotes its BE GT
+# (graphql), so callers must own the FE-vs-BE call — we ONLY apply when
+# explicitly hinted via the `task_hint` argument; the keyword-derived
+# classifier is left untouched. Env-gated, default OFF.
+_TASK_HINT_BOOST_DEFAULT = float(os.getenv("CODE_RAG_TASK_HINT_BOOST", "2.0"))
+_VALID_TASK_HINTS = frozenset({"frontend", "backoffice", "backend"})
+
+# 2026-05-22: Auto-detect task hint from JIRA-style prefix in the query.
+# When CODE_RAG_AUTO_TASK_HINT=1, search_tool() will regex-scan the query
+# for "BO-XXXX" / "PI-XXXX" / "HS-XXXX" and infer task_hint accordingly
+# (BO/HS → "frontend", PI → "backend", CORE → no bias). The task ID is
+# stripped from the query string before downstream FTS/vector calls to
+# avoid noise tokens. Explicit caller-supplied task_hint always wins.
+# Env-gated default OFF — opt-in until pod-bench validates net delta on
+# realistic MCP usage patterns (callers like Claude orchestrator that
+# prepend "BO-1579: " to JIRA task search queries).
+_AUTO_TASK_HINT = os.getenv("CODE_RAG_AUTO_TASK_HINT", "0") == "1"
+_TASK_ID_RE = re.compile(r"\b(PI|BO|HS|PAY|FE|BE|INF|CORE)-?(\d+)\b", re.IGNORECASE)
+_TASK_PREFIX_BIAS = {
+    "PI": "backend",
+    "BO": "frontend",
+    "HS": "frontend",
+    "FE": "frontend",
+    "BE": "backend",
+    # CORE / PAY / INF intentionally NOT mapped — they span FE+BE in pay-com
+    # and would mis-route per [[project-h5-fix-refuted-2026-05-22]] BO-941
+    # multi-repo GT pattern (mixed-domain → leave task_hint=None).
+}
+
+
+def _auto_task_hint_from_query(query: str) -> tuple[str | None, str]:
+    """Detect JIRA task prefix in query → (inferred_hint, cleaned_query).
+
+    Returns (None, query) when no recognizable prefix or env is OFF.
+    Strips the task ID from the cleaned query so downstream FTS5/vector
+    don't waste a token slot on the ID itself.
+    """
+    if not _AUTO_TASK_HINT or not query:
+        return None, query
+    m = _TASK_ID_RE.search(query)
+    if not m:
+        return None, query
+    prefix = m.group(1).upper()
+    hint = _TASK_PREFIX_BIAS.get(prefix)
+    cleaned = _TASK_ID_RE.sub("", query, count=1)
+    # Collapse leftover separators (": ", " - ", etc.) and whitespace
+    cleaned = re.sub(r"^\s*[:\-,]\s*|\s*[:\-,]\s*$", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return hint, cleaned
+
+
 # Step 3-v3 (2026-05-21): default-FE soft boost for generic queries.
 # 7/13 FE-bias misses (per .claude/debug/current/misses_slice1.md) had
 # queries with NEITHER explicit FE keywords (button, modal, layout) NOR
@@ -331,6 +390,45 @@ _HIGHLIGHT_RE = re.compile(r">>>|<<<")
 # handles the full "[Repo: ...]" tag, so we clean the residue separately in
 # brief mode where every byte matters.
 _REPO_RESIDUE_RE = re.compile(r"^\.\.\.[a-zA-Z0-9_-]+\]\s*")
+
+
+def _apply_task_hint(
+    repo_boost: dict[str, float] | None,
+    repo_prefix_boost: dict[str, float] | None,
+    task_hint: str | None,
+) -> tuple[dict[str, float] | None, dict[str, float] | None]:
+    """Apply caller-supplied task_hint override to repo boost maps.
+
+    Returns the (possibly modified) (repo_boost, repo_prefix_boost) tuple.
+
+    Behaviour matrix:
+      - task_hint == "frontend" | "backoffice" → multiply every FRONTEND_REPO
+        by _TASK_HINT_BOOST_DEFAULT (default 2.0x). Existing classifier values
+        for FE repos (e.g. 0.9 demote) are OVERWRITTEN, not multiplied.
+      - task_hint == "backend" → multiply every BACKEND_REPO and add prefix
+        boosts for backend repo prefixes. Existing FE demote preserved.
+      - Anything else (None, "", "unknown", etc.) → no-op.
+
+    Opt-in via explicit caller arg only. No env-gate — the param itself is
+    the gate. Callers passing an unrecognised value get a silent no-op.
+    """
+    if not task_hint or task_hint not in _VALID_TASK_HINTS:
+        return repo_boost, repo_prefix_boost
+
+    boost = _TASK_HINT_BOOST_DEFAULT
+    rb = dict(repo_boost) if repo_boost else {}
+    pb = dict(repo_prefix_boost) if repo_prefix_boost else {}
+
+    if task_hint in {"frontend", "backoffice"}:
+        for repo in _FRONTEND_REPOS:
+            rb[repo] = boost  # overwrite demote/boost — explicit hint wins
+    elif task_hint == "backend":
+        for repo in _BACKEND_REPOS:
+            if repo:
+                rb[repo] = boost
+        for prefix in _BACKEND_REPO_PREFIXES:
+            pb[prefix] = boost
+    return (rb if rb else None), (pb if pb else None)
 
 
 def _detect_intent_adjustments(
@@ -540,6 +638,7 @@ def search_tool(
     brief: bool = False,
     cross_provider: bool = False,
     docs_index: bool | None = None,
+    task_hint: str | None = None,
 ) -> str:
     """Search the knowledge base using keyword + semantic hybrid search.
 
@@ -562,6 +661,15 @@ def search_tool(
         docs_index: Debug/eval override for two-tower routing.
             None (default) = auto-route by query intent. True = force docs tower.
             False = force code tower. Operators typically leave this unset.
+        task_hint: Optional caller-supplied intent hint. When the query text
+            does not carry FE/BE keywords (e.g. JIRA titles like "Audits
+            export csv"), pass "frontend" / "backoffice" to boost frontend
+            repos (backoffice-web, next-web-*, hosted-fields, ...) or
+            "backend" to boost backend repos and prefixes (grpc-, workflow-,
+            ...). Default 2.0x multiplier (env: CODE_RAG_TASK_HINT_BOOST).
+            Overrides the query-derived classification — use only when you
+            know the task domain. Mixed-domain tasks (FE+BE GT both required)
+            will see the un-hinted side regress; in that case leave None.
     """
     # Defensive validation: callers sometimes omit `query` entirely (observed 74x
     # KeyError('query') in logs/tool_calls.jsonl before this guard was added).
@@ -573,6 +681,15 @@ def search_tool(
         )
 
     limit = min(max(1, limit), 50)
+
+    # 2026-05-22: Auto-infer task_hint from JIRA-style prefix when the caller
+    # didn't pass one explicitly. Strips the task ID from the query so it
+    # doesn't pollute FTS tokens. Env-gated: CODE_RAG_AUTO_TASK_HINT=1.
+    if task_hint is None:
+        inferred, cleaned = _auto_task_hint_from_query(query)
+        if inferred is not None:
+            task_hint = inferred
+            query = cleaned
 
     expanded = expand_query(query) if _USE_EXPAND_QUERY else query
     if os.getenv("CODE_RAG_USE_DICTIONARY_EXPAND", "0") == "1":
@@ -594,6 +711,7 @@ def search_tool(
         brief=brief,
         cross_provider=cross_provider,
         docs_index=docs_index,
+        task_hint=task_hint,
     )
 
     # 2026-05-17: Env-gated default exclude for noisy file types that
@@ -608,7 +726,49 @@ def search_tool(
     elif default_exclude:
         exclude_file_types = default_exclude
 
-    repo_boost, repo_prefix_boost, is_frontend_only, is_backend = _detect_intent_adjustments(query)
+    repo_boost, repo_prefix_boost, is_frontend_only, _ = _detect_intent_adjustments(query)
+
+    # 2026-05-22: Caller-supplied task_hint overrides keyword-derived
+    # classification. Local A/B (bench_runs/improve/agent_task_prefix/):
+    # 3/5 H5 BO-* tasks lift into top-10 at 2.0x; 3/3 BO controls unchanged.
+    # See _apply_task_hint() docstring for the contract.
+    repo_boost, repo_prefix_boost = _apply_task_hint(repo_boost, repo_prefix_boost, task_hint)
+
+    # 2026-05-23: HARD repo filter when query mentions a known provider.
+    # Closes the PI-56 failure: "nuvei expired payment handling" gets confused
+    # with workflow-dispute-expiration because both contain "expired" + "nuvei".
+    # When the query mentions a provider name, restrict pool to provider-touching
+    # repos (grpc-apm-{provider}, grpc-providers-{provider}, grpc-connections-{provider},
+    # express-webhooks-*, workflow-provider-webhooks, express-api-callbacks).
+    # Env-gated default OFF.
+    repo_allow_list: set[str] | None = None
+    repo_allow_prefixes: tuple[str, ...] = ()
+    if os.getenv("CODE_RAG_HARD_FILTER", "0") == "1":
+        q_lower = query.lower()
+        mentioned_providers = [p for p in _PROVIDER_NAMES if re.search(r"\b" + re.escape(p) + r"\b", q_lower)]
+        if mentioned_providers:
+            # Build allow set: provider-named repos + workflow/webhook-routing repos
+            allow = set()
+            for prov in mentioned_providers:
+                allow.add(f"grpc-apm-{prov}")
+                allow.add(f"grpc-providers-{prov}")
+                allow.add(f"grpc-connections-{prov}")
+                allow.add(f"express-webhooks-{prov}")
+                allow.add(f"workflow-{prov}-webhook")
+            # Generic provider routing repos (any provider work touches these)
+            allow.update(
+                {
+                    "workflow-provider-webhooks",
+                    "express-webhooks-dispatch",
+                    "express-api-callbacks",
+                    "grpc-payment-gateway",
+                    "grpc-providers-features",
+                    "grpc-providers-credentials",
+                }
+            )
+            repo_allow_list = allow
+            # Allow these prefixes wholesale (capture sibling provider repos missed above)
+            repo_allow_prefixes = tuple(f"grpc-apm-{p}" for p in mentioned_providers)
 
     def _compute() -> str:
         ranked, vec_err, total_candidates = hybrid_search(
@@ -622,6 +782,8 @@ def search_tool(
             entity_boost=1.3 if use_entity_boost else 1.0,
             repo_boost=repo_boost,
             repo_prefix_boost=repo_prefix_boost,
+            repo_allow_list=repo_allow_list,
+            repo_allow_prefixes=repo_allow_prefixes,
         )
 
         # Fallback to original query if entity-boosted search returns too few results.
@@ -637,6 +799,8 @@ def search_tool(
                 docs_index=docs_index,
                 repo_boost=repo_boost,
                 repo_prefix_boost=repo_prefix_boost,
+                repo_allow_list=repo_allow_list,
+                repo_allow_prefixes=repo_allow_prefixes,
             )
             actual_query = expanded
 
@@ -676,6 +840,36 @@ def search_tool(
                     f"  {snippet[:300]}\n"
                 )
 
+        # 2026-05-23: scope warning when top-N spans many distinct repos for a
+        # SHORT query (low specificity). Helps the caller spot the PI-56 failure
+        # mode: top-3 are all from different repos (no clear winner cluster),
+        # the underlying query is vague, and the engineer would benefit from a
+        # narrowing hint. Verified 2026-05-23: fires correctly on "settlement"
+        # (1 word, 9 repos) and "Nuvei expired payment handling" (4 words, 3
+        # distinct top-3 repos), NOT on "paypal webhook signature" (focused,
+        # all express-webhooks-paypal). Env-gated default OFF.
+        scope_warning = ""
+        if os.getenv("CODE_RAG_SCOPE_WARNING", "0") == "1" and len(ranked) >= 5:
+            q_words = len(query.split())
+            top10_repos = [r.get("repo_name", "") for r in ranked[:10] if r.get("repo_name")]
+            top3_distinct = len(set(top10_repos[:3]))
+            top10_distinct = len(set(top10_repos))
+            # Two trigger conditions:
+            #  (a) very short query (≤4 words) AND top-3 all from different repos → vague intent
+            #  (b) short-ish query (≤6 words) AND top-10 spans ≥5 distinct repos → genuinely cross-cutting
+            fires = (q_words <= 4 and top3_distinct >= 3) or (q_words <= 6 and top10_distinct >= 5)
+            if fires:
+                seen_order = []
+                for r in ranked[:10]:
+                    rn = r.get("repo_name", "")
+                    if rn and rn not in seen_order:
+                        seen_order.append(rn)
+                scope_warning = (
+                    f"\n⚠ Pool spans {top10_distinct} repos in top-10: {', '.join(seen_order[:5])}"
+                    f"{', ...' if len(seen_order) > 5 else ''}. "
+                    f"To narrow: add `repo:<name>` filter or include a provider/repo name in the query.\n"
+                )
+
         # Coverage hint — the result list hit the requested limit and the pool
         # holds more; tell the caller so it can widen instead of silently
         # losing recall on broad/multi-file tasks.
@@ -700,7 +894,7 @@ def search_tool(
                     + "\n".join(results)
                     + coverage
                 )
-            return prefix + "\n".join(results) + coverage
+            return prefix + scope_warning + "\n".join(results) + coverage
 
         header = f"Found {len(ranked)} of {total_candidates} candidates for '{query}'"
         if repo:
@@ -711,6 +905,6 @@ def search_tool(
             header += " (keyword only)"
             header += f"\n⚠️ Vector search unavailable: {vec_err}"
 
-        return header + coverage + "\n\n" + "\n".join(results)
+        return header + scope_warning + coverage + "\n\n" + "\n".join(results)
 
     return cache_or_compute(ck, _compute)

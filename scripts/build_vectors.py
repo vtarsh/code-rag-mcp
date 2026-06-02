@@ -328,9 +328,21 @@ def _open_or_create_writer(lance_path, only_repos, force):
             db.drop_table("chunks")
 
     if only_repos and not force:
+        # 2026-05-24: skip dot-prefix infra repos (.github, .codex, etc.) which
+        # contain no indexable code chunks anyway. Previously these names hit
+        # the strict regex and aborted the entire vector update, blocking ALL
+        # legitimate repos in the batch.
+        filtered = [r for r in only_repos if r and not r.startswith(".")]
+        skipped = sorted(set(only_repos) - set(filtered))
+        if skipped:
+            print(f"  Skipping dot-prefix infra repos: {', '.join(skipped)}")
+        only_repos = filtered
         for r in only_repos:
             if not _VALID_REPO_RE.match(r):
                 raise RuntimeError(f"invalid repo name '{r}' — aborting vector update")
+        if not only_repos:
+            print("  No valid repos to embed after filtering — skipping vector step")
+            return
         try:
             table_ref = db.open_table("chunks")
             repo_filter = " OR ".join(f"repo_name = '{r}'" for r in only_repos)

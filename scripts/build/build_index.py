@@ -11,8 +11,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# Make ``src/`` importable when this script is invoked directly
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+# Make ``src/`` importable when this script is invoked directly.
+# After 2026-05 directory refactor this lives 2 levels deep under repo root
+# (scripts/build/build_index.py), so 3 .parent calls reach the repo root.
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 

@@ -434,13 +434,49 @@ _BODY_PROTECT_TOP_N = int(os.getenv("CODE_RAG_BODY_PROTECT_TOP_N", "5"))
 # "generic-term-drowned" zero-recall tasks where rare-token expected files
 # lose the BM25 race to token-dense siblings. Running one FTS5 query per
 # content token guarantees each token contributes files. Env-gated default
-# OFF — when ON, augments the FTS keyword pool (not the body pool) so it
-# composes orthogonally with Step 2 body enrichment.
+# OFF.
+#
+# Step 3 v2 (2026-05-22): redesigned from "append to FTS pool" (v1, NO-OP
+# because per-token candidates landed at ranks 151-250 with RRF≈0.01) to
+# "separate RRF leg". Per-token results now get their own pt:{rowid} key in
+# scores with weight CODE_RAG_PT_RRF_WEIGHT (default 0.5 — mirrors body-pass
+# weighting). Rank-0 candidate then scores 0.5/(K+0+1) ≈ 0.0122 — comparable
+# to vector rank-41 instead of vector rank-150. Same-rowid merge (after the
+# fts+vec merge) folds pt: into fts:/vec: when the per-token candidate
+# corroborates an existing co-hit, additively boosting confident chunks.
 _PER_TOKEN_UNION = os.getenv("CODE_RAG_PER_TOKEN_UNION", "0") == "1"
 # Per-token FTS pool size. 10 x 10 tokens = +100 candidates worst case,
-# keeping the keyword_results pool <= 150 + 100 = 250 (under the 300 ceiling).
+# scoring as a separate RRF leg (no longer appended to keyword_results).
 _PT_LIMIT = int(os.getenv("CODE_RAG_PT_LIMIT", "10"))
 _PT_MAX_TOKENS = int(os.getenv("CODE_RAG_PT_MAX_TOKENS", "10"))
+# Per-token RRF leg weight. 0.5 mirrors _BODY_RRF_WEIGHT — auxiliary signal
+# that lifts borderline matches without overpowering primary FTS/vector legs.
+_PT_RRF_WEIGHT = float(os.getenv("CODE_RAG_PT_RRF_WEIGHT", "0.5"))
+
+# 2026-05-22: post-fusion soft demote for test-path and tooling-repo noise.
+# Q3 ("how does merchant onboarding flow work") returned 3/6 .spec.js tests;
+# Q1 ("how to add a new payment provider integration") returned
+# github-run-e2e-action/src/index.ts as top-1 (CI dispatcher containing
+# `paymentProviders` workflow input). Both fire only when the query lacks
+# the corresponding domain keyword (test/spec/ci/action/template/boilerplate).
+_DEMOTE_TEST_PATHS = os.getenv("CODE_RAG_DEMOTE_TEST_PATHS", "0") == "1"
+_DEMOTE_TEST_MULT = float(os.getenv("CODE_RAG_DEMOTE_TEST_MULT", "0.5"))
+_DEMOTE_TOOLING_REPOS = os.getenv("CODE_RAG_DEMOTE_TOOLING_REPOS", "0") == "1"
+_DEMOTE_TOOLING_MULT = float(os.getenv("CODE_RAG_DEMOTE_TOOLING_MULT", "0.2"))
+# Path indicators of test files (anywhere in file_path)
+_TEST_PATH_RE = re.compile(r"(^|/)(tests?|__tests__|e2e)/|\.spec\.|\.test\.", re.IGNORECASE)
+# Tooling/CI repo name patterns. EXCLUDES boilerplate-* — those are templates
+# users actually consult for "how to add a new X" queries (verified Q1 A/B
+# 2026-05-22: demoting boilerplate-node-providers-grpc-service for "how to add
+# a new payment provider" hurts more than github-run-e2e-action noise helps).
+_TOOLING_REPO_RE = re.compile(
+    r"(^github-[\w-]*-action$|-eslint-config$|-prettier-config$|^lint-|^config-)", re.IGNORECASE
+)
+# Query keywords that suppress the demote (when present, results are wanted)
+_TEST_QUERY_KEYWORDS = frozenset(
+    {"test", "tests", "testing", "spec", "specs", "unit", "mock", "mocks", "fixture", "fixtures", "e2e"}
+)
+_TOOLING_QUERY_KEYWORDS = frozenset({"ci", "cd", "action", "actions", "github", "lint", "eslint", "prettier"})
 
 
 def hybrid_search(
@@ -457,6 +493,8 @@ def hybrid_search(
     repo_boost: dict[str, float] | None = None,
     repo_prefix_boost: dict[str, float] | None = None,
     body: str | None = None,
+    repo_allow_list: set[str] | None = None,
+    repo_allow_prefixes: tuple[str, ...] = (),
 ) -> tuple[list[dict], str | None, int]:
     """Hybrid search: combine FTS5 keyword + vector similarity via RRF.
 
@@ -513,15 +551,16 @@ def hybrid_search(
     #    P4.2: raised 100→150 to fill rerank pool to ~200 after RRF overlap.
     keyword_results = fts_search(query, repo, file_type, exclude_file_types, limit=150)
 
-    # Step 3 (per-token candidate union): rare-token rescue for
-    # generic-term-drowned queries. Appends per-token candidates to the
-    # FTS pool AFTER the global FTS call, so they land at lower ranks
-    # (RRF positional weight is smaller) — they only win when the
-    # downstream reranker or vector co-hit promotes them. Bit-identical
-    # to baseline when env unset.
-    per_token_count = 0
+    # Step 3 v2 (per-token candidate union as separate RRF leg): rare-token
+    # rescue for generic-term-drowned queries. Stashed for a dedicated RRF
+    # leg below — NOT appended to keyword_results (that was v1, NO-OP because
+    # appended candidates landed at rank ≥151 with RRF≈0.01). The own-leg
+    # design ranks per-token candidates against their own retriever, so
+    # rank-0 scores _PT_RRF_WEIGHT/(K+1) regardless of where they would have
+    # fallen in the merged FTS pool. Bit-identical to baseline when env unset.
+    per_token_results = []
     if _PER_TOKEN_UNION:
-        extra = fts_search_per_token(
+        per_token_results = fts_search_per_token(
             query,
             repo,
             file_type,
@@ -529,12 +568,6 @@ def hybrid_search(
             per_token_limit=_PT_LIMIT,
             max_tokens=_PT_MAX_TOKENS,
         )
-        seen_ids = {sr.rowid for sr in keyword_results}
-        for sr in extra:
-            if sr.rowid not in seen_ids:
-                keyword_results.append(sr)
-                seen_ids.add(sr.rowid)
-                per_token_count += 1
 
     # 2. Vector search — two-tower routing.
     #
@@ -628,6 +661,26 @@ def hybrid_search(
         scores[key]["score"] += rrf_score
         scores[key]["sources"].append("vector")
 
+    # Step 3 v2: per-token RRF leg. Per-token candidates score independently
+    # so rank-0 lands at _PT_RRF_WEIGHT/(K+1) instead of the buried position
+    # they'd hit in the merged FTS pool. Co-hits with FTS/vector are folded
+    # in the same-rowid merge below — corroboration compounds additively.
+    for rank_idx, sr in enumerate(per_token_results):
+        key = f"pt:{sr.rowid}"
+        rrf_score = _PT_RRF_WEIGHT / (K + rank_idx + 1)
+        if key not in scores:
+            scores[key] = {
+                "score": 0,
+                "repo_name": sr.repo_name,
+                "file_path": sr.file_path,
+                "file_type": sr.file_type,
+                "chunk_type": sr.chunk_type,
+                "snippet": sr.snippet,
+                "sources": [],
+            }
+        scores[key]["score"] += rrf_score
+        scores[key]["sources"].append("per_token")
+
     # Merge same-rowid chunks across FTS and vector when they refer to the
     # same physical chunk (same repo and file path).
     for key in list(scores.keys()):
@@ -644,6 +697,33 @@ def hybrid_search(
                     fts_data["sources"] = list(dict.fromkeys(fts_data["sources"] + vec_data["sources"]))
                     del scores[vec_key]
 
+    # Step 3 v2: fold pt: scores into matching fts:/vec: keys (same physical
+    # chunk by rowid + repo/path sanity check). Runs AFTER the fts/vec merge
+    # so a triple-hit (fts+vec+pt) collapses into a single fts: entry that
+    # accumulates all three RRF scores. pt: entries without an fts:/vec:
+    # twin survive as standalone candidates carrying the pt-leg score.
+    per_token_unique = 0
+    for key in list(scores.keys()):
+        if not key.startswith("pt:"):
+            continue
+        rowid = key.split(":", 1)[1]
+        pt_data = scores[key]
+        target = None
+        for cand_key in (f"fts:{rowid}", f"vec:{rowid}"):
+            if cand_key in scores:
+                cand = scores[cand_key]
+                if cand.get("repo_name") == pt_data.get("repo_name") and cand.get("file_path") == pt_data.get(
+                    "file_path"
+                ):
+                    target = cand
+                    break
+        if target is not None:
+            target["score"] += pt_data["score"]
+            target["sources"] = list(dict.fromkeys(target["sources"] + pt_data["sources"]))
+            del scores[key]
+        else:
+            per_token_unique += 1
+
     # 2026-05-18: repo boost for frontend/backend query routing.
     if repo_boost:
         for data in scores.values():
@@ -659,6 +739,23 @@ def hybrid_search(
                 if repo.startswith(prefix):
                     data["score"] *= mult
                     break
+
+    # 2026-05-23: HARD repo filter (drops candidates entirely). Caller passes
+    # `repo_allow_list` (exact match) + `repo_allow_prefixes` (startswith match).
+    # When either is non-empty, every score entry whose repo doesn't match is
+    # deleted before rerank — frees up rerank top-200 slots for in-scope
+    # candidates. Used by service.py when CODE_RAG_HARD_FILTER=1 + provider
+    # name detected in query, to prevent cross-workflow confusion (e.g.
+    # nuvei payment-expired vs dispute-expired per PI-56 finding).
+    filtered_out = 0
+    if repo_allow_list or repo_allow_prefixes:
+        allow_set = set(repo_allow_list or ())
+        for key in list(scores.keys()):
+            repo = scores[key].get("repo_name", "")
+            keep = repo in allow_set or any(repo.startswith(p) for p in repo_allow_prefixes)
+            if not keep:
+                del scores[key]
+                filtered_out += 1
 
     keyword_only_count = sum(1 for s in scores.values() if s.get("sources") == ["keyword"])
     vector_only_count = sum(1 for s in scores.values() if s.get("sources") == ["vector"])
@@ -759,6 +856,28 @@ def hybrid_search(
         # Rerank with cross-encoder (eval path may override with a specific model)
         ranked = rerank(query, ranked, limit, reranker_override=reranker_override)
 
+    # 2026-05-22: POST-rerank soft demote for test-path and tooling-repo noise.
+    # Applied AFTER rerank because pre-rerank score adjustments are systematically
+    # overridden by the reranker (verified empirically in Step 3 v2 / STRIP_META /
+    # H5 FE_DEMOTE A/B tests — all showed ~2-rank shifts regardless of pre-rerank
+    # multiplier). Operating on `combined_score` after rerank actually moves results
+    # in the final top-N. Fires only when the query lacks the corresponding domain
+    # keywords (test/spec/ci/action/template/boilerplate). Env-gated default OFF.
+    if (_DEMOTE_TEST_PATHS or _DEMOTE_TOOLING_REPOS) and ranked:
+        query_tokens = set((query or "").lower().split())
+        suppress_test_demote = bool(query_tokens & _TEST_QUERY_KEYWORDS)
+        suppress_tool_demote = bool(query_tokens & _TOOLING_QUERY_KEYWORDS)
+        if _DEMOTE_TEST_PATHS and not suppress_test_demote:
+            for r in ranked:
+                if _TEST_PATH_RE.search(r.get("file_path") or ""):
+                    r["combined_score"] = r.get("combined_score", r.get("score", 0)) * _DEMOTE_TEST_MULT
+        if _DEMOTE_TOOLING_REPOS and not suppress_tool_demote:
+            for r in ranked:
+                if _TOOLING_REPO_RE.search(r.get("repo_name") or ""):
+                    r["combined_score"] = r.get("combined_score", r.get("score", 0)) * _DEMOTE_TOOLING_MULT
+        # Re-sort by adjusted combined_score and clip to limit
+        ranked = sorted(ranked, key=lambda x: x.get("combined_score", x.get("score", 0)), reverse=True)[:limit]
+
     # Step 2 (2026-05-21): JIRA body enrichment — RRF-merge a code-anchored
     # body pass into the reranked title list. Default OFF; no-op without a
     # body string. Body candidates that ALREADY appear in `ranked` get a
@@ -814,7 +933,8 @@ def hybrid_search(
             "exclude_file_types": exclude_file_types,
             "body_query": body_query_str,
             "body_fts_count": body_pass_hits,
-            "per_token_added": per_token_count,
+            "per_token_added": len(per_token_results),
+            "per_token_unique": per_token_unique,
         }
     )
 

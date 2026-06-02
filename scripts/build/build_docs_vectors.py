@@ -31,7 +31,8 @@ DEFAULT_lance_dir = BASE_DIR / "db" / "vectors.lance.docs"
 DEFAULT_CHECKPOINT_PATH = BASE_DIR / "db" / "docs_checkpoint.json"
 
 # --- Add project root to sys.path so `src...` imports resolve from this script ---
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# 2026-05-24: moved into scripts/build/, repo root is 3 levels up
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 

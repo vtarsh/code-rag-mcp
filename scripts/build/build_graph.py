@@ -16,8 +16,10 @@ Thin entry point — implementation lives in `src/graph/builders/`.
 import sys
 from pathlib import Path
 
-# Ensure repo root is on sys.path so `src.graph.builders` resolves
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Ensure repo root is on sys.path so `src.graph.builders` resolves.
+# After 2026-05 refactor this lives at scripts/build/build_graph.py — need 3
+# .parent calls to reach the repo root.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from scripts._common import setup_paths
 
 setup_paths()

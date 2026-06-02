@@ -19,7 +19,8 @@ from pathlib import Path
 import yaml
 
 # Ensure project root on path
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# 2026-05-24: moved into scripts/build/, repo root is 3 levels up
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 from scripts._common import setup_paths
 
