@@ -1,13 +1,10 @@
 """Tests for types.py — Pydantic models."""
 
 from src.types import (
-    FlowPath,
     GraphEdge,
-    ImpactNode,
     RuntimeStats,
     SearchResult,
     ToolCallStat,
-    VectorResult,
 )
 
 
@@ -37,13 +34,6 @@ class TestSearchResult:
         assert "keyword" in r.sources
 
 
-class TestVectorResult:
-    def test_creation(self):
-        r = VectorResult(rowid=1, repo_name="r", file_path="f", file_type="proto", chunk_type="message")
-        assert r.distance == 0.0
-        assert r.content_preview == ""
-
-
 class TestGraphEdge:
     def test_creation(self):
         e = GraphEdge(source="a", target="b", edge_type="grpc_call")
@@ -52,23 +42,6 @@ class TestGraphEdge:
     def test_with_detail(self):
         e = GraphEdge(source="a", target="b", edge_type="npm_dep", detail="@pay/types")
         assert e.detail == "@pay/types"
-
-
-class TestImpactNode:
-    def test_creation(self):
-        n = ImpactNode(name="repo-x", level=2, via_type="grpc_call")
-        assert n.level == 2
-
-
-class TestFlowPath:
-    def test_creation(self):
-        fp = FlowPath(nodes=["a", "b", "c"], edges=["grpc_call", "npm_dep"], score=5)
-        assert len(fp.nodes) == 3
-        assert fp.score == 5
-
-    def test_defaults(self):
-        fp = FlowPath(nodes=[], edges=[])
-        assert fp.score == 0
 
 
 class TestToolCallStat:

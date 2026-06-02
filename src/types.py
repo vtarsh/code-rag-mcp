@@ -24,18 +24,6 @@ class SearchResult(BaseModel):
     combined_score: float | None = None
 
 
-class VectorResult(BaseModel):
-    """Raw result from LanceDB vector search."""
-
-    rowid: int
-    repo_name: str
-    file_path: str
-    file_type: str
-    chunk_type: str
-    content_preview: str = ""
-    distance: float = 0.0
-
-
 class GraphEdge(BaseModel):
     """Edge in the dependency graph."""
 
@@ -43,22 +31,6 @@ class GraphEdge(BaseModel):
     target: str
     edge_type: str
     detail: str = ""
-
-
-class ImpactNode(BaseModel):
-    """Node discovered during impact analysis BFS."""
-
-    name: str
-    level: int
-    via_type: str
-
-
-class FlowPath(BaseModel):
-    """A path found by trace_flow between two repos."""
-
-    nodes: list[str]
-    edges: list[str]
-    score: int = 0
 
 
 class ToolCallStat(BaseModel):

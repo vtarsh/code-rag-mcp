@@ -202,7 +202,7 @@ def _query_wants_docs(query: str) -> bool:
         return True
     if _CODE_SIG_RE.search(query) or _REPO_TOKEN_RE.search(query):
         return False
-    tokens = query.split()
+    query.split()
     # Default to code intent for ambiguous queries.
     # Doc-intent queries should match explicit doc signals ( Tier 1-3 above ).
     return False
