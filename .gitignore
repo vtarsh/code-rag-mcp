@@ -103,6 +103,16 @@ scripts/tavily-docs-crawler.py
 
 # --- bench_runs: ephemeral benchmark dumps (json/jsonl/log). Only curated
 #     .md analyses stay tracked (cited by ARCHITECTURE_STATUS.md). ---
-bench_runs/**
-!bench_runs/**/
-!bench_runs/**/*.md
+bench_runs/
+
+# --- Generated run outputs at repo root (benchmark/scan/log dumps) ---
+/clone_log.json
+/extract_log.json
+/repo_state.json
+/benchmark_results.json
+/benchmark_realworld_results.json
+/blind_spots_results.json
+
+# --- Claude Code session scratch (per-run, not shared) ---
+.claude/autonomous/
+.claude/debug/current/

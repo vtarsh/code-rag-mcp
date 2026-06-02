@@ -56,13 +56,15 @@ The runtime is split into two processes: [`daemon.py`](daemon.py) is a persisten
 ├── raw/                  # Cloned repo artifacts (generated)
 ├── extracted/            # Extracted chunks / configs (generated)
 ├── logs/                 # Runtime logs (generated)
-├── bench_runs/           # Benchmark JSON dumps (mostly untracked)
+├── bench_runs/           # Benchmark dumps (3 curated .md tracked; json/jsonl/log gitignored)
 ├── models/               # Fine-tuned artifacts (mostly untracked)
-├── .claude/              # Agent infrastructure (rules, skills, plans)
+├── archive/              # Retired session/planning docs (git-tracked, 9 .md)
+├── .claude/              # Agent infrastructure (agents, skills, rules, docs, debug)
 ├── .secrets/             # API keys, tokens (gitignored)
 ├── AGENTS.md             # This file
 ├── README.md
 ├── ARCHITECTURE.md
+├── ARCHITECTURE_STATUS.md
 ├── TESTING.md
 ├── ROADMAP.md
 ├── Makefile
@@ -77,7 +79,8 @@ The runtime is split into two processes: [`daemon.py`](daemon.py) is a persisten
 
 | Path | Classification | Notes |
 |------|----------------|-------|
-| `AGENTS.md`, `README.md`, `ARCHITECTURE.md`, `TESTING.md`, `ROADMAP.md` | **git** | curated docs |
+| `AGENTS.md`, `README.md`, `ARCHITECTURE.md`, `ARCHITECTURE_STATUS.md`, `TESTING.md`, `ROADMAP.md` | **git** | curated docs (only these 6 .md at root) |
+| `archive/` | **git** | retired session/planning docs (9 .md; e.g. `MODEL_TRAINING_SPEC.md`, `RERANKER_IMPROVEMENT_PLAN.md`, `NEXT_SESSION_PROMPT.md`, `SESSION_FINDINGS.md`) |
 | `mcp_server.py`, `daemon.py`, `cli.py`, `setup_wizard.py` | **git** | entry points |
 | `pyproject.toml`, `Makefile`, `.gitignore`, `.pre-commit-config.yaml` | **git** | project config |
 | `src/`, `tests/` | **git** | source + tests, all tracked |
@@ -85,13 +88,12 @@ The runtime is split into two processes: [`daemon.py`](daemon.py) is a persisten
 | `profiles/example/` | **git** | template profile |
 | `profiles/pay-com/` | **gitignored** | private repo clone; curated docs force-tracked inside |
 | `db/`, `raw/`, `extracted/`, `logs/` | **gitignored generated** | recreated by build pipeline |
-| `bench_runs/` | **hybrid** | baselines tracked; timestamped dumps untracked |
+| `bench_runs/` | **hybrid** | 3 curated `.md` tracked; json/jsonl/log dumps gitignored |
 | `models/` | **hybrid** | metadata tracked; model weights untracked |
 | `.secrets/` | **gitignored** | credentials |
 | `graph.html` | **gitignored** | generated graph visualization |
-| `.claude/rules/`, `.claude/docs/`, `.claude/skills/` | **git** | agent infrastructure |
-| `.claude/plans/`, `.claude/research/` | **git** | planning docs |
-| `.claude/debug/` | **git** (ruff-excluded) | ephemeral debug artifacts (149 tracked files) |
+| `.claude/agents/`, `.claude/skills/`, `.claude/rules/`, `.claude/docs/` | **git** | agent infrastructure |
+| `.claude/debug/` | **git** (ruff-excluded) | ephemeral debug artifacts (155 tracked files) |
 | `.claude/worktrees/` | **gitignored** | ephemeral per-session branches |
 
 ---
@@ -215,7 +217,6 @@ scripts/scrape/extract_artifacts.py → scripts/build/build_index.py → scripts
 2. **`models/` mixed storage** — Only metadata tracked; weights untracked. Is this intentional?
 3. **`setup_wizard.py` stale** — Last touched 8+ weeks ago. Still wired into `Makefile`.
 4. **Doc validators not in git** — Six `validate_doc_*.py` scripts actively used but never committed. Keep ephemeral?
-5. **`.claude/plans/` untracked** — Contains planning docs; some tracked, some not. Intentional?
 
 ---
 

@@ -1,8 +1,8 @@
 # Architecture status — code-rag-mcp · 2026-05-19
 
 > **READ THIS FIRST.** This is the current source of truth on direction.
-> It SUPERSEDES `MODEL_TRAINING_SPEC.md`, `RERANKER_IMPROVEMENT_PLAN.md`,
-> `NEXT_SESSION_PROMPT.md` and the recall@10 framing in `SESSION_FINDINGS.md` —
+> It SUPERSEDES `archive/MODEL_TRAINING_SPEC.md`, `archive/RERANKER_IMPROVEMENT_PLAN.md`,
+> `archive/NEXT_SESSION_PROMPT.md` and the recall@10 framing in `archive/SESSION_FINDINGS.md` —
 > all of those reflect an earlier direction that was tested and rejected.
 
 ## TL;DR
@@ -23,8 +23,8 @@ hybrid as-is; stop chasing fine-tuning.** A full agentic-grep rebuild is a
 - ❌ Do **not** delete the vector (LanceDB) leg "to simplify" — **measured**, it
   earns ~+5pp recall@pool (stable; the hit@10 delta is a noisy −3.6/−8.3pp
   test-retest pair — see 2026-05-20 correction). It is not baggage.
-- ❌ Do **not** trust `MODEL_TRAINING_SPEC.md` / `RERANKER_IMPROVEMENT_PLAN.md` /
-  `NEXT_SESSION_PROMPT.md` — superseded, they point the wrong way.
+- ❌ Do **not** trust `archive/MODEL_TRAINING_SPEC.md` / `archive/RERANKER_IMPROVEMENT_PLAN.md` /
+  `archive/NEXT_SESSION_PROMPT.md` — superseded, they point the wrong way.
 
 ## What was measured (this session)
 

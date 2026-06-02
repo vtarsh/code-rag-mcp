@@ -46,7 +46,7 @@ tests/
 | `test_analyze.py` | 30+ | `src/tools/analyze/` |
 | `test_benchmark_doc_intent.py` | 25+ | `scripts/bench/benchmark_doc_intent.py` |
 | `test_build_combined_train.py` | 15 | `scripts/build/build_combined_train.py` |
-| `test_vector.py` | 10 | `src/search/vectors.py` |
+| `test_vector.py` | 10 | `src/search/vector.py` |
 | `smoke_search.py` | 12 | End-to-end search quality (loads DB + reranker) |
 
 ## Running Tests

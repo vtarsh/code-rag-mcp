@@ -6,16 +6,21 @@
 ## Directory Tree
 
 ```
-scripts/
+scripts/                    # 92 tracked .py/.sh files (incl. 7 __init__.py package markers)
 ├── _common.py              # Shared utilities (DaemonError, setup_paths)
 ├── build_vectors.py        # LanceDB embeddings builder (root — Makefile refs)
+├── build_repo_summary_index.py  # Repo-summary index builder
+├── gen_repo_facts.py       # Generate per-repo facts
 ├── health_check_agents_md.py  # AGENTS.md validation (root — test refs)
+├── parse_jaeger_trace.py   # Parse Jaeger trace dumps
+├── visualize_graph.py      # Graph visualization helper
 ├── full_update.sh          # Full pipeline entry point (Makefile)
 ├── clone_repos.sh          # Shallow-clone GitHub org repos
+├── docs_validate_all.sh    # Run all doc validators
+├── run_with_timeout.sh     # Timeout wrapper for long jobs
 ├── build/                  # Index, graph, vector builders
 │   ├── build_index.py
 │   ├── build_graph.py
-│   ├── build_vectors.py
 │   ├── build_env_index.py
 │   ├── build_audit_context.py
 │   ├── build_clean_jira_eval.py
@@ -42,26 +47,22 @@ scripts/
 │   ├── local_code_bench.py
 │   └── sample_bench_v2.py
 ├── eval/                   # Eval harnesses
+│   ├── bench_steps_to_find.py
 │   ├── bootstrap_eval_ci.py
 │   ├── eval_finetune.py
 │   ├── eval_harness.py
 │   ├── eval_jidm.py
+│   ├── eval_jira_clean.py
 │   ├── eval_verdict.py
-│   └── eval_verdict.py
+│   ├── replay_miss.py
+│   └── run_s2f.sh
 ├── analysis/               # Analytics, churn, mining
-│   ├── analyze_calls.py
 │   ├── analyze_feedback.py
 │   ├── analyze_session_quality.py
-│   ├── autoresearch_eval.py
-│   ├── autoresearch_loop.py
 │   ├── detect_blind_spots.py
 │   ├── detect_doc_staleness.py
-│   ├── gen_repo_facts.py
-│   ├── method_level_gaps.py
 │   ├── mine_co_changes.py
-│   ├── predict_failures.py
-│   ├── proactivity_eval.py
-│   └── semantic_gap_scorer.py
+│   └── proactivity_eval.py
 ├── maint/                  # Maintenance, validation
 │   ├── generate_housekeeping_report.py
 │   ├── validate_doc_anchors.py
@@ -69,7 +70,6 @@ scripts/
 │   ├── validate_doc_frontmatter.py
 │   ├── validate_doc_related_repos.py
 │   ├── validate_doc_size.py
-│   ├── validate_gaps.py
 │   ├── validate_overlay_vs_proto.py
 │   ├── validate_provider_paths.py
 │   └── validate_recipe.py
@@ -87,12 +87,19 @@ scripts/
 │   └── v12_candidates_regen_doc.py
 ├── scrape/                 # Doc scraping
 │   ├── extract_artifacts.py
-│   ├── finalize_scrape.py
-│   └── tavily-docs-crawler.py
+│   └── finalize_scrape.py
 └── runpod/                 # RunPod training pipeline
-    ├── train_docs_embedder.py
+    ├── bench_large_models.py
+    ├── cost_guard.py
+    ├── full_pipeline.py
+    ├── oneshot_docs.py
+    ├── oneshot_rerank.py
     ├── pod_lifecycle.py
-    └── pod_watcher.py
+    ├── pod_watcher.py
+    ├── prepare_train_data.py
+    ├── train_docs_embedder.py
+    ├── train_reranker_ce.py
+    └── setup_env.sh
 ```
 
 ## Entry Points

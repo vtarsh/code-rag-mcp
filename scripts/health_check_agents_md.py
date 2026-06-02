@@ -191,7 +191,15 @@ class HealthChecker:
         return len([d for d in p.iterdir() if d.is_dir()])
 
     def _git_ls_files(self, path_rel: str) -> int:
-        code, out = self._run(["git", "ls-files", path_rel])
+        # profiles/pay-com/ is a SEPARATE git repo (pay-knowledge-profile),
+        # gitignored here. Query its own index rather than this repo's, so a
+        # path tracked over there isn't mis-reported as "not in git index".
+        prefix = "profiles/pay-com/"
+        if path_rel.startswith(prefix):
+            sub = REPO_ROOT / "profiles" / "pay-com"
+            code, out = self._run(["git", "ls-files", path_rel[len(prefix) :]], cwd=sub)
+        else:
+            code, out = self._run(["git", "ls-files", path_rel])
         if code != 0:
             return 0
         return len([ln for ln in out.splitlines() if ln.strip()])
@@ -227,13 +235,13 @@ class HealthChecker:
                 )
 
     def check_counts(self) -> None:
-        # Root: 59 test files  (line 111)
+        # Root: 63 test files  (line 111)
         actual = self._count_glob("tests/test_*.py")
-        self._assert_count("test files", 59, actual, line=111)
+        self._assert_count("test files", 63, actual, line=111)
 
-        # Root: 71 Python modules in src/  (line 181)
+        # Root: 75 Python modules in src/  (line 181)
         actual = len(list((REPO_ROOT / "src").rglob("*.py")))
-        self._assert_count("src Python modules", 73, actual, line=181)
+        self._assert_count("src Python modules", 75, actual, line=181)
 
         # Root: 14 graph builder modules  (line 467)
         actual = self._count_glob("src/graph/builders/*.py")
@@ -243,9 +251,9 @@ class HealthChecker:
         actual = self._count_glob("src/index/builders/*.py")
         self._assert_count("index builder modules", 18, actual, line=470)
 
-        # Root: ~117 scripts + helpers  (line 115)
+        # Root: ~142 scripts + helpers  (line 115)
         actual = self._count_files("scripts")
-        self._assert_count("scripts + helpers", 117, actual, line=115, approximate=True)
+        self._assert_count("scripts + helpers", 142, actual, line=115, approximate=True)
 
         # Root: ~100 tracked scripts  (line 183)
         actual = self._git_ls_files("scripts/")
@@ -256,9 +264,9 @@ class HealthChecker:
         self._assert_count("tracked debug files", 149, actual, line=552, approximate=True)
 
         # Profile counts
-        # Profile: 22 gotcha files  (line 213)
+        # Profile: 34 gotcha files  (line 213)
         actual = self._count_files("profiles/pay-com/docs/gotchas")
-        self._assert_count("gotcha files", 22, actual, line=213)
+        self._assert_count("gotcha files", 34, actual, line=213)
 
         # Profile: ~45 reference files + subdirs  (line 254)
         # Count top-level files + immediate subdirs in references/
@@ -271,9 +279,9 @@ class HealthChecker:
             actual_ref = 0
         self._assert_count("reference files + subdirs", 45, actual_ref, line=254, approximate=True)
 
-        # Profile: 20 flow files  (line 331)
+        # Profile: 21 flow files  (line 331)
         actual = self._count_files("profiles/pay-com/docs/flows")
-        self._assert_count("flow files", 20, actual, line=331)
+        self._assert_count("flow files", 21, actual, line=331)
 
         # Profile: 0 MOC files  (line 358) — _moc/ deleted as stale auto-generated indexes
         actual = self._count_files("profiles/pay-com/docs/notes/_moc")
@@ -289,9 +297,9 @@ class HealthChecker:
         )
         self._assert_count("profile scripts", 22, actual, line=448)
 
-        # Profile: 4,014 docs files  (line 102) — after duplicate purge + removed provider dirs
+        # Profile: 4,151 docs files  (line 102) — after duplicate purge + removed provider dirs
         actual = self._count_files("profiles/pay-com/docs")
-        self._assert_count("docs files", 4014, actual, line=102)
+        self._assert_count("docs files", 4151, actual, line=102)
 
     # ------------------------------------------------------------------
     # 3. Orphan detection
