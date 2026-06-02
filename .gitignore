@@ -100,3 +100,9 @@ scripts/tavily-docs-crawler.py
 
 
 
+
+# --- bench_runs: ephemeral benchmark dumps (json/jsonl/log). Only curated
+#     .md analyses stay tracked (cited by ARCHITECTURE_STATUS.md). ---
+bench_runs/**
+!bench_runs/**/
+!bench_runs/**/*.md
