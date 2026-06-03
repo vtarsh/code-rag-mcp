@@ -28,7 +28,7 @@ ROOT = Path.home() / ".code-rag-mcp/profiles/pay-com/docs"
 REPORT = ROOT / "_housekeeping_report.md"
 TASKS_OUT = Path("/tmp/docs-housekeeping-tasks.md")
 
-SCAN_DIRS = ["gotchas", "references", "notes/_moc", "dictionary", "flows"]
+SCAN_DIRS = ["gotchas", "references", "dictionary", "flows"]
 EXCLUDE_PARTS = {"scraped", "test-credentials", "contract-patterns"}
 
 LINK_RE = re.compile(r"\[([^\]\n]+)\]\((?!https?://|mailto:|#)([^)\s]+\.md)(?:#[^)\s]*)?\)")
@@ -96,7 +96,7 @@ def stale_files(days: int = 14):
     rels = {str(d.relative_to(ROOT)): d for d in docs}
     outbound = {rel: parse_outbound_links(p) for rel, p in rels.items()}
     inbound = defaultdict(int)
-    for src, links in outbound.items():
+    for _src, links in outbound.items():
         for tgt in links:
             inbound[tgt] += 1
     cutoff = dt.datetime.now().timestamp() - days * 86400

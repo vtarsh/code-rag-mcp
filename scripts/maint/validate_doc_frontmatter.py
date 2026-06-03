@@ -11,16 +11,14 @@ from pathlib import Path
 
 ROOT = Path.home() / ".code-rag-mcp/profiles/pay-com/docs"
 
-SCAN = ["gotchas", "references", "notes/_moc", "flows", "dictionary"]
+SCAN = ["gotchas", "references", "flows", "dictionary"]
 EXCLUDE_PARTS = {"scraped", "test-credentials", "contract-patterns"}
 
 
 def is_exempt(path: Path) -> bool:
     if path.name.startswith("_") and path.name.endswith("_report.md"):
         return True
-    if any(part in EXCLUDE_PARTS for part in path.parts):
-        return True
-    return False
+    return any(part in EXCLUDE_PARTS for part in path.parts)
 
 
 def has_type_field(md: Path) -> bool:

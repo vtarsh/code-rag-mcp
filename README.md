@@ -74,7 +74,7 @@ make test
 ## How it works
 
 ```
-1. clone_repos.sh                       — shallow-clone all repos from your GitHub org
+1. scripts/clone_repos.sh                — shallow-clone all repos from your GitHub org
 2. scripts/scrape/extract_artifacts.py   — parse repos into structured artifacts
 3. scripts/build/build_index.py          — create SQLite FTS5 full-text search index
 4. scripts/build_vectors.py              — create LanceDB vector embeddings (kept at root)
@@ -366,6 +366,26 @@ Environment variables:
 cd ~/.code-rag-mcp && python3 daemon.py &
 ```
 The MCP proxy (`mcp_server.py`) will also auto-start the daemon if it is not running.
+
+## Documentation map
+
+Root-level docs (the only `.md` files kept at the repo root):
+
+| File | Purpose |
+|------|---------|
+| `README.md` | This file — setup, tools, ops. |
+| `AGENTS.md` | Navigation catalog for agents (directory tree, storage classification, backlinks). |
+| `ARCHITECTURE.md` | System design, module layout, build pipeline, invariants. |
+| `ARCHITECTURE_STATUS.md` | Current source of truth for search-quality decisions and landed steps. |
+| `ROADMAP.md` | Forward-looking priorities. |
+| `TESTING.md` | Test suites, smoke harness, how to run them. |
+
+Superseded planning and per-session handoff records live in **`archive/`**
+(`MODEL_TRAINING_SPEC.md`, `RERANKER_IMPROVEMENT_PLAN.md`,
+`NEXT_SESSION_PROMPT.md` + `STEP2`/`STEP6`/`STEP9`, `SESSION_FINDINGS.md`,
+`DEEPRESEARCH_PROMPT.md`). They are kept for provenance only — several point the
+wrong way (the FT / recall@10 framing was rejected on 2026-05-19). See
+`archive/README.md` and prefer `ARCHITECTURE_STATUS.md` for anything current.
 
 ## Stack
 

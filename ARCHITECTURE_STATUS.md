@@ -895,5 +895,5 @@ runs `pytest tests/smoke_search.py` after every rebuild, logs to
 - `bench_runs/improve/noise_audit/` — 25-query stratified noise audit
 - `bench_runs/improve/hard_filter/` — HARD_FILTER PI-56 A/B
 - `tests/smoke_search.py` — 12-test quality regression baseline
-- `DEEPRESEARCH_PROMPT.md` — the deep-research brief
+- `archive/DEEPRESEARCH_PROMPT.md` — the deep-research brief
 - `.claude/autonomous/PROGRESS.md` — full chronological log

@@ -27,7 +27,7 @@ dependency tracing, and task analysis tools via Model Context Protocol.
 │   │   ├── fts.py, vector.py, code_facts.py, env_vars.py      │
 │   ├── graph/   (BFS, shortest path, 28 edge types)          │
 │   └── tools/                                                │
-│       ├── analyze/  (task analysis, 13 modules)             │
+│       ├── analyze/  (task analysis, 11 modules)             │
 │       ├── context.py (context_builder)                      │
 │       └── service.py (repo_overview, health_check, etc.)    │
 ├─────────────────────────────────────────────────────────────┤
@@ -47,16 +47,25 @@ vtarsh/code-rag-mcp (PUBLIC)        vtarsh/code-rag-mcp-profile (PRIVATE)
 ├── scripts/                        ├── conventions.yaml    ← org prefixes, domains
 ├── tests/                          ├── glossary.yaml
 ├── profiles/example/               ├── known_flows.yaml
-├── AGENTS.md                       ├── benchmarks.yaml
-├── ARCHITECTURE.md (this file)     ├── install.sh          ← symlinks scripts
-├── TESTING.md                      ├── uninstall.sh
-└── Makefile                        ├── scripts/            ← ~30 org-specific scripts
-                                    ├── docs/flows/
-                                    ├── docs/gotchas/        ← runtime traps only
-                                    ├── docs/references/     ← stable structural knowledge
-                                    ├── docs/dictionary/     ← concepts/entities/fields YAMLs
-                                    └── RECALL-TRACKER.md
+├── archive/         ← superseded   ├── benchmarks.yaml
+│                      planning docs ├── install.sh          ← symlinks scripts
+├── cli.py · daemon.py              ├── uninstall.sh
+├── mcp_server.py · setup_wizard.py ├── scripts/            ← ~30 org-specific scripts
+├── Makefile                        ├── flows/traces/        ← consolidated flow traces
+├── README.md                       ├── docs/gotchas/        ← runtime traps only
+├── AGENTS.md                       ├── docs/references/     ← stable structural knowledge
+├── ARCHITECTURE.md (this file)     ├── docs/dictionary/     ← concepts/entities/fields YAMLs
+├── ARCHITECTURE_STATUS.md          └── RECALL-TRACKER.md
+├── ROADMAP.md
+└── TESTING.md
 ```
+
+**Root docs**: only six `.md` files live at the public-repo root — `README`,
+`AGENTS`, `ARCHITECTURE`, `ARCHITECTURE_STATUS`, `ROADMAP`, `TESTING`. Superseded
+planning / handoff records (`MODEL_TRAINING_SPEC`, `RERANKER_IMPROVEMENT_PLAN`,
+`NEXT_SESSION_PROMPT`/`STEP2`/`STEP6`/`STEP9`, `SESSION_FINDINGS`,
+`DEEPRESEARCH_PROMPT`) were moved to `archive/` — kept for provenance only; see
+`archive/README.md`.
 
 **Dependency**: Private repo is cloned into `profiles/pay-com/` (gitignored in public repo).
 `install.sh` creates symlinks from `profiles/pay-com/scripts/` into `scripts/`.

@@ -344,7 +344,7 @@ def index_references(conn: sqlite3.Connection) -> tuple[int, int]:
 def index_dictionary(conn: sqlite3.Connection) -> tuple[int, int]:
     """Index domain dictionary YAMLs from profiles/{profile}/docs/dictionary/.
 
-    Files: fields.yaml, entities.yaml, concepts.yaml (schema in dictionary/README.md).
+    Files: fields.yaml, entities.yaml, concepts.yaml (schema in dictionary/_index.md).
     Each top-level list entry (`- name: ...`) becomes its own chunk so search can
     cite a single entry and stop. Mirrors index_flows() splitter.
 

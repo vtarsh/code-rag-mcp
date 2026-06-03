@@ -4,7 +4,6 @@
 Limits:
   gotchas/    ≤ 200 lines
   references/ ≤ 200 lines (test-credentials/, contract-patterns/, scraped/ exempt)
-  notes/_moc/ ≤ 100 lines
 
 Skips auto-generated `_*_report.md`. Exits non-zero on violations.
 """
@@ -17,15 +16,12 @@ ROOT = Path.home() / ".code-rag-mcp/profiles/pay-com/docs"
 LIMITS = [
     ("gotchas", 200, []),
     ("references", 200, ["test-credentials", "contract-patterns", "scraped"]),
-    ("notes/_moc", 100, []),
 ]
 
 
 def is_exempt(path: Path) -> bool:
     name = path.name
-    if name.startswith("_") and name.endswith("_report.md"):
-        return True
-    return False
+    return name.startswith("_") and name.endswith("_report.md")
 
 
 def main() -> int:
