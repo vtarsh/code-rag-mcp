@@ -208,6 +208,15 @@ else
 fi
 
 echo ""
+if [[ "${SKIP_VECTORS:-0}" != "1" ]]; then
+  # Prevent LanceDB version/fragment bloat (incremental append+delete never
+  # pruned old versions → 79GB / 22709 versions for ~260MB of real vectors,
+  # ballooning the daemon's mmap to 12-20GB virtual). build_vectors already
+  # paused the daemon, so there is no concurrent reader here.
+  echo "[post] Compacting vector stores (prevent bloat)..."
+  python3 "$SCRIPTS_DIR/maint/compact_vector_stores.py" 2>&1 | tail -6
+  echo ""
+fi
 echo "[post] Regenerating repo facts + staleness report..."
 python3 "$SCRIPTS_DIR/gen_repo_facts.py" 2>&1 | tail -3
 python3 "$SCRIPTS_DIR/analysis/detect_doc_staleness.py" 2>&1 | tail -3
