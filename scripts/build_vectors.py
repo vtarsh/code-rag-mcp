@@ -28,6 +28,7 @@ import re
 import sqlite3
 import sys
 import time
+from datetime import timedelta
 from pathlib import Path
 
 import lancedb
@@ -367,8 +368,17 @@ def _open_or_create_writer(lance_path, only_repos, force):
 
     def optimize_cb():
         if state["table"] is not None:
-            with contextlib.suppress(Exception):
-                state["table"].optimize()
+            # Compact fragments AND prune old versions, so the store does not
+            # bloat to 100GB+ mid-build (uncompacted versions accumulate and can
+            # fill the disk). Fall back to plain optimize() on lancedb builds
+            # that don't accept cleanup_older_than.
+            try:
+                state["table"].optimize(cleanup_older_than=timedelta(seconds=1))
+            except TypeError:
+                with contextlib.suppress(Exception):
+                    state["table"].optimize()
+            except Exception:
+                pass
 
     def get_table():
         return state["table"]
