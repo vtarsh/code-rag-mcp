@@ -503,6 +503,15 @@ def main():
         except Exception:
             print("\n  LanceDB exists but can't read. Rebuilding...")
 
+    # A --force rebuild reassigns SQLite rowids (the FTS index was rebuilt), so a
+    # prior checkpoint holds STALE rowids that would wrongly SKIP new chunks
+    # (observed: 18,978 of 87,471 skipped, leaving a chunks/vectors mismatch).
+    # Clear it BEFORE streaming — the end-of-run unlink is too late.
+    if force and checkpoint_path.exists():
+        with contextlib.suppress(Exception):
+            checkpoint_path.unlink()
+            print("  [checkpoint] cleared stale checkpoint before --force rebuild")
+
     print(f"\n[3/4] Streaming {len(rows)} chunks into LanceDB...")
     writer_fn, optimize_cb, get_table = _open_or_create_writer(lance_path, only_repos=None, force=force)
     embed_and_write_streaming(
