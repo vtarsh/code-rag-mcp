@@ -19,6 +19,14 @@ fi
 echo "$$" > "$LOCK_DIR/pid"
 trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM
 
+# Run the whole build at BACKGROUND QoS so the Mac stays usable during it.
+# macOS deprioritizes this process tree's CPU / GPU / disk I/O below the
+# foreground; children (extract, build_index, build_vectors, embedding on MPS)
+# inherit it. The build just takes a little longer instead of glitching the
+# desktop — fixes "the Mac is unusable while the index rebuilds".
+taskpolicy -b -p $$ 2>/dev/null || true
+renice 15 -p $$ >/dev/null 2>&1 || true
+
 export ACTIVE_PROFILE="${ACTIVE_PROFILE:-$(cat "$BASE_DIR/.active_profile" 2>/dev/null || echo "example")}"
 PROFILE_CONFIG="$BASE_DIR/profiles/$ACTIVE_PROFILE/config.json"
 LEGACY_CONFIG="$BASE_DIR/config.json"
