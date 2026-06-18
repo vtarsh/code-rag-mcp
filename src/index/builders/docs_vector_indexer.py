@@ -27,6 +27,7 @@ import os
 import re
 import sqlite3
 import time
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -174,8 +175,23 @@ def _to_list(vec) -> list[float]:
 
 
 def _encode(model, texts: list[str], batch_size: int) -> list[list[float]]:
-    raw = model.encode(texts, batch_size=batch_size, show_progress_bar=False)
-    return [_to_list(v) for v in raw]
+    # MPS-safe batch cap + OOM self-heal — see scripts/build_vectors._encode.
+    # A 32-chunk encode asks the O(seq²) attention matmul for ~2 GB; uncapped on
+    # MPS the pool balloons to ~12 GB (invisible to RSS) and thrashes the Mac.
+    cap = int(os.getenv("CODE_RAG_EMBED_BATCH", "8"))
+    if cap > 0:
+        batch_size = min(batch_size, cap)
+    while True:
+        try:
+            raw = model.encode(texts, batch_size=batch_size, show_progress_bar=False)
+            return [_to_list(v) for v in raw]
+        except RuntimeError as e:
+            if "out of memory" in str(e).lower() and batch_size > 1:
+                batch_size = max(1, batch_size // 2)
+                _memguard.free_memory()
+                print(f"  [encode OOM — retrying at batch_size={batch_size}]", flush=True)
+                continue
+            raise
 
 
 def _progress(done: int, total: int, start_time: float, remaining_at_start: int) -> str:
@@ -452,7 +468,17 @@ def _open_or_create_writer(
 
     def optimize_cb() -> None:
         if state["table"] is not None:
-            state["table"].optimize()
+            # Compact fragments AND prune old versions so the docs store does not
+            # bloat (uncompacted versions accumulate — 665 versions / 13GB observed
+            # 2026-06-08). Mirrors the code tower (build_vectors.py optimize_cb);
+            # fall back to plain optimize() on lancedb builds without the kwarg.
+            try:
+                state["table"].optimize(cleanup_older_than=timedelta(seconds=1))
+            except TypeError:
+                with contextlib.suppress(Exception):
+                    state["table"].optimize()
+            except Exception:
+                pass
 
     def get_table():
         return state["table"]
@@ -563,6 +589,13 @@ def _load_sentence_transformer(cfg):
             print(f"  [load] WARN _fix_gte_persistent_false_buffers skipped: {e}", flush=True)
         _cap_max_seq_length(model, _GTE_TRAIN_MAX_SEQ_LENGTH)
         print(f"  [load] capped max_seq_length={_GTE_TRAIN_MAX_SEQ_LENGTH} for {cfg.key}", flush=True)
+    else:
+        # Non-GTE docs models (e.g. nomic-embed-text-v1.5) also ship
+        # max_seq_length=8192; cap to a safety ceiling (≥ long_limit tokens) so a
+        # long chunk can't blow up attention. Default 4096 never truncates the
+        # ≤8000-char chunks we feed, so embeddings are unchanged.
+        seq_cap = _memguard.cap_seq_length(model)
+        print(f"  [load] capped max_seq_length={seq_cap} for {cfg.key}", flush=True)
 
     return model, device
 
@@ -595,6 +628,8 @@ def build_docs_vectors(
       refs + MPS cache between batches; a psutil watchdog hard-exits on
       memory pressure so the next run resumes from the rowid checkpoint.
     """
+    # Cap the MPS allocator before SentenceTransformer/torch initialises it.
+    _memguard.configure_mps_limits()
     from src.models import get_model_config
 
     mcfg = get_model_config(model_key)
@@ -658,8 +693,14 @@ def build_docs_vectors(
     table = get_table()
     vectors_stored = 0
     if table is not None:
-        with contextlib.suppress(Exception):
-            table.optimize()
+        # Prune old versions on finalise too (not just compact) — see optimize_cb.
+        try:
+            table.optimize(cleanup_older_than=timedelta(seconds=1))
+        except TypeError:
+            with contextlib.suppress(Exception):
+                table.optimize()
+        except Exception:
+            pass
         try:
             vectors_stored = table.count_rows()
         except Exception:
