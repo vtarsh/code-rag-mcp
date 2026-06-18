@@ -27,6 +27,17 @@ trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM
 taskpolicy -b -p $$ 2>/dev/null || true
 renice 15 -p $$ >/dev/null 2>&1 || true
 
+# Bound MPS/Metal memory for every embed child (build_vectors, embedding, docs
+# tower). Root cause of "rebuild reserves 11+GB, Mac thrashes":
+#   1. Default high-water-mark 1.7 lets MPS balloon to ~20 GB on a 16 GB Mac —
+#      graphics memory invisible to the RSS guard → swap thrash. 0.5 caps ~5.9 GB.
+#   2. A 32-chunk encode batch wants ~2 GB of attention; CODE_RAG_EMBED_BATCH=8
+#      shrinks each spike ~4× so it fits well under the cap (no OOM, no thrash).
+# Set here (before any python starts) so torch reads it at allocator init.
+export PYTORCH_MPS_HIGH_WATERMARK_RATIO="${PYTORCH_MPS_HIGH_WATERMARK_RATIO:-${CODE_RAG_MPS_HIGH_WATERMARK:-0.5}}"
+export PYTORCH_MPS_LOW_WATERMARK_RATIO="${PYTORCH_MPS_LOW_WATERMARK_RATIO:-${CODE_RAG_MPS_LOW_WATERMARK:-0.2}}"
+export CODE_RAG_EMBED_BATCH="${CODE_RAG_EMBED_BATCH:-8}"
+
 export ACTIVE_PROFILE="${ACTIVE_PROFILE:-$(cat "$BASE_DIR/.active_profile" 2>/dev/null || echo "example")}"
 PROFILE_CONFIG="$BASE_DIR/profiles/$ACTIVE_PROFILE/config.json"
 LEGACY_CONFIG="$BASE_DIR/config.json"
