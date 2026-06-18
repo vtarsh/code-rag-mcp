@@ -9,6 +9,7 @@ Covers:
 
 from __future__ import annotations
 
+import os
 import sys
 import urllib.error
 from unittest.mock import MagicMock, patch
@@ -48,6 +49,18 @@ class TestGetLimits:
         assert limits.sys_avail_soft_bytes == int(1.5 * 1024**3)
         assert limits.sys_avail_hard_bytes == int(0.5 * 1024**3)
         assert limits.daemon_port == 9999
+
+    def test_mps_defaults_and_overrides(self, monkeypatch):
+        monkeypatch.delenv("CODE_RAG_EMBED_MPS_SOFT_GB", raising=False)
+        monkeypatch.delenv("CODE_RAG_EMBED_MPS_HARD_GB", raising=False)
+        limits = _memguard.get_limits()
+        assert limits.mps_soft_bytes == 7 * 1024**3
+        assert limits.mps_hard_bytes == 9 * 1024**3
+        monkeypatch.setenv("CODE_RAG_EMBED_MPS_SOFT_GB", "4")
+        monkeypatch.setenv("CODE_RAG_EMBED_MPS_HARD_GB", "5")
+        limits2 = _memguard.get_limits()
+        assert limits2.mps_soft_bytes == 4 * 1024**3
+        assert limits2.mps_hard_bytes == 5 * 1024**3
 
 
 class TestPauseDaemon:
@@ -160,6 +173,100 @@ class TestCheckAndMaybeExit:
         # hard path goes straight to sys.exit(0); compact_cb is intentionally
         # not called there — checkpoint is what saves us, not another compact.
         assert exc.value.code == 0
+
+
+class TestConfigureMpsLimits:
+    """The cap that bounds the MPS allocator below the swap-thrash ceiling."""
+
+    _KEYS = (
+        "PYTORCH_MPS_HIGH_WATERMARK_RATIO",
+        "PYTORCH_MPS_LOW_WATERMARK_RATIO",
+        "CODE_RAG_MPS_HIGH_WATERMARK",
+        "CODE_RAG_MPS_LOW_WATERMARK",
+    )
+
+    def test_sets_defaults_when_unset(self, monkeypatch):
+        for k in self._KEYS:
+            monkeypatch.delenv(k, raising=False)
+        _memguard.configure_mps_limits()
+        assert os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] == "0.5"
+        assert os.environ["PYTORCH_MPS_LOW_WATERMARK_RATIO"] == "0.2"
+
+    def test_preset_pytorch_var_wins(self, monkeypatch):
+        # A value from the plist / full_update.sh must not be overwritten.
+        monkeypatch.setenv("PYTORCH_MPS_HIGH_WATERMARK_RATIO", "0.9")
+        monkeypatch.delenv("CODE_RAG_MPS_HIGH_WATERMARK", raising=False)
+        _memguard.configure_mps_limits()
+        assert os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] == "0.9"
+
+    def test_code_rag_override_becomes_default(self, monkeypatch):
+        monkeypatch.delenv("PYTORCH_MPS_HIGH_WATERMARK_RATIO", raising=False)
+        monkeypatch.setenv("CODE_RAG_MPS_HIGH_WATERMARK", "0.3")
+        _memguard.configure_mps_limits()
+        assert os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] == "0.3"
+
+
+class TestMpsAllocatedBytes:
+    def test_zero_when_torch_missing(self):
+        original = sys.modules.pop("torch", None)
+        try:
+            sys.modules["torch"] = None  # type: ignore[assignment]
+            try:
+                assert _memguard.mps_allocated_bytes() == 0
+            finally:
+                del sys.modules["torch"]
+        finally:
+            if original is not None:
+                sys.modules["torch"] = original
+
+
+class TestMemoryPressureMps:
+    """MPS lives in unified RAM but not in RSS — the guard must escalate on it."""
+
+    def _patch_psutil(self, rss_bytes, avail_bytes):
+        fake_proc = MagicMock()
+        fake_proc.memory_info.return_value = MagicMock(rss=rss_bytes)
+        fake_psutil = MagicMock()
+        fake_psutil.Process.return_value = fake_proc
+        fake_psutil.virtual_memory.return_value = MagicMock(available=avail_bytes)
+        return patch.dict(sys.modules, {"psutil": fake_psutil})
+
+    def test_soft_when_mps_at_soft_despite_tiny_rss(self, monkeypatch):
+        # The live bug: RSS ~8 MB, MPS ~12 GB. Old guard saw "ok"; now it's soft.
+        monkeypatch.setattr(_memguard, "mps_allocated_bytes", lambda: 7 * 1024**3)
+        with self._patch_psutil(rss_bytes=8 * 1024**2, avail_bytes=8 * 1024**3):
+            level, _, _ = _memguard.memory_pressure()
+        assert level == "soft"
+
+    def test_hard_when_mps_at_hard_despite_tiny_rss(self, monkeypatch):
+        monkeypatch.setattr(_memguard, "mps_allocated_bytes", lambda: 9 * 1024**3)
+        with self._patch_psutil(rss_bytes=8 * 1024**2, avail_bytes=8 * 1024**3):
+            level, _, _ = _memguard.memory_pressure()
+        assert level == "hard"
+
+    def test_ok_when_mps_below_soft(self, monkeypatch):
+        monkeypatch.setattr(_memguard, "mps_allocated_bytes", lambda: 5 * 1024**3)
+        with self._patch_psutil(rss_bytes=2 * 1024**3, avail_bytes=8 * 1024**3):
+            level, _, _ = _memguard.memory_pressure()
+        assert level == "ok"
+
+
+class TestJournal:
+    def test_appends_line(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CODE_RAG_HOME", str(tmp_path))
+        _memguard.journal("embed_missing", model="coderank", peak_mps_g="3.0", final_vectors=92015)
+        log = tmp_path / "logs" / "mem_journal.log"
+        assert log.exists()
+        line = log.read_text(encoding="utf-8").strip()
+        assert "embed_missing" in line
+        assert "model=coderank" in line
+        assert "peak_mps_g=3.0" in line
+        assert "final_vectors=92015" in line
+
+    def test_never_raises(self, monkeypatch):
+        # Unwritable home → swallowed, no exception bubbles to the build.
+        monkeypatch.setenv("CODE_RAG_HOME", "/proc/nonexistent-cannot-create")
+        _memguard.journal("x", a=1)  # must not raise
 
 
 class TestFreeMemory:

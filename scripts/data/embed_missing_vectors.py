@@ -19,6 +19,7 @@ import os
 import sqlite3
 import sys
 import time
+from datetime import timedelta
 from pathlib import Path
 
 # 2026-05-24: moved into scripts/data/, repo root is 3 levels up
@@ -31,6 +32,7 @@ import lancedb
 import psutil
 
 from scripts.build_vectors import embed_simple
+from src.index.builders import _memguard
 from src.models import get_model_config
 
 _GIB = 1024**3
@@ -38,7 +40,35 @@ RSS_SOFT_LIMIT_BYTES = int(float(os.getenv("CODE_RAG_EMBED_RSS_SOFT_GB", "8")) *
 RSS_HARD_LIMIT_BYTES = int(float(os.getenv("CODE_RAG_EMBED_RSS_HARD_GB", "10")) * _GIB)
 SYS_AVAIL_SOFT_BYTES = int(float(os.getenv("CODE_RAG_EMBED_SYS_AVAIL_SOFT_GB", "2")) * _GIB)
 SYS_AVAIL_HARD_BYTES = int(float(os.getenv("CODE_RAG_EMBED_SYS_AVAIL_HARD_GB", "0.8")) * _GIB)
+# MPS/Metal buffers live in unified RAM but never show up in RSS — guard them too,
+# else a 12 GB graphics balloon thrashes the Mac while RSS reads ~8 MB.
+MPS_SOFT_LIMIT_BYTES = int(float(os.getenv("CODE_RAG_EMBED_MPS_SOFT_GB", "7")) * _GIB)
+MPS_HARD_LIMIT_BYTES = int(float(os.getenv("CODE_RAG_EMBED_MPS_HARD_GB", "9")) * _GIB)
 DAEMON_PORT = int(os.getenv("CODE_RAG_DAEMON_PORT", "8742"))
+
+
+def _dir_mb(path) -> int:
+    total = 0
+    for p in Path(path).rglob("*"):
+        if p.is_file():
+            with contextlib.suppress(OSError):
+                total += p.stat().st_size
+    return total // (1024 * 1024)
+
+
+def _optimize_and_prune(table) -> None:
+    """Compact fragments AND prune old versions so the store can't bloat.
+
+    Bare ``table.optimize()`` only compacts — it leaves every superseded
+    fragment/version on disk, which is how this store grew to 12 GB for ~270 MB
+    of live vectors (126 stale fragments, 185 versions, 332 dead ANN indices).
+    ``cleanup_older_than`` reclaims them; the full-build path already does this.
+    Falls back to a bare optimize on lancedb builds without the kwarg.
+    """
+    try:
+        table.optimize(cleanup_older_than=timedelta(seconds=1))
+    except TypeError:
+        table.optimize()
 
 
 def parse_args() -> tuple[str, bool]:
@@ -64,13 +94,19 @@ def load_model(model_key: str):
         device = "cuda"
     else:
         device = "cpu"
-    print(f"  Using device: {device}")
-
     model = SentenceTransformer(mcfg.name, trust_remote_code=mcfg.trust_remote_code, device=device)
+    seq_cap = _memguard.cap_seq_length(model)
+    print(
+        f"  Using device: {device} | max_seq_length capped to {seq_cap} "
+        f"| MPS high/low watermark {os.getenv('PYTORCH_MPS_HIGH_WATERMARK_RATIO', '?')}/"
+        f"{os.getenv('PYTORCH_MPS_LOW_WATERMARK_RATIO', '?')}"
+    )
     return model, mcfg
 
 
 def main() -> None:
+    # Cap the MPS allocator before SentenceTransformer/torch initialises it.
+    _memguard.configure_mps_limits()
     model_key, pause_daemon_flag = parse_args()
     db_path = _BASE_DIR / "db" / "knowledge.db"
     if not db_path.exists():
@@ -105,6 +141,8 @@ def main() -> None:
         return
 
     index_dirty = False
+    peak_mps = peak_rss = 0
+    min_avail = None
 
     if missing_rowids:
         if pause_daemon_flag:
@@ -153,16 +191,28 @@ def main() -> None:
             batches_since_compact += 1
             rss = psutil.Process().memory_info().rss
             available = psutil.virtual_memory().available
-            mem_pressure = rss >= RSS_SOFT_LIMIT_BYTES or available <= SYS_AVAIL_SOFT_BYTES
+            mps = _memguard.mps_allocated_bytes()
+            peak_mps = max(peak_mps, mps)
+            peak_rss = max(peak_rss, rss)
+            min_avail = available if min_avail is None else min(min_avail, available)
+            mem_pressure = (
+                rss >= RSS_SOFT_LIMIT_BYTES
+                or available <= SYS_AVAIL_SOFT_BYTES
+                or mps >= MPS_SOFT_LIMIT_BYTES
+            )
             if batches_since_compact >= COMPACT_EVERY or mem_pressure:
-                reason = f"rss={rss / _GIB:.1f}G avail={available / _GIB:.1f}G" if mem_pressure else "scheduled"
+                reason = (
+                    f"rss={rss / _GIB:.1f}G mps={mps / _GIB:.1f}G avail={available / _GIB:.1f}G"
+                    if mem_pressure
+                    else "scheduled"
+                )
                 compact_start = time.time()
                 try:
-                    table.optimize()
+                    _optimize_and_prune(table)
                 except Exception as e:
                     print(f"  [compact failed ({reason}): {e}]")
                 else:
-                    print(f"  [compact ok in {time.time() - compact_start:.1f}s ({reason})]")
+                    print(f"  [compact+prune ok in {time.time() - compact_start:.1f}s ({reason})]")
                 batches_since_compact = 0
                 if mem_pressure:
                     gc.collect()
@@ -171,28 +221,40 @@ def main() -> None:
                             _mps_empty()
                     rss_after = psutil.Process().memory_info().rss
                     avail_after = psutil.virtual_memory().available
-                    if rss_after >= RSS_HARD_LIMIT_BYTES or avail_after <= SYS_AVAIL_HARD_BYTES:
+                    mps_after = _memguard.mps_allocated_bytes()
+                    if (
+                        rss_after >= RSS_HARD_LIMIT_BYTES
+                        or avail_after <= SYS_AVAIL_HARD_BYTES
+                        or mps_after >= MPS_HARD_LIMIT_BYTES
+                    ):
                         print(
                             f"  [hard memory pressure: rss={rss_after / _GIB:.1f}G "
-                            f"avail={avail_after / _GIB:.1f}G; exiting cleanly at "
-                            f"{done}/{len(missing_rowids)} — next run resumes from delta]",
+                            f"mps={mps_after / _GIB:.1f}G avail={avail_after / _GIB:.1f}G; "
+                            f"exiting cleanly at {done}/{len(missing_rowids)} — next run resumes from delta]",
                             flush=True,
                         )
                         sys.exit(0)
-                    if rss_after >= RSS_SOFT_LIMIT_BYTES or avail_after <= SYS_AVAIL_SOFT_BYTES:
+                    if (
+                        rss_after >= RSS_SOFT_LIMIT_BYTES
+                        or avail_after <= SYS_AVAIL_SOFT_BYTES
+                        or mps_after >= MPS_SOFT_LIMIT_BYTES
+                    ):
                         print(
-                            f"  [rss={rss_after / _GIB:.1f}G avail={avail_after / _GIB:.1f}G "
-                            f"still tight after compact; sleeping 30s]",
+                            f"  [rss={rss_after / _GIB:.1f}G mps={mps_after / _GIB:.1f}G "
+                            f"avail={avail_after / _GIB:.1f}G still tight after compact; sleeping 30s]",
                             flush=True,
                         )
                         time.sleep(30)
 
             rate = done / max(time.time() - embed_start, 0.1)
             remaining = (len(missing_rowids) - done) / max(rate, 0.01)
-            print(f"  {done}/{len(missing_rowids)} ({rate:.1f} emb/s, ~{remaining / 60:.0f}m remaining)")
+            print(
+                f"  {done}/{len(missing_rowids)} ({rate:.1f} emb/s, ~{remaining / 60:.0f}m remaining) "
+                f"[mem rss={rss / _GIB:.1f}G mps={mps / _GIB:.1f}G avail={available / _GIB:.1f}G]"
+            )
         conn.close()
         with contextlib.suppress(Exception):
-            table.optimize()
+            _optimize_and_prune(table)
         print(f"\n[5/6] Appended {done} vectors to LanceDB")
         index_dirty = True
 
@@ -203,6 +265,10 @@ def main() -> None:
             table.delete(f"rowid IN ({','.join(str(r) for r in batch)})")
             if i % 5000 == 0 or i + 500 >= len(orphan_rowids):
                 print(f"  {min(i + 500, len(orphan_rowids))}/{len(orphan_rowids)}")
+        # Deletes only tombstone rows — compact + prune to actually reclaim disk.
+        print("  Compacting + pruning after orphan deletion...")
+        with contextlib.suppress(Exception):
+            _optimize_and_prune(table)
         index_dirty = True
 
     new_total = table.count_rows()
@@ -220,6 +286,18 @@ def main() -> None:
             replace=True,
         )
         print(f"  Index rebuilt in {time.time() - idx_start:.1f}s")
+
+    _memguard.journal(
+        "embed_missing",
+        model=model_key,
+        added=len(missing_rowids),
+        removed=len(orphan_rowids),
+        final_vectors=new_total,
+        peak_mps_g=f"{peak_mps / _GIB:.1f}",
+        peak_rss_g=f"{peak_rss / _GIB:.1f}",
+        min_avail_g=f"{(min_avail or 0) / _GIB:.1f}",
+        lance_mb=_dir_mb(lance_path),
+    )
 
     print(
         f"\nDone. Added {len(missing_rowids)}, removed {len(orphan_rowids)} "
