@@ -22,6 +22,7 @@ Usage:
 """
 
 import contextlib
+import gc
 import json
 import os
 import re
@@ -160,9 +161,36 @@ def save_checkpoint_rowids(checkpoint_path, done_rowids):
 # data list (no streaming) so callers can decide how to write it. The full
 # build path uses embed_and_write_streaming() instead.
 def _encode(model, texts, mcfg, batch_size=None):
+    """Encode ``texts`` with an MPS-safe batch size and OOM self-healing.
+
+    Root cause of the recurring "rebuild reserves 11+GB, Mac thrashes": one
+    encode batch of 32 code chunks asks the O(seq²) attention matmul for ~2 GB,
+    and with the MPS allocator uncapped the pool balloons to ~12 GB of graphics
+    memory (invisible to RSS) → swap thrash. Capping the encode batch (default 8,
+    override CODE_RAG_EMBED_BATCH) shrinks each spike ~4×; the OOM-retry halves
+    the batch and retries so a pathological chunk degrades gracefully instead of
+    crashing the cron job. Long chunks already arrive with batch_size=4.
+    """
     bs = batch_size or mcfg.batch_size
-    embeddings = model.encode(texts, batch_size=bs, show_progress_bar=False)
-    return [e.tolist() for e in embeddings]
+    cap = int(os.getenv("CODE_RAG_EMBED_BATCH", "8"))
+    if cap > 0:
+        bs = min(bs, cap)
+    while True:
+        try:
+            embeddings = model.encode(texts, batch_size=bs, show_progress_bar=False)
+            return [e.tolist() for e in embeddings]
+        except RuntimeError as e:
+            if "out of memory" in str(e).lower() and bs > 1:
+                bs = max(1, bs // 2)
+                gc.collect()
+                with contextlib.suppress(Exception):
+                    import torch
+
+                    if torch.backends.mps.is_available():
+                        torch.mps.empty_cache()
+                print(f"  [encode OOM — retrying at batch_size={bs}]", flush=True)
+                continue
+            raise
 
 
 def embed_simple(model, rows, mcfg):
@@ -416,9 +444,18 @@ def _print_summary(table, lance_path, mcfg):
     print(f"Model: {mcfg.name} ({mcfg.key})")
     print(f"Size on disk: {lance_size:.1f}MB")
     print(f"{'=' * 60}")
+    _memguard.journal(
+        "build_vectors",
+        model=mcfg.key,
+        vectors=table.count_rows(),
+        lance_mb=int(lance_size),
+        mps_g=f"{_memguard.mps_allocated_bytes() / (1024**3):.1f}",
+    )
 
 
 def main():
+    # Cap the MPS allocator before SentenceTransformer/torch initialises it.
+    _memguard.configure_mps_limits()
     model_key, force, only_repos, no_reindex, pause_daemon_flag = parse_args()
     mcfg = get_model_config(model_key)
     lance_path = BASE_DIR / "db" / mcfg.lance_dir
@@ -449,7 +486,12 @@ def main():
         device = "cpu"
 
     model = SentenceTransformer(mcfg.name, trust_remote_code=mcfg.trust_remote_code, device=device)
-    print(f"  Model loaded on {device} in {time.time() - start:.1f}s")
+    seq_cap = _memguard.cap_seq_length(model)
+    print(
+        f"  Model loaded on {device} in {time.time() - start:.1f}s "
+        f"(max_seq_length capped to {seq_cap}, MPS watermark "
+        f"{os.getenv('PYTORCH_MPS_HIGH_WATERMARK_RATIO', '?')}/{os.getenv('PYTORCH_MPS_LOW_WATERMARK_RATIO', '?')})"
+    )
 
     # Read chunks
     print("\n[2/4] Reading chunks from SQLite...")
