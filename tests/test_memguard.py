@@ -220,6 +220,53 @@ class TestMpsAllocatedBytes:
                 sys.modules["torch"] = original
 
 
+class TestMpsCurrentBytes:
+    def test_zero_when_torch_missing(self):
+        original = sys.modules.pop("torch", None)
+        try:
+            sys.modules["torch"] = None  # type: ignore[assignment]
+            try:
+                assert _memguard.mps_current_bytes() == 0
+            finally:
+                del sys.modules["torch"]
+        finally:
+            if original is not None:
+                sys.modules["torch"] = original
+
+
+class TestSystemMetrics:
+    """System-wide stress signals folded into the diagnostic journal."""
+
+    def test_swap_used_bytes_nonneg(self):
+        assert _memguard.swap_used_bytes() >= 0
+
+    def test_swap_used_bytes_zero_when_psutil_missing(self):
+        with patch.dict(sys.modules, {"psutil": None}):
+            assert _memguard.swap_used_bytes() == 0
+
+    def test_system_cpu_percent_nonneg(self):
+        assert _memguard.system_cpu_percent() >= 0.0
+
+    def test_system_cpu_percent_zero_when_psutil_missing(self):
+        with patch.dict(sys.modules, {"psutil": None}):
+            assert _memguard.system_cpu_percent() == 0.0
+
+    def test_phys_footprint_nonneg(self):
+        # On macOS returns the real phys_footprint (>0); elsewhere 0. Never negative.
+        assert _memguard.phys_footprint_bytes() >= 0
+
+    @pytest.mark.skipif(sys.platform != "darwin", reason="phys_footprint is macOS-only")
+    def test_phys_footprint_positive_on_macos(self):
+        # The live process always has a non-trivial footprint; this also guards the
+        # ctypes struct offset (a wrong offset would read 0 or garbage).
+        fp = _memguard.phys_footprint_bytes()
+        assert fp > 1024 * 1024  # > 1 MB — sane lower bound
+
+    def test_phys_footprint_zero_off_macos(self, monkeypatch):
+        monkeypatch.setattr(_memguard.sys, "platform", "linux")
+        assert _memguard.phys_footprint_bytes() == 0
+
+
 class TestMemoryPressureMps:
     """MPS lives in unified RAM but not in RSS — the guard must escalate on it."""
 

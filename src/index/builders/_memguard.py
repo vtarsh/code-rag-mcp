@@ -44,6 +44,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import UTC
 
 _GIB = 1024**3
 
@@ -93,15 +94,11 @@ def configure_mps_limits() -> None:
     MUST run before any ``import torch`` that touches MPS — torch reads these env
     vars once, at allocator init. All embed entry points call it first thing.
     """
-    os.environ.setdefault(
-        "PYTORCH_MPS_HIGH_WATERMARK_RATIO", os.getenv("CODE_RAG_MPS_HIGH_WATERMARK", "0.5")
-    )
+    os.environ.setdefault("PYTORCH_MPS_HIGH_WATERMARK_RATIO", os.getenv("CODE_RAG_MPS_HIGH_WATERMARK", "0.5"))
     # Low watermark deliberately aggressive (0.2 ≈ 2.4 GB on a 16 GB Mac) so the
     # allocator releases cached buffers between batches instead of squatting on
     # ~5 GB, leaving headroom for the next encode spike under the high cap.
-    os.environ.setdefault(
-        "PYTORCH_MPS_LOW_WATERMARK_RATIO", os.getenv("CODE_RAG_MPS_LOW_WATERMARK", "0.2")
-    )
+    os.environ.setdefault("PYTORCH_MPS_LOW_WATERMARK_RATIO", os.getenv("CODE_RAG_MPS_LOW_WATERMARK", "0.2"))
 
 
 def mps_allocated_bytes() -> int:
@@ -121,6 +118,109 @@ def mps_allocated_bytes() -> int:
     return 0
 
 
+def mps_current_bytes() -> int:
+    """MPS memory backing *live* tensors right now (excludes the cache pool), or 0.
+
+    Pairs with :func:`mps_allocated_bytes` (the driver pool the process *reserves*):
+    ``current`` is what the workload genuinely *needs* this instant, ``driver`` is
+    what MPS is holding on to. ``driver - current`` is reclaimable cache that
+    ``torch.mps.empty_cache()`` can hand back. Never raises (no torch / no MPS /
+    old torch → 0).
+    """
+    try:
+        import torch
+
+        if torch.backends.mps.is_available():
+            return int(torch.mps.current_allocated_memory())
+    except Exception:
+        pass
+    return 0
+
+
+def swap_used_bytes() -> int:
+    """System swap currently in use (bytes), or 0. The thrash signal.
+
+    The original "Mac unusable during rebuild" symptom was the kernel swapping
+    out under MPS pressure. RSS/MPS show the footprint; swap shows whether the
+    machine actually started thrashing. Never raises (no psutil → 0).
+    """
+    try:
+        import psutil
+
+        return int(psutil.swap_memory().used)
+    except Exception:
+        return 0
+
+
+def system_cpu_percent(interval: float | None = None) -> float:
+    """System-wide CPU utilisation %, or 0.0.
+
+    ``interval=None`` is non-blocking and returns the load since the *previous*
+    call (use in a loop to track a peak). Pass a small ``interval`` (e.g. 0.1)
+    for a meaningful one-shot point sample. Never raises (no psutil → 0.0).
+    """
+    try:
+        import psutil
+
+        return float(psutil.cpu_percent(interval=interval))
+    except Exception:
+        return 0.0
+
+
+def phys_footprint_bytes() -> int:
+    """This process's ``phys_footprint`` — the exact number macOS Activity Monitor
+    shows in its "Memory" column. Read in-process via Mach ``task_info``
+    (TASK_VM_INFO); returns 0 on non-macOS or any failure.
+
+    Why log it alongside RSS + MPS driver pool: footprint is the single number the
+    user actually sees and worries about, and it folds in compressed/swapped dirty
+    pages and owned graphics memory that neither RSS nor the MPS counters expose.
+    One syscall, no subprocess. The struct layout is stable since 10.9 (rev1);
+    ``phys_footprint`` sits at byte offset 144.
+    """
+    if sys.platform != "darwin":
+        return 0
+    try:
+        import ctypes
+
+        class _TaskVMInfo(ctypes.Structure):
+            # task_vm_info, fields in order up to phys_footprint (offset 144).
+            _fields_ = [  # noqa: RUF012 — ctypes requires a plain list here
+                ("virtual_size", ctypes.c_uint64),
+                ("region_count", ctypes.c_int32),
+                ("page_size", ctypes.c_int32),
+                ("resident_size", ctypes.c_uint64),
+                ("resident_size_peak", ctypes.c_uint64),
+                ("device", ctypes.c_uint64),
+                ("device_peak", ctypes.c_uint64),
+                ("internal", ctypes.c_uint64),
+                ("internal_peak", ctypes.c_uint64),
+                ("external", ctypes.c_uint64),
+                ("external_peak", ctypes.c_uint64),
+                ("reusable", ctypes.c_uint64),
+                ("reusable_peak", ctypes.c_uint64),
+                ("purgeable_volatile_pmap", ctypes.c_uint64),
+                ("purgeable_volatile_resident", ctypes.c_uint64),
+                ("purgeable_volatile_virtual", ctypes.c_uint64),
+                ("compressed", ctypes.c_uint64),
+                ("compressed_peak", ctypes.c_uint64),
+                ("compressed_lifetime", ctypes.c_uint64),
+                ("phys_footprint", ctypes.c_uint64),
+            ]
+
+        libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
+        task_self = ctypes.c_uint.in_dll(libc, "mach_task_self_").value
+        info = _TaskVMInfo()
+        count = ctypes.c_uint(ctypes.sizeof(_TaskVMInfo) // 4)
+        TASK_VM_INFO = 22
+        kr = libc.task_info(task_self, TASK_VM_INFO, ctypes.byref(info), ctypes.byref(count))
+        if kr != 0:
+            return 0
+        return int(info.phys_footprint)
+    except Exception:
+        return 0
+
+
 def journal(event: str, **fields) -> None:
     """Append one diagnostic line to ``$CODE_RAG_HOME/logs/mem_journal.log``.
 
@@ -130,13 +230,13 @@ def journal(event: str, **fields) -> None:
     per-batch lines from the cron stdout log. Self-trims; never raises.
     """
     try:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         base = os.environ.get("CODE_RAG_HOME") or os.path.expanduser("~/.code-rag")
         log_dir = os.path.join(base, "logs")
         os.makedirs(log_dir, exist_ok=True)
         path = os.path.join(log_dir, "mem_journal.log")
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         kv = " ".join(f"{k}={v}" for k, v in fields.items())
         with contextlib.suppress(Exception):
             if os.path.exists(path) and os.path.getsize(path) > 2_000_000:

@@ -80,6 +80,9 @@ from src.models import get_model_config  # noqa: E402
 
 _model_cfg = get_model_config(EMBEDDING_MODEL_KEY)
 DB_PATH = BASE_DIR / "db" / "knowledge.db"
+# Shadow clones of org repos (filtered source trees produced by the extract step).
+# Served read-only by the shadow_fs tools (grep_shadow / read_shadow_file / list_shadow_dir).
+EXTRACTED_DIR = BASE_DIR / "extracted"
 # CODE_RAG_TASKS_DB override lets an honest (de-leaked) task_history be supplied
 # for benchmarking analyze_task — default is the production tasks.db.
 DB_TASKS_PATH = (

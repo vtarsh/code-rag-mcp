@@ -51,9 +51,25 @@ from src.tools.service import (
     repo_overview_tool,
     trace_internal_tool,
 )
+from src.tools.shadow_fs import grep_shadow_tool, list_shadow_dir_tool, read_shadow_file_tool
 from src.tools.shadow_types import provider_type_map_tool
 
 PORT = int(os.environ.get("CODE_RAG_PORT", os.environ.get("PAY_KNOWLEDGE_PORT", "8742")))
+# Bind address. Default loopback. To serve teammates over a VPN, set either an
+# explicit interface IP or a CIDR like CODE_RAG_BIND=172.31.1.0/27 — the daemon
+# resolves its own address inside that subnet at startup (VPN IPs change between
+# connects). With a CIDR and no matching interface (VPN down) it falls back to
+# loopback. A non-loopback bind always keeps a second loopback listener so the
+# owner's local proxy is unaffected. Set CODE_RAG_TOKEN for remote callers.
+# Env wins; falls back to the .bind / .secrets/team_token files so the daemon
+# binds correctly no matter WHO starts it (manual run, launchd, or an MCP proxy
+# auto-start whose own env predates the bind config).
+_BIND_FILE = Path(__file__).parent / ".bind"
+BIND = os.environ.get("CODE_RAG_BIND") or (_BIND_FILE.read_text().strip() if _BIND_FILE.exists() else "127.0.0.1")
+# Optional shared secret: when set, every non-loopback /tool/ and /admin/
+# request must carry the X-Auth-Token header with this value.
+_TOKEN_FILE = Path(__file__).parent / ".secrets" / "team_token"
+AUTH_TOKEN = os.environ.get("CODE_RAG_TOKEN") or (_TOKEN_FILE.read_text().strip() if _TOKEN_FILE.exists() else "")
 PID_FILE = Path(__file__).parent / "daemon.pid"
 
 _LOG_FORMAT = "%(asctime)s [daemon] %(levelname)s %(message)s"
@@ -123,6 +139,17 @@ TOOLS: dict[str, Callable[[dict[str, Any]], str]] = {
     "provider_type_map": lambda args: provider_type_map_tool(
         args["provider"], args.get("method", ""), args.get("mode", "overview")
     ),
+    "grep_shadow": lambda args: grep_shadow_tool(
+        args["pattern"],
+        args.get("repo", ""),
+        args.get("glob", ""),
+        args.get("max_results", 100),
+        args.get("context", 0),
+        args.get("case_insensitive", False),
+        args.get("fixed_string", False),
+    ),
+    "read_shadow_file": lambda args: read_shadow_file_tool(args["path"], args.get("offset", 1), args.get("limit", 200)),
+    "list_shadow_dir": lambda args: list_shadow_dir_tool(args.get("path", "")),
 }
 
 
@@ -130,6 +157,23 @@ class DaemonHandler(BaseHTTPRequestHandler):
     """Handle /tool/<name> and /health requests."""
 
     def do_GET(self) -> None:
+        # ---- /client: serve the thin MCP proxy script for teammate installs ----
+        # mcp_server.py is dual-mode: with CODE_RAG_HOST set it acts as a pure
+        # remote client (never starts a local daemon), so the same file IS the
+        # teammate client. One curl replaces "clone the repo".
+        if self.path == "/client":
+            if not self._authorized():
+                self._json_response(401, {"error": "unauthorized: missing or wrong X-Auth-Token"})
+                return
+            script = Path(__file__).parent / "mcp_server.py"
+            body = script.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/x-python")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
         if self.path == "/health":
             from src.embedding_provider import (
                 _embedding_provider,
@@ -162,7 +206,23 @@ class DaemonHandler(BaseHTTPRequestHandler):
         else:
             self._json_response(404, {"error": "not found"})
 
+    def _authorized(self) -> bool:
+        """Check the shared-secret header when CODE_RAG_TOKEN is set.
+
+        Loopback clients always pass — the token only gates remote (VPN)
+        callers, so the owner's local setup needs no extra config.
+        """
+        if not AUTH_TOKEN:
+            return True
+        if self.client_address[0] in ("127.0.0.1", "::1"):
+            return True
+        return self.headers.get("X-Auth-Token", "") == AUTH_TOKEN
+
     def do_POST(self) -> None:
+        if not self._authorized():
+            self._json_response(401, {"error": "unauthorized: missing or wrong X-Auth-Token"})
+            return
+
         # ---- /admin/unload: idempotent, reversible ----
         # Drop resident model refs + empty MPS cache. Process keeps running.
         # Next /tool/... call triggers a lazy reload via get_*_provider().
@@ -170,6 +230,7 @@ class DaemonHandler(BaseHTTPRequestHandler):
         # relief where a full restart is NOT wanted (e.g. a sibling job
         # about to load its own copy for a bounded task).
         if self.path == "/admin/unload":
+            before = _mem_snapshot()
             from src.embedding_provider import reset_providers
 
             reset_providers()
@@ -178,8 +239,17 @@ class DaemonHandler(BaseHTTPRequestHandler):
 
                 if torch.backends.mps.is_available():
                     torch.mps.empty_cache()
-            log.info("Admin: unloaded resident models (reversible; lazy reload on next tool call)")
-            self._json_response(200, {"status": "unloaded", "will_exit": False})
+            after = _mem_snapshot()
+            log.info(
+                "Admin: unloaded resident models (reversible; lazy reload on next tool call) "
+                f"(footprint {before['footprint_mb']}→{after['footprint_mb']}MB, "
+                f"rss {before['rss_mb']}→{after['rss_mb']}MB, "
+                f"mps_drv {before['mps_drv_mb']}→{after['mps_drv_mb']}MB)"
+            )
+            _journal_unload("admin_unload", before, after)
+            self._json_response(
+                200, {"status": "unloaded", "will_exit": False, "mem_before": before, "mem_after": after}
+            )
             return
 
         # ---- /admin/shutdown: irreversible, drain + exit ----
@@ -243,9 +313,21 @@ class DaemonHandler(BaseHTTPRequestHandler):
         source = "cli" if "cli.py" in ua else "mcp" if "mcp_server" in ua else "direct"
         session_id = self.headers.get("X-Session-ID", "")
 
+        t0 = time.time()
+        mem_before = _mem_snapshot()
         _inflight_requests.inc()
+        # Race guard vs the idle-restart watchdog: it sets _shutting_down THEN
+        # re-reads inflight. By incrementing FIRST and re-checking the gate here,
+        # we form a handshake that makes the two mutually exclusive — either the
+        # watchdog sees our inflight and defers the restart, or it already set the
+        # gate and we bail with a clean, retryable 503 instead of being killed
+        # mid-call by os._exit(). (The earlier gate check is the fast path; this
+        # is the one that closes the window between it and inc().)
+        if _shutting_down.is_set():
+            _inflight_requests.dec()
+            self._json_response(503, {"error": "daemon restarting, please retry"})
+            return
         try:
-            t0 = time.time()
             try:
                 result = TOOLS[tool_name](args)
             except KeyError as ke:
@@ -258,18 +340,34 @@ class DaemonHandler(BaseHTTPRequestHandler):
                 missing = str(ke).strip("'\"")
                 log.warning(f"tool={tool_name} KeyError ({missing}):\n{traceback.format_exc()}")
                 _log_call(
-                    tool_name, args, "", duration_ms, error=f"missing arg: {missing}", source=source, session=session_id
+                    tool_name,
+                    args,
+                    "",
+                    duration_ms,
+                    error=f"missing arg: {missing}",
+                    source=source,
+                    session=session_id,
+                    mem_before=mem_before,
                 )
                 self._json_response(400, {"error": f"missing required argument: {missing}"})
                 return
             duration_ms = (time.time() - t0) * 1000
             log.info(f"tool={tool_name} source={source} duration={duration_ms:.0f}ms")
-            _log_call(tool_name, args, result, duration_ms, source=source, session=session_id)
+            _log_call(tool_name, args, result, duration_ms, source=source, session=session_id, mem_before=mem_before)
             self._json_response(200, {"result": result})
         except Exception as e:
             duration_ms = (time.time() - t0) * 1000
             log.error(f"tool={tool_name} error: {traceback.format_exc()}")
-            _log_call(tool_name, args, str(e), duration_ms, error=str(e), source=source, session=session_id)
+            _log_call(
+                tool_name,
+                args,
+                str(e),
+                duration_ms,
+                error=str(e),
+                source=source,
+                session=session_id,
+                mem_before=mem_before,
+            )
             self._json_response(500, {"error": str(e)})
         finally:
             _inflight_requests.dec()
@@ -321,10 +419,112 @@ class _InflightCounter:
 
 _inflight_requests = _InflightCounter()
 
+_MIB = 1024 * 1024
+
+
+def _mem_snapshot() -> dict:
+    """Cheap in-process memory snapshot for the tool-call / unload journals.
+
+    Three numbers separate "how much it *consumes*" from "how much it *needs*" —
+    the exact confusion behind a 3.9 GB Activity-Monitor "Memory" reading while
+    real RAM (RSS) sat at 45 MB:
+
+    - ``rss_mb``       — resident RAM (psutil); pages the OS has in physical RAM
+                         now. Drops to tens of MB when idle pages swap/compress.
+    - ``footprint_mb`` — phys_footprint: the EXACT number macOS Activity Monitor
+                         shows in its "Memory" column (folds in compressed/swapped
+                         dirty pages + owned graphics). The user's mental model.
+    - ``mps_drv_mb``   — MPS driver pool this process *reserves* (unified-memory
+                         graphics footprint). The bulk of the footprint for us.
+    - ``mps_cur_mb``   — MPS memory backing *live* tensors; the genuine working set.
+
+    ``mps_drv_mb - mps_cur_mb`` is reclaimable cache (what ``empty_cache`` returns).
+    Never raises — any probe that fails degrades to -1 for that field so the
+    journal line is still written.
+    """
+    snap = {
+        "rss_mb": -1,
+        "footprint_mb": -1,
+        "mps_drv_mb": -1,
+        "mps_cur_mb": -1,
+        "cpu_pct": -1,
+        "swap_mb": -1,
+        "models": is_model_loaded(),
+        "rerank": is_reranker_loaded(),
+    }
+    with contextlib.suppress(Exception):
+        import psutil
+
+        snap["rss_mb"] = round(psutil.Process().memory_info().rss / _MIB)
+    with contextlib.suppress(Exception):
+        from src.index.builders._memguard import phys_footprint_bytes
+
+        fp = phys_footprint_bytes()
+        if fp > 0:
+            snap["footprint_mb"] = round(fp / _MIB)
+    with contextlib.suppress(Exception):
+        from src.index.builders._memguard import mps_allocated_bytes, mps_current_bytes
+
+        snap["mps_drv_mb"] = round(mps_allocated_bytes() / _MIB)
+        snap["mps_cur_mb"] = round(mps_current_bytes() / _MIB)
+    # System-wide stress: cpu% (non-blocking, since last snapshot) + swap used.
+    # The before/after pair brackets the tool, so mem_after.cpu_pct ≈ load during
+    # the call; swap_mb is the thrash signal (machine, not just this process).
+    with contextlib.suppress(Exception):
+        from src.index.builders._memguard import swap_used_bytes, system_cpu_percent
+
+        snap["cpu_pct"] = round(system_cpu_percent(), 1)
+        snap["swap_mb"] = round(swap_used_bytes() / _MIB)
+    return snap
+
+
+def _journal_unload(event: str, before: dict, after: dict, **extra) -> None:
+    """Journal a model-unload reclaim (before/after + delta). Never raises.
+
+    Answers the core question behind a high idle footprint: does
+    ``reset_providers() + empty_cache()`` actually hand the MPS driver pool back?
+    ``drv_freed_mb`` is the reserved graphics memory reclaimed; if it stays ~0
+    while ``mps_drv_mb`` is large, the pool is stuck and only a process restart
+    (``/admin/shutdown``) will return it.
+    """
+    with contextlib.suppress(Exception):
+        from src.index.builders._memguard import journal
+
+        journal(
+            event,
+            rss_before=before.get("rss_mb"),
+            rss_after=after.get("rss_mb"),
+            footprint_before=before.get("footprint_mb"),
+            footprint_after=after.get("footprint_mb"),
+            footprint_freed_mb=before.get("footprint_mb", 0) - after.get("footprint_mb", 0),
+            mps_drv_before=before.get("mps_drv_mb"),
+            mps_drv_after=after.get("mps_drv_mb"),
+            mps_cur_before=before.get("mps_cur_mb"),
+            mps_cur_after=after.get("mps_cur_mb"),
+            drv_freed_mb=before.get("mps_drv_mb", 0) - after.get("mps_drv_mb", 0),
+            **extra,
+        )
+
+
 # Idle auto-unload: drop resident ML models after N seconds of no /tool/ traffic.
 # Reload is lazy (next /tool/ call triggers _ensure_model in embedding_provider).
-# CODE_RAG_IDLE_UNLOAD_SEC=0 disables the watchdog entirely.
+# CODE_RAG_IDLE_UNLOAD_SEC=0 disables the unload tier.
 _IDLE_UNLOAD_SEC = int(os.environ.get("CODE_RAG_IDLE_UNLOAD_SEC", "1800"))
+
+# Idle auto-RESTART (tier 2): after a longer idle, exit the process so launchd
+# (KeepAlive=true) respawns a fresh ~45 MB daemon. This is the ONLY thing that
+# returns the MPS allocator pool — measured 2026-06-19: unload + empty_cache
+# reclaims only ~1/3, ~2 GB of driver-reserved graphics memory stays stuck for
+# the process lifetime (PyTorch MPS keeps it; watermark caps + empty_cache do
+# not help while warm). NOT per-search churn: fires only once the daemon has
+# gone quiet for the full window AND is still holding a stuck pool worth the
+# cold-start cost. Default 0 = OFF (opt-in; assumes launchd KeepAlive — a
+# manually-run daemon would NOT respawn). Set e.g. CODE_RAG_IDLE_RESTART_SEC=3600.
+_IDLE_RESTART_SEC = int(os.environ.get("CODE_RAG_IDLE_RESTART_SEC", "0"))
+# Don't restart a fresh/idle process that never accumulated a pool — only when the
+# driver-reserved MPS pool is at least this large (MB). Skips pointless churn.
+_IDLE_RESTART_MIN_MPS_MB = int(os.environ.get("CODE_RAG_IDLE_RESTART_MIN_MPS_MB", "512"))
+
 _last_activity_ts = time.time()
 _activity_lock = threading.Lock()
 
@@ -335,21 +535,79 @@ def _touch_activity() -> None:
         _last_activity_ts = time.time()
 
 
+def _idle_decision(idle_s: float, inflight: int, models_loaded: bool, held_mps_mb: int) -> str:
+    """Pure policy: what should the idle watchdog do right now?
+
+    Returns ``"restart"`` | ``"unload"`` | ``"none"``. Extracted from the loop so
+    the two-tier thresholds are unit-testable without sleeping. Restart wins over
+    unload (it reclaims strictly more — the stuck pool unload can't free), but
+    only when a real pool is held (``held_mps_mb``) so a fresh idle process isn't
+    churned. ``held_mps_mb`` of -1 (probe failed) never triggers a restart.
+    """
+    if inflight > 0:
+        return "none"
+    if _IDLE_RESTART_SEC > 0 and idle_s >= _IDLE_RESTART_SEC and held_mps_mb >= _IDLE_RESTART_MIN_MPS_MB:
+        return "restart"
+    if _IDLE_UNLOAD_SEC > 0 and idle_s >= _IDLE_UNLOAD_SEC and models_loaded:
+        return "unload"
+    return "none"
+
+
+def _idle_restart(idle_s: float, held_mps_mb: int, footprint_mb: int = -1) -> bool:
+    """Exit the process so launchd (KeepAlive) respawns a fresh low-RSS daemon.
+
+    Returns False (does not exit) if a request slipped in — the caller keeps
+    watching and retries next tick. On success it never returns (``os._exit``).
+
+    Conflict-free handshake with the request handler: we set ``_shutting_down``
+    FIRST, then re-read inflight. The handler increments inflight FIRST, then
+    re-checks the gate. This ordering makes "a request runs" and "we exit"
+    mutually exclusive — so we never ``os._exit`` on top of an in-flight tool
+    call. If a request did arrive in the window, we clear the gate and abort the
+    restart (the stuck pool waits for the next idle window — correctness over
+    eager reclaim).
+    """
+    _shutting_down.set()
+    if _inflight_requests.get() > 0:
+        _shutting_down.clear()
+        log.info("Idle watchdog: restart deferred — a request arrived during the idle window; will retry")
+        return False
+    log.info(
+        f"Idle watchdog: full restart after {idle_s:.0f}s idle — returning "
+        f"{held_mps_mb}MB driver-reserved MPS (footprint {footprint_mb}MB) that "
+        f"unload/empty_cache can't free; launchd KeepAlive will respawn a fresh process"
+    )
+    with contextlib.suppress(Exception):
+        from src.index.builders._memguard import journal
+
+        journal("idle_restart", idle_s=round(idle_s), mps_drv_mb=held_mps_mb, footprint_mb=footprint_mb)
+    os._exit(0)
+
+
 def _idle_watchdog() -> None:
-    if _IDLE_UNLOAD_SEC <= 0:
+    intervals = [t for t in (_IDLE_UNLOAD_SEC, _IDLE_RESTART_SEC) if t > 0]
+    if not intervals:
         return
-    check_every = max(30, _IDLE_UNLOAD_SEC // 4)
+    check_every = max(30, min(intervals) // 4)
     while not _shutting_down.is_set():
         time.sleep(check_every)
         if _shutting_down.is_set():
             return
         with _activity_lock:
             idle = time.time() - _last_activity_ts
-        if idle < _IDLE_UNLOAD_SEC:
+        snap = _mem_snapshot()
+        action = _idle_decision(
+            idle,
+            _inflight_requests.get(),
+            bool(snap["models"] or snap["rerank"]),
+            snap["mps_drv_mb"],
+        )
+        if action == "restart":
+            # Returns only if deferred (a request raced in); os._exit otherwise.
+            # Keep looping so a deferred restart fires on a later quiet tick.
+            _idle_restart(idle, snap["mps_drv_mb"], snap["footprint_mb"])
             continue
-        if _inflight_requests.get() > 0:
-            continue
-        if not (is_model_loaded() or is_reranker_loaded()):
+        if action != "unload":
             continue
         try:
             from src.embedding_provider import reset_providers
@@ -360,7 +618,13 @@ def _idle_watchdog() -> None:
 
                 if torch.backends.mps.is_available():
                     torch.mps.empty_cache()
-            log.info(f"Idle watchdog: unloaded resident models after {idle:.0f}s of inactivity")
+            after = _mem_snapshot()
+            log.info(
+                f"Idle watchdog: unloaded resident models after {idle:.0f}s of inactivity "
+                f"(rss {snap['rss_mb']}→{after['rss_mb']}MB, "
+                f"mps_drv {snap['mps_drv_mb']}→{after['mps_drv_mb']}MB)"
+            )
+            _journal_unload("idle_unload", snap, after, idle_s=round(idle))
         except Exception as e:
             log.warning(f"Idle watchdog: unload failed: {e}")
 
@@ -443,6 +707,7 @@ def _log_call(
     error: str | None = None,
     source: str = "unknown",
     session: str = "",
+    mem_before: dict | None = None,
 ) -> None:
     """Append tool call record to JSONL log. Never raises.
 
@@ -450,11 +715,19 @@ def _log_call(
     Writes FULL result to tool_calls_full.jsonl when CODE_RAG_FULL_TOOL_LOG=1
     (opt-in, used for blind-test audit to catch leaks past the preview cutoff).
 
+    Memory: each record carries ``mem_before``/``mem_after`` snapshots (RSS +
+    MPS driver-pool + MPS live) so a future "why does this process reserve N GB"
+    question is answerable from the call log — which tool grew the footprint, by
+    how much, and whether it was reserved cache vs live tensors. A compact line
+    also goes to ``logs/mem_journal.log`` for ``tail``-friendly triage alongside
+    the embed/unload events already journalled there.
+
     Concurrency: each line is emitted under a thread lock + fcntl.LOCK_EX so
     multi-threaded ThreadingHTTPServer handlers can't interleave on the same
     buffer. Size-triggered rotation prevents runaway bench runs from filling
     the disk.
     """
+    mem_after = _mem_snapshot()
     try:
         from datetime import datetime
 
@@ -469,6 +742,8 @@ def _log_call(
             "error": error,
             "source": source,
             "session": session,
+            "mem_before": mem_before,
+            "mem_after": mem_after,
         }
         _append_jsonl_locked(_CALLS_LOG, {**base, "result_preview": result[:preview_limit].replace("\n", " ")})
 
@@ -476,6 +751,45 @@ def _log_call(
             _append_jsonl_locked(_FULL_CALLS_LOG, {**base, "result": result})
     except Exception:
         pass
+
+    # Compact, greppable resource line next to the embed/unload journal so the
+    # next memory investigation is one `tail mem_journal.log` away.
+    with contextlib.suppress(Exception):
+        from src.index.builders._memguard import journal
+
+        journal(
+            "tool",
+            name=tool_name,
+            dur_ms=round(duration_ms),
+            rss_mb=mem_after.get("rss_mb"),
+            footprint_mb=mem_after.get("footprint_mb"),
+            mps_drv_mb=mem_after.get("mps_drv_mb"),
+            mps_cur_mb=mem_after.get("mps_cur_mb"),
+            models=int(bool(mem_after.get("models"))),
+            err=1 if error else 0,
+        )
+
+
+def _resolve_bind(spec: str) -> str:
+    """Resolve a bind spec to a concrete IP. CIDR → local interface IP in that subnet."""
+    if "/" not in spec:
+        return spec
+    import ipaddress
+    import re
+    import subprocess
+
+    ifconfig = "/sbin/ifconfig" if Path("/sbin/ifconfig").exists() else "ifconfig"
+    try:
+        network = ipaddress.ip_network(spec, strict=False)
+        out = subprocess.run([ifconfig], capture_output=True, text=True, timeout=5).stdout
+        for ip_str in re.findall(r"inet (\d+\.\d+\.\d+\.\d+)", out):
+            ip = ipaddress.ip_address(ip_str)
+            if ip in network and not ip.is_loopback:
+                return ip_str
+    except (ValueError, OSError, subprocess.TimeoutExpired) as e:
+        log.warning(f"Bind spec '{spec}' resolution failed: {e}")
+    log.warning(f"No local interface in {spec} (VPN down?) — falling back to loopback")
+    return "127.0.0.1"
 
 
 def write_pid() -> None:
@@ -494,13 +808,27 @@ def main() -> None:
 
     write_pid()
 
-    if _IDLE_UNLOAD_SEC > 0:
+    if _IDLE_UNLOAD_SEC > 0 or _IDLE_RESTART_SEC > 0:
         threading.Thread(target=_idle_watchdog, daemon=True, name="idle-watchdog").start()
-        log.info(f"Idle watchdog started: unload after {_IDLE_UNLOAD_SEC}s of inactivity")
+        restart_note = (
+            f" + full restart after {_IDLE_RESTART_SEC}s (>{_IDLE_RESTART_MIN_MPS_MB}MB MPS held)"
+            if _IDLE_RESTART_SEC > 0
+            else ""
+        )
+        log.info(f"Idle watchdog started: unload after {_IDLE_UNLOAD_SEC}s of inactivity{restart_note}")
 
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), DaemonHandler)
+    bind_ip = _resolve_bind(BIND)
+    if bind_ip not in ("127.0.0.1", "localhost") and not AUTH_TOKEN:
+        log.warning(f"Binding to {bind_ip} WITHOUT CODE_RAG_TOKEN — anyone on the network can call tools/admin")
+
+    server = ThreadingHTTPServer((bind_ip, PORT), DaemonHandler)
+    if bind_ip not in ("127.0.0.1", "localhost"):
+        # Keep a loopback listener alongside the VPN one for the owner's local proxy.
+        loopback = ThreadingHTTPServer(("127.0.0.1", PORT), DaemonHandler)
+        threading.Thread(target=loopback.serve_forever, daemon=True, name="loopback-listener").start()
+        log.info(f"Loopback listener ready at http://127.0.0.1:{PORT}")
     try:
-        log.info(f"Daemon ready at http://127.0.0.1:{PORT}")
+        log.info(f"Daemon ready at http://{bind_ip}:{PORT}")
         server.serve_forever()
     except KeyboardInterrupt:
         log.info("Shutting down")

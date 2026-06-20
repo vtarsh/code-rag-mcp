@@ -359,6 +359,94 @@ class TestAdminEndpoints:
         daemon._shutting_down.clear()
 
 
+class TestIdleDecision:
+    """Two-tier idle policy: unload after the short window, full restart after the
+    long window (only when a stuck MPS pool is actually held)."""
+
+    def _cfg(self, monkeypatch, *, unload, restart, min_mps):
+        import daemon
+
+        monkeypatch.setattr(daemon, "_IDLE_UNLOAD_SEC", unload)
+        monkeypatch.setattr(daemon, "_IDLE_RESTART_SEC", restart)
+        monkeypatch.setattr(daemon, "_IDLE_RESTART_MIN_MPS_MB", min_mps)
+        return daemon
+
+    def test_inflight_blocks_everything(self, monkeypatch):
+        d = self._cfg(monkeypatch, unload=1800, restart=3600, min_mps=512)
+        assert d._idle_decision(99999, inflight=1, models_loaded=True, held_mps_mb=4000) == "none"
+
+    def test_unload_when_models_loaded_past_unload_window(self, monkeypatch):
+        d = self._cfg(monkeypatch, unload=1800, restart=3600, min_mps=512)
+        assert d._idle_decision(1800, inflight=0, models_loaded=True, held_mps_mb=100) == "unload"
+
+    def test_no_unload_when_models_already_gone(self, monkeypatch):
+        d = self._cfg(monkeypatch, unload=1800, restart=0, min_mps=512)
+        assert d._idle_decision(9999, inflight=0, models_loaded=False, held_mps_mb=100) == "none"
+
+    def test_restart_when_long_idle_and_pool_held(self, monkeypatch):
+        d = self._cfg(monkeypatch, unload=1800, restart=3600, min_mps=512)
+        # restart wins over unload; fires even with models already unloaded
+        assert d._idle_decision(3600, inflight=0, models_loaded=False, held_mps_mb=2000) == "restart"
+
+    def test_restart_skipped_when_pool_too_small(self, monkeypatch):
+        d = self._cfg(monkeypatch, unload=1800, restart=3600, min_mps=512)
+        # fresh process, nothing accumulated → no churn; falls back to unload tier
+        assert d._idle_decision(9999, inflight=0, models_loaded=True, held_mps_mb=40) == "unload"
+        assert d._idle_decision(9999, inflight=0, models_loaded=False, held_mps_mb=40) == "none"
+
+    def test_restart_disabled_by_default(self, monkeypatch):
+        d = self._cfg(monkeypatch, unload=1800, restart=0, min_mps=512)
+        assert d._idle_decision(999999, inflight=0, models_loaded=True, held_mps_mb=9000) == "unload"
+
+    def test_failed_mps_probe_never_restarts(self, monkeypatch):
+        d = self._cfg(monkeypatch, unload=1800, restart=3600, min_mps=512)
+        assert d._idle_decision(9999, inflight=0, models_loaded=True, held_mps_mb=-1) == "unload"
+
+
+class TestIdleRestartHandshake:
+    """The idle-restart must never os._exit on top of an in-flight request."""
+
+    def test_defers_and_clears_gate_when_request_inflight(self):
+        import daemon
+
+        daemon._shutting_down.clear()
+        daemon._inflight_requests.inc()  # simulate a request that raced in
+        exited = {"called": False}
+        try:
+            with patch("daemon.os._exit", lambda code: exited.__setitem__("called", True)):
+                result = daemon._idle_restart(999, held_mps_mb=2000, footprint_mb=3000)
+            assert result is False, "must defer (not exit) when a request is in-flight"
+            assert exited["called"] is False, "os._exit must NOT fire over an in-flight call"
+            assert not daemon._shutting_down.is_set(), "gate must be cleared so the request proceeds"
+        finally:
+            daemon._inflight_requests.dec()
+            daemon._shutting_down.clear()
+
+    def test_exits_when_no_inflight(self):
+        import daemon
+
+        daemon._shutting_down.clear()
+        exited = {"code": None}
+        with patch("daemon.os._exit", lambda code: exited.__setitem__("code", code)):
+            daemon._idle_restart(999, held_mps_mb=2000, footprint_mb=3000)
+        assert exited["code"] == 0, "must os._exit(0) when idle and nothing in-flight"
+        daemon._shutting_down.clear()
+
+    def test_handler_returns_503_when_gate_set_after_inc(self):
+        """If the gate is already set when a /tool/ call lands, it gets a clean
+        retryable 503 — never a killed connection."""
+        import daemon
+
+        daemon._shutting_down.set()
+        try:
+            mock_tools = {"search": lambda args: "should-not-run"}
+            responses, data = _make_handler("POST", "/tool/search", body={"query": "x"}, tools=mock_tools)
+            assert responses[0]["status"] == 503
+            assert "retry" in data["error"].lower() or "shutting down" in data["error"].lower()
+        finally:
+            daemon._shutting_down.clear()
+
+
 class TestLogConcurrency:
     """Concurrent JSONL writes must not interleave or tear lines."""
 
