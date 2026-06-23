@@ -222,6 +222,8 @@ def _apply_code_facts(
     repo: str,
     rrf_k: int,
     kw_weight: float,
+    file_type: str = "",
+    exclude_file_types: str = "",
 ) -> None:
     """P0c: Fold code_facts_fts hits into the RRF pool.
 
@@ -268,7 +270,17 @@ def _apply_code_facts(
 
     if missing_pairs:
         injected = fetch_chunks_for_files(missing_pairs)
+        excluded_set = {e.strip() for e in exclude_file_types.split(",") if e.strip()} if exclude_file_types else set()
         for rank_idx, chunk in enumerate(injected):
+            # Injected candidates must obey the SAME file_type / exclude contract
+            # as the FTS and vector legs. code_facts only ever maps to code-type
+            # chunks (grpc_method/library/route/service), so an explicit doc-type
+            # include filter (e.g. file_type='gotchas') drops every injection, and
+            # an excluded type is never re-introduced through this back door.
+            if file_type and chunk.get("file_type") != file_type:
+                continue
+            if chunk.get("file_type") in excluded_set:
+                continue
             # chunk["rowid"] comes from the `chunks` (FTS5) table.
             key = f"fts:{chunk['rowid']}"
             if key in scores:
@@ -547,6 +559,20 @@ def hybrid_search(
     if _DEMOTE_DOC_NOISE and not _DOC_QUERY_RE.search(query or ""):
         exclude_file_types = f"{exclude_file_types},{_DOC_NOISE_TYPES}" if exclude_file_types else _DOC_NOISE_TYPES
 
+    # An EXPLICIT file_type include filter must always win over any exclude —
+    # the auto doc-noise demotion above, the eval/CLI CODE_RAG_DEFAULT_EXCLUDE,
+    # or a caller-supplied exclude. Without this, `file_type='gotchas'` plus the
+    # doc-noise exclude builds the self-contradicting SQL
+    # `file_type='gotchas' AND file_type NOT IN ('gotchas', ...)` → 0 rows from
+    # both FTS and vector, and the empty pool gets back-filled with code-only
+    # candidates by _apply_code_facts — so a `file_type=gotchas` search returns
+    # code tagged [code_facts] instead of the requested gotcha. Drop the
+    # requested type from the exclude list so the include is honoured.
+    if file_type and exclude_file_types:
+        exclude_file_types = ",".join(
+            ft for ft in (e.strip() for e in exclude_file_types.split(",")) if ft and ft != file_type
+        )
+
     # 1. Keyword search (FTS5) — large pool, no per-repo cap.
     #    P4.2: raised 100→150 to fill rerank pool to ~200 after RRF overlap.
     keyword_results = fts_search(query, repo, file_type, exclude_file_types, limit=150)
@@ -777,7 +803,7 @@ def hybrid_search(
     # wiring so the hybrid-mode regression on 103 "lost" tickets can be
     # attributed (or not) to these candidate-pool injections.
     if not _DISABLE_CODE_FACTS:
-        _apply_code_facts(scores, query, repo, K, KW_WEIGHT)
+        _apply_code_facts(scores, query, repo, K, KW_WEIGHT, file_type, exclude_file_types)
         # P0c: wire env_vars — UPPERCASE identifiers in the query resolve to the
         # repos where those env vars are defined. Light repo-level boost.
         _apply_env_vars(scores, query)
