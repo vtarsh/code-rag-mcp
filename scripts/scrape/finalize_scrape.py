@@ -375,6 +375,33 @@ def _classify_all(providers_root: Path) -> int:
     return 0
 
 
+def _report_content_integrity(provider_dir: Path) -> int:
+    """Run scraped-doc integrity checks (stub/404, truncation, near-empty, crawl
+    failures) on the provider dir and print findings. Returns the HIGH count so
+    --check can fail on a truncated/broken scrape. Best-effort: never raises."""
+    vsd_path = REPO_ROOT / "scripts" / "maint" / "validate_scraped_docs.py"
+    try:
+        spec = importlib.util.spec_from_file_location("validate_scraped_docs", vsd_path)
+        if spec is None or spec.loader is None:
+            return 0
+        vsd = importlib.util.module_from_spec(spec)
+        sys.modules["validate_scraped_docs"] = vsd
+        spec.loader.exec_module(vsd)
+        issues = vsd.check_provider_dir(provider_dir, provider_dir.parent)
+    except Exception as exc:  # noqa: BLE001 — integrity check must never break finalize
+        print(f"[1b/3] content integrity: skipped ({exc})", file=sys.stderr)
+        return 0
+    high = sum(1 for i in issues if i.severity == "high")
+    if not issues:
+        print("[1b/3] content integrity: OK", file=sys.stderr)
+        return 0
+    print(f"[1b/3] content integrity: {high} high / {len(issues) - high} other", file=sys.stderr)
+    for i in sorted(issues, key=lambda x: x.severity):
+        if i.severity in ("high", "medium"):
+            print(f"   {i.severity.upper():6} {i.code:14} {i.path} — {i.detail}", file=sys.stderr)
+    return high
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Validate scraped provider docs and gate auto-injection of validator findings into index.md."
@@ -425,6 +452,8 @@ def main(argv: list[str] | None = None) -> int:
         timeout=args.timeout,
     )
 
+    content_high = _report_content_integrity(args.provider_dir)
+
     index_path = args.provider_dir / "index.md"
     index_text = index_path.read_text(encoding="utf-8") if index_path.exists() else None
 
@@ -450,6 +479,12 @@ def main(argv: list[str] | None = None) -> int:
         _print_block("UNKNOWN VERDICT", block, reason)
         return 2
     if action in ("check_ok",):
+        if content_high:
+            print(
+                f"CONTENT DRIFT: {content_high} high-severity scrape-integrity issue(s) — see [1b/3] above",
+                file=sys.stderr,
+            )
+            return 1
         print(f"OK: {reason}", file=sys.stderr)
         return 0
     if action == "check_drift":
