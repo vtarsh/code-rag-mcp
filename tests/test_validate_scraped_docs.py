@@ -51,10 +51,19 @@ def test_looks_truncated():
 
 # --------------------------- crawl summary --------------------------------- #
 def test_check_crawl_summary_flags_failures():
-    codes = {i.code for i in vsd.check_crawl_summary({"discovered": 10, "extracted": 7, "failed": 3, "errors": ["boom"]}, "p")}
+    # Many failures relative to extracted -> HIGH crawl_failed + crawl_incomplete.
+    issues = vsd.check_crawl_summary({"discovered": 10, "extracted": 4, "failed": 6, "errors": ["boom"]}, "p")
+    codes = {i.code for i in issues}
     assert "crawl_failed" in codes
-    assert "crawl_errors" in codes
     assert "crawl_incomplete" in codes
+    assert any(i.code == "crawl_failed" and i.severity == "high" for i in issues)
+
+
+def test_check_crawl_summary_small_failure_is_medium():
+    # A few dead pages among many extracted -> MEDIUM, not HIGH.
+    issues = vsd.check_crawl_summary({"discovered": 290, "extracted": 290, "failed": 1, "errors": ["x: 404"]}, "p")
+    cf = [i for i in issues if i.code == "crawl_failed"]
+    assert cf and cf[0].severity == "medium"
 
 
 def test_check_crawl_summary_clean():

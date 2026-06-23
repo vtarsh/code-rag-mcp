@@ -147,15 +147,26 @@ def check_crawl_summary(summary: dict, provider: str) -> list[Issue]:
     issues: list[Issue] = []
     rel = f"{provider}/_crawl_summary.json"
     discovered = summary.get("discovered")
-    extracted = summary.get("extracted")
-    failed = summary.get("failed") or 0
-    errors = summary.get("errors") or []
-    if extracted == 0:
+    extracted = summary.get("extracted")  # None when an older-schema summary omits it
+    # Failure lists live under different keys across scraper generations.
+    errors = (
+        summary.get("errors")
+        or summary.get("failures")
+        or summary.get("failed_urls")
+        or summary.get("empty_body")
+        or []
+    )
+    failed = summary.get("failed") or len(errors)
+    if extracted == 0:  # EXPLICIT 0 only — a missing field is not "extracted nothing"
         issues.append(Issue(rel, provider, "high", "crawl_extracted_zero", "crawl extracted 0 pages"))
-    if failed:
-        issues.append(Issue(rel, provider, "high", "crawl_failed", f"{failed} page(s) failed to fetch"))
-    if errors:
-        issues.append(Issue(rel, provider, "high", "crawl_errors", f"crawl reported errors: {errors!r}"[:200]))
+    elif failed:
+        # One issue for fetch failures (failed count and the errors list describe
+        # the same pages — don't double-flag). HIGH only when failures are a large
+        # share of the crawl; a few dead upstream pages are MEDIUM, not systemic.
+        total = (extracted or 0) + failed
+        sev = "high" if total and failed / total > 0.3 else "medium"
+        sample = errors[0] if errors else ""
+        issues.append(Issue(rel, provider, sev, "crawl_failed", f"{failed} page(s) failed to fetch; e.g. {sample}"[:200]))
     if isinstance(discovered, int) and isinstance(extracted, int) and 0 < extracted < discovered:
         issues.append(
             Issue(rel, provider, "medium", "crawl_incomplete", f"extracted {extracted} of {discovered} discovered")
