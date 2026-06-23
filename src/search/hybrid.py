@@ -409,6 +409,21 @@ _DEMOTE_DOC_NOISE = os.getenv("CODE_RAG_DEMOTE_DOC_NOISE", "1") == "1"  # enable
 # vendor docs (stripe-docs, ilixium-docs, ...). Folding them into FIX-A makes
 # the production pipeline match what the eval measured.
 _DOC_NOISE_TYPES = "docs,reference,gotchas,domain_registry,provider_doc,package_usage,dictionary"
+# Scenario B (2026-06-23): the blanket list above also auto-excludes CURATED,
+# positively-boosted knowledge (gotchas / reference / dictionary / domain_registry)
+# on any query lacking a doc-trigger word — so curated answers (e.g. the ISO-8583
+# error-mapping gotcha) are unreachable unless the caller passes an explicit
+# file_type filter. With this flag ON, only genuine vendor-doc noise is excluded;
+# curated types stay in the pool and are ordered by their existing boosts. Default
+# OFF = byte-identical to the n=665-benchmarked behaviour — flip the default only
+# after a RunPod n=665 run confirms no recall regression.
+_DOC_NOISE_VENDOR_TYPES = "docs,provider_doc,package_usage"
+_DOC_NOISE_VENDOR_ONLY = os.getenv("CODE_RAG_DOC_NOISE_VENDOR_ONLY", "0") == "1"
+
+
+def _active_doc_noise_types(vendor_only: bool) -> str:
+    """File-type list the doc-noise demotion excludes (vendor-only when flagged)."""
+    return _DOC_NOISE_VENDOR_TYPES if vendor_only else _DOC_NOISE_TYPES
 
 # FIX-D (2026-05-19): the RRF `scores` dict is keyed per chunk (fts:/vec:rowid),
 # so a file with N indexed chunks produces N pool entries and can occupy N of
@@ -557,7 +572,8 @@ def hybrid_search(
     # integration" task to docs, which disabled FIX-A on exactly the provider
     # tasks where vendor-doc noise is worst (agentic-eval finding 2026-05-19).
     if _DEMOTE_DOC_NOISE and not _DOC_QUERY_RE.search(query or ""):
-        exclude_file_types = f"{exclude_file_types},{_DOC_NOISE_TYPES}" if exclude_file_types else _DOC_NOISE_TYPES
+        _noise = _active_doc_noise_types(_DOC_NOISE_VENDOR_ONLY)
+        exclude_file_types = f"{exclude_file_types},{_noise}" if exclude_file_types else _noise
 
     # An EXPLICIT file_type include filter must always win over any exclude —
     # the auto doc-noise demotion above, the eval/CLI CODE_RAG_DEFAULT_EXCLUDE,

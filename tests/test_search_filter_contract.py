@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from src.search.hybrid import _apply_code_facts, hybrid_search
+from src.search.hybrid import _active_doc_noise_types, _apply_code_facts, hybrid_search
 
 # A query with NO doc-trigger word (test/docs/guide/gotcha/how-to/overview/...),
 # so _DEMOTE_DOC_NOISE fires and would add gotchas to the exclude list.
@@ -194,3 +194,25 @@ def test_code_facts_maps_only_to_code_types():
         f"{n} code_facts pairs map to doc-type chunks — Fix 2's include filter "
         "would silently drop legit code injections; revisit _apply_code_facts"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Scenario B: vendor-only doc-noise mode keeps CURATED types in the pool
+# --------------------------------------------------------------------------- #
+class TestVendorOnlyDocNoise:
+    def test_default_excludes_curated_types(self):
+        # OFF (default) = full list, incl. curated gotchas/reference — byte-identical
+        # to the n=665-benchmarked behaviour.
+        types = _active_doc_noise_types(False).split(",")
+        assert "gotchas" in types
+        assert "reference" in types
+        assert "provider_doc" in types
+
+    def test_vendor_only_keeps_curated_types(self):
+        # ON = only vendor noise excluded; curated knowledge stays reachable.
+        types = _active_doc_noise_types(True).split(",")
+        assert "provider_doc" in types  # vendor noise still excluded
+        assert "docs" in types
+        assert "gotchas" not in types  # curated stays in the pool
+        assert "reference" not in types
+        assert "dictionary" not in types

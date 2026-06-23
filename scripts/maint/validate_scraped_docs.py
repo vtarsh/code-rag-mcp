@@ -49,18 +49,20 @@ STUB_CLUSTER_MAX_BYTES = 20_000  # only sizes below this count as a stub cluster
 # Strong markers of a page that was NOT really fetched (404 / JS wall / bot gate).
 # Matched case-insensitively against visible text.
 STUB_MARKERS = (
+    # NB: only stub-SPECIFIC phrases — bare "404 not found" / "error 404" are
+    # excluded because API reference pages legitimately document a 404 response
+    # (e.g. volt "Recalled amendments return 404 Not Found"), which would false-flag.
     "page not found",
     "this page could not be found",
     "we couldn't find that page",
     "we can't find the page",
-    "404 not found",
-    "error 404",
     "you need to enable javascript",
     "enable javascript to run this app",
     "javascript is required",
     "please enable javascript",
-    "access denied",
-    "403 forbidden",
+    # NB: "access denied" / "403 forbidden" are intentionally NOT markers — they
+    # appear verbatim in legit auth/error docs (e.g. ecp authorization pages),
+    # producing false stub_page hits. JS-wall + 404 + bot-gate markers are enough.
     "are you a robot",
     "just a moment...",
     "checking your browser before",
@@ -191,7 +193,10 @@ def check_file(path: Path, provider: str, rel: str) -> list[Issue]:
             Issue(rel, provider, "high", "stub_page", f"stub/404/JS-wall markers {markers} in a {visible}-char doc")
         )
     elif visible < MIN_VISIBLE_CHARS:
-        issues.append(Issue(rel, provider, "high", "near_empty", f"only {visible} chars of visible text"))
+        # MEDIUM, not HIGH: a near-empty doc is often a legit-tiny page (API
+        # enum-case, terse reference fragment, version stub) rather than a broken
+        # scrape — worth review, but not a definite failure like a 404 stub.
+        issues.append(Issue(rel, provider, "medium", "near_empty", f"only {visible} chars of visible text"))
 
     trunc = looks_truncated(text)
     if trunc:
