@@ -42,7 +42,24 @@ ulimit -n 32768 2>/dev/null || ulimit -n "$(ulimit -Hn 2>/dev/null)" 2>/dev/null
 # half-written vector index. -t 7200 self-terminates after 2h; also killed on exit.
 caffeinate -i -m -s -t 7200 &
 CAFFEINATE_PID=$!
-trap 'rm -rf "$LOCK_DIR"; kill "$CAFFEINATE_PID" 2>/dev/null || true' EXIT INT TERM
+
+# Cleanup + a grep-able pass/fail banner on exit. With `set -e` the script aborts
+# mid-step on failure, so without this the only failure signal is the log stopping
+# early. Writes logs/last_run_status.txt = "OK ..." / "FAILED exit=N ..." for an
+# at-a-glance "did last night's rebuild finish?" check.
+_on_exit() {
+  local code=$?
+  rm -rf "$LOCK_DIR" 2>/dev/null || true
+  [ -n "${CAFFEINATE_PID:-}" ] && kill "$CAFFEINATE_PID" 2>/dev/null || true
+  if [ "$code" -eq 0 ]; then
+    echo "[done] full_update.sh COMPLETE $(date -Iseconds)"
+    echo "OK $(date -Iseconds)" > "$LOG_DIR/last_run_status.txt" 2>/dev/null || true
+  else
+    echo "[done] full_update.sh FAILED exit=$code $(date -Iseconds) — see ${LOG_FILE:-update log}"
+    echo "FAILED exit=$code $(date -Iseconds)" > "$LOG_DIR/last_run_status.txt" 2>/dev/null || true
+  fi
+}
+trap _on_exit EXIT INT TERM
 
 # Bound MPS/Metal memory for every embed child (build_vectors, embedding, docs
 # tower). Root cause of "rebuild reserves 11+GB, Mac thrashes":
@@ -70,6 +87,10 @@ MODEL_KEY=$(jq -r '.embedding_model // "coderank"' "$CONFIG_FILE")
 
 LOG_FILE="$LOG_DIR/update_$(date +%Y%m%d_%H%M%S).log"
 LATEST_LOG="$LOG_DIR/latest.log"
+# Dedicated FULL log for the embed/vector steps. The main per-run log only keeps
+# the last few lines of each (| tail -N), which hid all but the tail of the
+# 2026-06-24 create_index failure — capture the whole thing here for diagnosis.
+VEC_LOG="$LOG_DIR/vectors_build.log"
 
 exec > >(tee "$LOG_FILE") 2>&1
 ln -sf "$LOG_FILE" "$LATEST_LOG"
@@ -164,6 +185,7 @@ print(','.join(changed))
     BATCH_SIZE=30
     echo ""
     echo "[5/7] Building vector embeddings..."
+    echo "=== $(date -Iseconds) [5/7] vector build (mode ${FULL_FLAG:-incremental}) ===" >> "$VEC_LOG"
     if [[ -n "$REPOS_FLAG" ]]; then
       REPO_LIST="${REPOS_FLAG#--repos=}"
       IFS=',' read -ra ALL_REPOS <<< "$REPO_LIST"
@@ -179,16 +201,16 @@ print(','.join(changed))
           REINDEX_FLAG="--no-reindex"
         fi
         echo "  Batch $BATCH_NUM/$BATCH_TOTAL (${#BATCH[@]} repos)..."
-        python3 "$SCRIPTS_DIR/build_vectors.py" --model="$MODEL_KEY" --repos="$BATCH_STR" $REINDEX_FLAG 2>&1 | tail -3
+        python3 "$SCRIPTS_DIR/build_vectors.py" --model="$MODEL_KEY" --repos="$BATCH_STR" $REINDEX_FLAG 2>&1 | tee -a "$VEC_LOG" | tail -3
       done
     else
-      python3 "$SCRIPTS_DIR/build_vectors.py" --model="$MODEL_KEY" --force 2>&1 | tail -3
+      python3 "$SCRIPTS_DIR/build_vectors.py" --model="$MODEL_KEY" --force 2>&1 | tee -a "$VEC_LOG" | tail -3
     fi
 
     echo ""
     echo "[5b/7] Syncing doc vectors (missing + orphan cleanup)..."
     bash "$SCRIPTS_DIR/run_with_timeout.sh" 10800 \
-        python3 "$SCRIPTS_DIR/data/embed_missing_vectors.py" --model=coderank 2>&1 | tail -10 || \
+        python3 "$SCRIPTS_DIR/data/embed_missing_vectors.py" --model=coderank 2>&1 | tee -a "$VEC_LOG" | tail -10 || \
         echo "  ⚠️ sync failed or timed out — chunks/vectors will reconcile next run"
 
     echo ""
@@ -199,8 +221,11 @@ print(','.join(changed))
     elif [[ -n "$REPOS_FLAG" ]]; then
       DOCS_ARGS+=("$REPOS_FLAG")
     fi
-    python3 "$SCRIPTS_DIR/build/build_docs_vectors.py" "${DOCS_ARGS[@]}" 2>&1 | tail -6 || \
+    python3 "$SCRIPTS_DIR/build/build_docs_vectors.py" "${DOCS_ARGS[@]}" 2>&1 | tee -a "$VEC_LOG" | tail -6 || \
         echo "  ⚠️ docs tower build failed — router will fall back to code tower only"
+
+    # Keep the full vector log bounded (~last 40k lines across recent runs).
+    tail -n 40000 "$VEC_LOG" > "$VEC_LOG.tmp" 2>/dev/null && mv "$VEC_LOG.tmp" "$VEC_LOG" 2>/dev/null || true
   fi
 
   echo ""
