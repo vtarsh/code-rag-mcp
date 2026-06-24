@@ -28,13 +28,21 @@ taskpolicy -b -p $$ 2>/dev/null || true
 renice 15 -p $$ >/dev/null 2>&1 || true
 
 # Raise the open-file limit. The LanceDB vector-index build (table.create_index)
-# opens every fragment of the store at once; under launchd's low default
-# RLIMIT_NOFILE a fragmented store hits "Too many open files (os error 24)" and
-# step 5 dies — exactly how the 2026-06-24 03:00 cron failed (chunks rebuilt,
-# vectors left stale). Raise the soft limit toward the hard cap (no-op if already
-# higher). The launchd plist also sets SoftResourceLimits as the cron backstop;
-# this line covers manual runs.
-ulimit -n 16384 2>/dev/null || ulimit -n "$(ulimit -Hn 2>/dev/null)" 2>/dev/null || true
+# opens every fragment of the store at once (~4150 for the coderank tower today);
+# under launchd's low default RLIMIT_NOFILE (256) it hits "Too many open files
+# (os error 24)" and step 5 dies — exactly how the 2026-06-24 03:00 cron failed
+# (chunks rebuilt, vectors left stale). 32768 is ~8x current fragments, under the
+# kern.maxfilesperproc cap (61440). The launchd plist sets SoftResourceLimits as
+# the cron backstop; this line covers manual runs.
+ulimit -n 32768 2>/dev/null || ulimit -n "$(ulimit -Hn 2>/dev/null)" 2>/dev/null || true
+
+# Keep the Mac awake for the whole rebuild window. The launchd plist wraps the run
+# in caffeinate, but start an explicit 2-hour timer here too so MANUAL runs (and any
+# path that bypasses the plist) can't let the machine sleep mid-build and leave a
+# half-written vector index. -t 7200 self-terminates after 2h; also killed on exit.
+caffeinate -i -m -s -t 7200 &
+CAFFEINATE_PID=$!
+trap 'rm -rf "$LOCK_DIR"; kill "$CAFFEINATE_PID" 2>/dev/null || true' EXIT INT TERM
 
 # Bound MPS/Metal memory for every embed child (build_vectors, embedding, docs
 # tower). Root cause of "rebuild reserves 11+GB, Mac thrashes":
