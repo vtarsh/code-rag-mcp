@@ -27,6 +27,15 @@ trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM
 taskpolicy -b -p $$ 2>/dev/null || true
 renice 15 -p $$ >/dev/null 2>&1 || true
 
+# Raise the open-file limit. The LanceDB vector-index build (table.create_index)
+# opens every fragment of the store at once; under launchd's low default
+# RLIMIT_NOFILE a fragmented store hits "Too many open files (os error 24)" and
+# step 5 dies — exactly how the 2026-06-24 03:00 cron failed (chunks rebuilt,
+# vectors left stale). Raise the soft limit toward the hard cap (no-op if already
+# higher). The launchd plist also sets SoftResourceLimits as the cron backstop;
+# this line covers manual runs.
+ulimit -n 16384 2>/dev/null || ulimit -n "$(ulimit -Hn 2>/dev/null)" 2>/dev/null || true
+
 # Bound MPS/Metal memory for every embed child (build_vectors, embedding, docs
 # tower). Root cause of "rebuild reserves 11+GB, Mac thrashes":
 #   1. Default high-water-mark 1.7 lets MPS balloon to ~20 GB on a 16 GB Mac —
